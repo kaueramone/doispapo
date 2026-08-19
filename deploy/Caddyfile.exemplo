@@ -58,6 +58,11 @@
 		}
 	}
 
+	# Pontos de entrada sempre revalidados: se o index.html ou o service
+	# worker ficam em cache, nenhuma atualização chega ao navegador.
+	@pontos_entrada path / /index.html /serviceWorker.js /versao.json /manifest.webmanifest
+	header @pontos_entrada Cache-Control "no-cache, must-revalidate"
+
 	# Serviço de cota de convites (Dois Papo)
 	route /api-convites* {
 		uri strip_prefix /api-convites

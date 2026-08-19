@@ -270,6 +270,17 @@ INJECAO = """
   #dp-convites li .dp-uso{opacity:.6;font-family:system-ui,sans-serif}
   #dp-convites code{cursor:pointer;user-select:all}
 
+  /* Banner de nova versao */
+  #dp-att{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
+    z-index:2147483001;display:flex;align-items:center;gap:12px;
+    padding:11px 16px;border-radius:12px;
+    font:13px/1 system-ui,-apple-system,sans-serif;color:#e8edf6;
+    background:rgba(16,24,35,.96);border:1px solid rgba(140,65,217,.45);
+    box-shadow:0 12px 34px -10px rgba(0,0,0,.7)}
+  #dp-att button{cursor:pointer;border:0;border-radius:8px;
+    padding:8px 14px;font:650 12.5px system-ui,sans-serif;color:#fff;
+    background:linear-gradient(100deg,#2E8BEB,#8C41D9)}
+
   /* Aviso na tela de cadastro */
   #dp-aviso-convite{margin:0 0 16px;padding:12px 14px;border-radius:10px;
     font:13px/1.5 system-ui,sans-serif;
@@ -421,6 +432,57 @@ INJECAO = """
     });
   }
 
+  /* ------------------- auto-atualizacao de versao -------------------- */
+  var VERSAO="__BUILD__", avisando=false;
+
+  function limparERecarregar(nova){
+    try{
+      // evita laco de recarga se algo der errado
+      if(sessionStorage.getItem("dp_atualizando")===nova)return;
+      sessionStorage.setItem("dp_atualizando",nova);
+    }catch(e){}
+    var tarefas=[];
+    if(window.caches)tarefas.push(caches.keys().then(function(ks){
+      return Promise.all(ks.map(function(k){ return caches.delete(k); }));
+    }));
+    if(navigator.serviceWorker)tarefas.push(
+      navigator.serviceWorker.getRegistrations().then(function(rs){
+        return Promise.all(rs.map(function(r){ return r.unregister(); }));
+      }));
+    Promise.all(tarefas).catch(function(){}).then(function(){
+      location.reload();
+    });
+  }
+
+  function banner(nova){
+    if(avisando||document.getElementById("dp-att"))return;
+    avisando=true;
+    var d=document.createElement("div");
+    d.id="dp-att";
+    d.innerHTML='<span>Nova versão disponível.</span>'+
+      '<button id="dp-att-b">Atualizar agora</button>';
+    document.body.appendChild(d);
+    document.getElementById("dp-att-b")
+      .addEventListener("click",function(){ limparERecarregar(nova); });
+  }
+
+  function checarVersao(inicial){
+    fetch("/versao.json",{cache:"no-store"})
+      .then(function(r){ return r.json(); })
+      .then(function(v){
+        if(!v||!v.build||v.build===VERSAO)return;
+        // No carregamento, atualiza direto: nada foi digitado ainda.
+        // Com o app aberto, apenas avisa — recarregar sozinho apagaria
+        // uma mensagem sendo escrita.
+        if(inicial)limparERecarregar(v.build);
+        else banner(v.build);
+      })
+      .catch(function(){});
+  }
+
+  checarVersao(true);
+  setInterval(function(){ checarVersao(false); }, 300000);
+
   function tick(){ assinatura(); loginLogo(); preencheConvite();
                    painelConvites(); }
   if(document.readyState!=="loading")tick();
@@ -558,6 +620,24 @@ for _f in sorted(glob.glob(os.path.join(DST, "assets", "index-*.js")) +
 build_id = _h.hexdigest()[:10]
 sw, n_cn = re.subn(r'precache-v\d+', f"precache-dp-{build_id}", sw)
 conta("cache-renomeado", n_cn)
+
+# Arquivo de versao consultado pelo cliente para detectar atualizacao.
+json.dump({"build": build_id}, open(os.path.join(DST, "versao.json"), "w"))
+
+# Carimba o build id no script injetado.
+_idx = os.path.join(DST, "index.html")
+_h = open(_idx, encoding="utf-8").read()
+if "__BUILD__" in _h:
+    open(_idx, "w", encoding="utf-8").write(_h.replace("__BUILD__", build_id))
+
+# Na ativacao, o SW apaga qualquer cache que nao seja deste build.
+_guarda = ("self.addEventListener('activate',function(e){e.waitUntil("
+           "caches.keys().then(function(ks){return Promise.all(ks.filter("
+           "function(k){return k.indexOf('%s')===-1}).map(function(k){"
+           "return caches.delete(k)}))}))});\n" % build_id)
+if "dp-guarda-cache" not in sw:
+    sw = "// dp-guarda-cache\n" + _guarda + sw
+    conta("guarda-cache", 1)
 
 # assume o controle imediatamente, sem esperar todas as abas fecharem
 if "skipWaiting" not in sw[:400]:
