@@ -94,6 +94,7 @@
   var estiloLuz = document.createElement("style");
   estiloLuz.textContent =
     ".dp-falando{position:relative}" +
+    ".vc_tile.dp-falando::after{border-radius:14px;inset:-2px}" +
     ".dp-falando::after{content:'';position:absolute;inset:-3px;" +
       "border-radius:12px;border:2px solid #3fb950;" +
       "box-shadow:0 0 10px rgba(63,185,80,.65);pointer-events:none;" +
@@ -122,11 +123,17 @@
   var manterNativa = false;
   try { manterNativa = localStorage.getItem("dp_nativa") === "1"; } catch (e) {}
 
+  /* dKGhWu é utilitária: nos quadros do grid ela está presente mesmo em
+     silêncio, então ali é estrutural e removê-la desarrumaria o layout.
+     Só sai da lista lateral, onde de fato acompanha o estado de fala. */
   function limparNativa(bloco) {
     if (manterNativa || !bloco || !bloco.classList) return;
-    for (var i = 0; i < CLASSES_FALA.length; i++)
-      if (bloco.classList.contains(CLASSES_FALA[i]))
-        bloco.classList.remove(CLASSES_FALA[i]);
+    var lateral = bloco.classList.contains(CLASSE_BLOCO);
+    for (var i = 0; i < CLASSES_FALA.length; i++) {
+      var c = CLASSES_FALA[i];
+      if (c === "dKGhWu" && !lateral) continue;
+      if (bloco.classList.contains(c)) bloco.classList.remove(c);
+    }
   }
 
   /* O mesmo participante aparece em dois lugares: na lista lateral do
@@ -142,17 +149,42 @@
     var agora = Date.now();
     if (agora - mapaEm < 500) return;
     mapaEm = agora;
-    var novo = {}, spans = document.querySelectorAll("span");
+    var novo = {};
+
+    // lista lateral: nome em <span>, avatar em <svg> irmão
+    var spans = document.querySelectorAll("span");
     for (var i = 0; i < spans.length; i++) {
       var t = (spans[i].textContent || "").trim();
       if (!t || t.length > 40) continue;
       var bloco = spans[i].parentElement;
-      if (!bloco) continue;
-      // o bloco do participante traz o avatar num <svg> irmão
-      if (!bloco.querySelector("svg")) continue;
+      if (!bloco || !bloco.querySelector("svg")) continue;
       (novo[t] = novo[t] || []).push(bloco);
     }
+
+    // grid central: raiz identificada por vc_tile, nome num <div> folha.
+    // Consultar vc_tile custa pouco — são poucos quadros — bem menos que
+    // varrer todos os divs da página.
+    var quadros = document.querySelectorAll(".vc_tile");
+    for (var q = 0; q < quadros.length; q++) {
+      var nome = nomeNoQuadro(quadros[q]);
+      if (nome) (novo[nome] = novo[nome] || []).push(quadros[q]);
+    }
+
     mapaBlocos = novo;
+  }
+
+  function nomeNoQuadro(quadro) {
+    // primeiro elemento-folha com texto curto; o ícone de estado é
+    // descartado pela classe de símbolo
+    var cands = quadro.querySelectorAll("div,span");
+    for (var i = 0; i < cands.length; i++) {
+      var e = cands[i];
+      if (e.children.length) continue;
+      if ((e.className || "").indexOf("material-symbols") >= 0) continue;
+      var t = (e.textContent || "").trim();
+      if (t && t.length <= 40) return t;
+    }
+    return null;
   }
 
   function blocosDe(nome) { return (nome && mapaBlocos[nome]) || []; }
