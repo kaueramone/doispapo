@@ -35,9 +35,12 @@
   /* vídeo de fundo do hero */
   .video-fundo{position:absolute;inset:0;overflow:hidden;pointer-events:none;
     z-index:0}
+  /* Escala de 1.35 além do necessário: joga a faixa de controles do
+     player para fora da área visível, caso ela pisque. */
   .video-fundo iframe{position:absolute;top:50%;left:50%;
     width:max(100vw,177.78vh);height:max(100vh,56.25vw);
-    transform:translate(-50%,-50%);border:0;pointer-events:none}
+    transform:translate(-50%,-50%) scale(1.35);border:0;
+    pointer-events:none}
   /* véu na cor do fundo: deixa o vídeo em ~30% de visibilidade */
   .video-fundo::after{content:"";position:absolute;inset:0;
     background:linear-gradient(180deg,
@@ -174,10 +177,7 @@
 
 <header>
   <div class="video-fundo" aria-hidden="true">
-    <iframe
-      src="https://www.youtube-nocookie.com/embed/cuL5gwokePA?autoplay=1&mute=1&loop=1&playlist=cuL5gwokePA&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&iv_load_policy=3&fs=0"
-      title="" tabindex="-1" allow="autoplay; encrypted-media"
-      referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>
+    <div id="video-hero"></div>
   </div>
   <div class="wrap">
     <img src="/logo-color.png" alt="Dois Papo">
@@ -349,6 +349,52 @@
         bt.disabled=false; bt.textContent="Entrar na fila";
       });
   });
+})();
+</script>
+<script>
+/* Fundo em vídeo do hero.
+   Não usamos loop=1: esse parâmetro RECARREGA o player a cada volta, e
+   na reinicialização a interface do YouTube (pausa, legendas) reaparece
+   por um instante. Com a API do player damos seekTo(0) antes do fim,
+   então o vídeo nunca termina e nada é recarregado. */
+(function(){
+  var ID = "cuL5gwokePA", player, alvo = document.getElementById("video-hero");
+  if(!alvo) return;
+
+  window.onYouTubeIframeAPIReady = function(){
+    player = new YT.Player("video-hero", {
+      videoId: ID,
+      host: "https://www.youtube-nocookie.com",
+      playerVars: {
+        autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0,
+        modestbranding: 1, rel: 0, playsinline: 1, iv_load_policy: 3
+      },
+      events: {
+        onReady: function(e){
+          e.target.mute();
+          e.target.playVideo();
+          // reinicia um pouco antes do fim, sem deixar o player concluir
+          setInterval(function(){
+            try{
+              var d = player.getDuration(), t = player.getCurrentTime();
+              if(d > 0 && d - t < 0.4) player.seekTo(0, true);
+            }catch(err){}
+          }, 250);
+        },
+        onStateChange: function(e){
+          // rede de segurança, caso o vídeo termine mesmo assim
+          if(e.data === YT.PlayerState.ENDED){
+            player.seekTo(0, true);
+            player.playVideo();
+          }
+        }
+      }
+    });
+  };
+
+  var tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
 })();
 </script>
 </body>
