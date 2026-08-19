@@ -25,7 +25,9 @@
     ],
     "security": {
       "csp": null,
-      "capabilities": ["padrao"]
+      "capabilities": [
+        "padrao"
+      ]
     },
     "trayIcon": {
       "id": "principal",
@@ -36,7 +38,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -51,7 +55,9 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["PortugueseBR"],
+        "languages": [
+          "PortugueseBR"
+        ],
         "displayLanguageSelector": false
       }
     }
