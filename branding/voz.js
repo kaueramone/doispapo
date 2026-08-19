@@ -62,52 +62,6 @@
   };
 
 
-  /* ---------------- remoção da luz nativa (duplicada) ----------------- */
-  /* Comparando o bloco do participante em silêncio e falando, o estado de
-     fala acrescenta exatamente estas quatro classes. Retirá-las devolve o
-     bloco ao visual de silêncio, e quem indica passa a ser o nosso anel —
-     que reage em 40 ms em vez de esperar o servidor.
-
-     A remoção é restrita a blocos de participante (identificados pela
-     classe base): duas dessas classes são utilitárias e aparecem em outros
-     elementos, onde não devem ser tocadas.
-
-     Desligar sem recompilar:
-       localStorage.setItem("dp_nativa","1"); location.reload();          */
-  var CLASSE_BLOCO = "eQVZMd";
-  var CLASSES_FALA = ["dKGhWu", "fXciza", "hgBSwO", "GrQgU"];
-  var manterNativa = false;
-  try { manterNativa = localStorage.getItem("dp_nativa") === "1"; } catch (e) {}
-
-  function limparNativa(el) {
-    if (manterNativa || !el || !el.classList) return;
-    if (!el.classList.contains(CLASSE_BLOCO)) return;
-    for (var i = 0; i < CLASSES_FALA.length; i++)
-      el.classList.remove(CLASSES_FALA[i]);
-  }
-
-  if (!manterNativa) {
-    new MutationObserver(function (regs) {
-      for (var i = 0; i < regs.length; i++) {
-        var r = regs[i];
-        if (r.type === "attributes") limparNativa(r.target);
-        else if (r.addedNodes) {
-          for (var k = 0; k < r.addedNodes.length; k++) {
-            var n = r.addedNodes[k];
-            if (n.nodeType !== 1) continue;
-            limparNativa(n);
-            var f = n.querySelectorAll
-                    ? n.querySelectorAll("." + CLASSE_BLOCO) : [];
-            for (var j = 0; j < f.length; j++) limparNativa(f[j]);
-          }
-        }
-      }
-    }).observe(document.documentElement, {
-      subtree: true, childList: true,
-      attributes: true, attributeFilter: ["class"]
-    });
-  }
-
   /* ------------------------- luz de fala local ------------------------ */
   /* A luz nativa depende do servidor: o SFU analisa os níveis e transmite
      de volta a lista de falantes ativos, então há uma ida e volta antes de
@@ -148,6 +102,32 @@
     "@media(prefers-reduced-motion:reduce){" +
       ".dp-falando::after{animation:none}}";
   document.head.appendChild(estiloLuz);
+
+  /* ---------------- remoção da luz nativa (duplicada) ----------------- */
+  /* Comparando o bloco em silêncio e falando, o estado de fala acrescenta
+     exatamente estas quatro classes. Retirá-las devolve o visual de
+     silêncio, deixando a indicação por conta do nosso anel.
+
+     Sem observador de mutação: a tentativa anterior vigiava o documento
+     inteiro e varria os descendentes de cada nó inserido, o que travava a
+     interface ao abrir um servidor. Aqui a limpeza acontece no laço que
+     já roda, sobre os blocos que já foram localizados — poucas operações
+     por ciclo, em vez de milhares por renderização.
+
+     Efeito colateral desejado: em quem não conseguimos mapear, a luz
+     nativa permanece. Melhor um indicador lento que nenhum.
+
+     Desligar: localStorage.setItem("dp_nativa","1"); location.reload();  */
+  var CLASSES_FALA = ["dKGhWu", "fXciza", "hgBSwO", "GrQgU"];
+  var manterNativa = false;
+  try { manterNativa = localStorage.getItem("dp_nativa") === "1"; } catch (e) {}
+
+  function limparNativa(bloco) {
+    if (manterNativa || !bloco || !bloco.classList) return;
+    for (var i = 0; i < CLASSES_FALA.length; i++)
+      if (bloco.classList.contains(CLASSES_FALA[i]))
+        bloco.classList.remove(CLASSES_FALA[i]);
+  }
 
   function blocoDe(nome) {
     if (!nome) return null;
@@ -202,6 +182,7 @@
       if (!nome) continue;
       var bloco = blocoDe(nome);
       if (!bloco) continue;
+      limparNativa(bloco);
       bloco.classList.toggle("dp-falando", r.nivel >= LIMIAR_REMOTO);
     }
   }
@@ -219,6 +200,7 @@
     var falando = a.estado.nivel >= a.cfg.limiar;
     var bloco = meuBloco();
     if (!bloco) return;
+    limparNativa(bloco);
     bloco.classList.toggle("dp-falando", falando);
   }
 
@@ -329,6 +311,12 @@
   setInterval(tick, 1000);
   // a luz precisa de cadência bem mais rápida que o resto
   setInterval(function () { luzDeFala(); luzDosOutros(); }, 40);
-  new MutationObserver(entrarDireto).observe(document.documentElement,
-    { childList: true, subtree: true });
+  // Amortecido: sem isso o observador dispara uma varredura de botões por
+  // mutação, e abrir um servidor gera centenas delas de uma vez. Foi esse
+  // padrão que travou a interface na tentativa anterior.
+  var pendente = null;
+  new MutationObserver(function () {
+    if (pendente) return;
+    pendente = setTimeout(function () { pendente = null; entrarDireto(); }, 150);
+  }).observe(document.documentElement, { childList: true, subtree: true });
 })();
