@@ -12,6 +12,37 @@
   "use strict";
   var API = "/api-convites";
 
+  /* Diagnóstico: informa o que existe na tela para eu mapear cada fluxo
+     de áudio ao respectivo participante. */
+  window.dpFalantes = function () {
+    var a = window.dpAudio || {};
+    var mids = document.querySelectorAll("audio,video");
+    var lista = [];
+    for (var i = 0; i < mids.length; i++) {
+      var m = mids[i], attrs = {};
+      for (var k = 0; k < m.attributes.length; k++)
+        attrs[m.attributes[k].name] = m.attributes[k].value;
+      lista.push({
+        tag: m.tagName,
+        atributos: attrs,
+        temFluxo: !!m.srcObject,
+        idDoFluxo: m.srcObject ? m.srcObject.id : null,
+        paiClasses: m.parentElement ? m.parentElement.className : null
+      });
+    }
+    var r = {
+      elementosDeMidia: lista,
+      fluxosMedidos: (a.remotos || []).map(function (x) {
+        return { idDoFluxo: x.stream.id,
+                 nivel: Math.round(x.nivel),
+                 ativo: x.stream.active };
+      }),
+      meuNivel: a.estado ? Math.round(a.estado.nivel) : null
+    };
+    console.log(JSON.stringify(r, null, 2));
+    return r;
+  };
+
   /* ------------------------- luz de fala local ------------------------ */
   /* A luz nativa depende do servidor: o SFU analisa os níveis e transmite
      de volta a lista de falantes ativos, então há uma ida e volta antes de

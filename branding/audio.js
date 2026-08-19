@@ -133,6 +133,62 @@
     return saida;
   }
 
+  /* ------------------ medição do áudio dos participantes -------------- */
+  /* Caminho seguro: capturamos o MediaStream no momento em que ele é
+     atribuído ao elemento de áudio e criamos um analisador PARALELO com
+     createMediaStreamSource. O elemento segue tocando por conta própria.
+     A alternativa — createMediaElementSource — desviaria a saída do
+     elemento, e esquecer de reconectar significaria mudo geral. */
+  var remotos = [];   // { stream, analisador, buf, nivel }
+  var ctxRemoto = null;
+
+  function registrarRemoto(elemento, stream) {
+    if (!stream || !stream.getAudioTracks || !stream.getAudioTracks().length)
+      return;
+    if (remotos.some(function (r) { return r.stream === stream; })) return;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!ctxRemoto) ctxRemoto = new Ctx();
+    try {
+      var src = ctxRemoto.createMediaStreamSource(stream);
+      var an = ctxRemoto.createAnalyser();
+      an.fftSize = 1024;
+      an.smoothingTimeConstant = 0.2;
+      src.connect(an);            // não vai ao destino: só medimos
+      remotos.push({ stream: stream, elemento: elemento, analisador: an,
+                     buf: new Float32Array(an.fftSize), nivel: -100 });
+    } catch (e) {}
+  }
+
+  function medirRemotos() {
+    for (var i = remotos.length - 1; i >= 0; i--) {
+      var r = remotos[i];
+      if (!r.stream.active) { remotos.splice(i, 1); continue; }
+      r.analisador.getFloatTimeDomainData(r.buf);
+      var soma = 0;
+      for (var k = 0; k < r.buf.length; k++) soma += r.buf[k] * r.buf[k];
+      var rms = Math.sqrt(soma / r.buf.length);
+      r.nivel = rms > 0 ? 20 * Math.log10(rms) : -100;
+    }
+  }
+  setInterval(medirRemotos, 40);
+
+  // Captura no ponto em que o app entrega o fluxo ao elemento.
+  try {
+    var protoMidia = HTMLMediaElement.prototype;
+    var descr = Object.getOwnPropertyDescriptor(protoMidia, "srcObject");
+    if (descr && descr.set) {
+      Object.defineProperty(protoMidia, "srcObject", {
+        configurable: true,
+        get: descr.get,
+        set: function (v) {
+          descr.set.call(this, v);
+          try { registrarRemoto(this, v); } catch (e) {}
+        }
+      });
+    }
+  } catch (e) {}
+
   /* ---------------------------------------------------------- interceptação */
   var original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
   navigator.mediaDevices.getUserMedia = function (restricoes) {
@@ -155,6 +211,7 @@
     // getUserMedia sem o nosso processamento, para o painel medir o sinal
     // cru na calibração sem passar duas vezes pela mesma cadeia
     original: original,
+    remotos: remotos,
     desligar: function () {
       try { localStorage.setItem("dp_audio_off", "1"); } catch (e) {}
       location.reload();
