@@ -225,7 +225,6 @@ conta("index.html", 2)
 
 INJECAO = """
 <style id="dp-marca">
-  /* Assinatura do desenvolvedor — canto superior direito */
   #dp-assinatura{position:fixed;top:0;right:0;z-index:2147483000;
     display:flex;align-items:center;gap:.35em;
     padding:5px 12px 6px;border-radius:0 0 0 10px;
@@ -237,12 +236,9 @@ INJECAO = """
     pointer-events:auto}
   #dp-assinatura a:hover{color:#2E8BEB;text-decoration:underline}
 
-  /* Logo na tela de login */
   #dp-login-logo{display:block;width:min(230px,58vw);height:auto;
     margin:0 auto 26px}
 
-  /* Rodapé do login: remove links institucionais herdados e o Bluesky.
-     O GitHub fica, apontando para o repositório próprio. */
   a[href*="doispapo.com/sobre"],
   a[href*="doispapo.com/termos"],
   a[href*="doispapo.com/privacidade"],
@@ -250,39 +246,183 @@ INJECAO = """
   a[href*="bsky.app"],
   a[href*="translate."],
   a[href*="developers."]{display:none!important}
+
+  /* Painel de convites nas configuracoes */
+  #dp-convites{margin:0 0 18px;padding:18px 20px;border-radius:14px;
+    background:linear-gradient(150deg,rgba(46,139,235,.10),
+      rgba(140,65,217,.10));border:1px solid rgba(140,65,217,.28);
+    font:14px/1.55 system-ui,-apple-system,sans-serif;color:inherit}
+  #dp-convites h3{margin:0 0 4px;font-size:15px;font-weight:700}
+  #dp-convites .dp-sub{opacity:.72;font-size:12.5px;margin-bottom:12px}
+  #dp-convites .dp-n{font-size:30px;font-weight:750;line-height:1;
+    background:linear-gradient(100deg,#2E8BEB,#8C41D9);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  #dp-convites .dp-lin{display:flex;align-items:baseline;gap:.5em;
+    margin-bottom:12px}
+  #dp-convites button{cursor:pointer;border:0;border-radius:9px;
+    padding:9px 16px;font:650 13px system-ui,sans-serif;color:#fff;
+    background:linear-gradient(100deg,#2E8BEB,#8C41D9)}
+  #dp-convites button[disabled]{opacity:.45;cursor:not-allowed}
+  #dp-convites ul{list-style:none;margin:12px 0 0;padding:0}
+  #dp-convites li{display:flex;justify-content:space-between;gap:1em;
+    padding:6px 9px;border-radius:7px;background:rgba(0,0,0,.16);
+    margin-top:5px;font:12px/1.4 ui-monospace,monospace}
+  #dp-convites li .dp-uso{opacity:.6;font-family:system-ui,sans-serif}
+  #dp-convites code{cursor:pointer;user-select:all}
+
+  /* Aviso na tela de cadastro */
+  #dp-aviso-convite{margin:0 0 16px;padding:12px 14px;border-radius:10px;
+    font:13px/1.5 system-ui,sans-serif;
+    background:rgba(140,65,217,.12);border:1px solid rgba(140,65,217,.3)}
+  #dp-aviso-convite.dp-erro{background:rgba(235,68,68,.12);
+    border-color:rgba(235,68,68,.35)}
 </style>
 <script id="dp-marca-js">
 (function(){
-  var LOGO="/assets/web/wordmark.svg";
+  var LOGO="/assets/web/wordmark.svg", API="/api-convites", TOKEN=null;
 
+  /* ---- captura o token de sessao das requisicoes do proprio app ---- */
+  var _fetch=window.fetch;
+  window.fetch=function(entrada,init){
+    try{
+      var h=(init&&init.headers)||(entrada&&entrada.headers);
+      if(h){
+        var t=h.get?h.get("X-Session-Token"):h["X-Session-Token"];
+        if(t)TOKEN=t;
+      }
+    }catch(e){}
+    return _fetch.apply(this,arguments);
+  };
+  var _srh=XMLHttpRequest.prototype.setRequestHeader;
+  XMLHttpRequest.prototype.setRequestHeader=function(n,v){
+    if(String(n).toLowerCase()==="x-session-token")TOKEN=v;
+    return _srh.apply(this,arguments);
+  };
+
+  function api(rota,opc){
+    opc=opc||{};
+    opc.headers=Object.assign({"Content-Type":"application/json"},
+      opc.headers||{}, TOKEN?{"X-Session-Token":TOKEN}:{});
+    return fetch(API+rota,opc).then(function(r){
+      return r.json().then(function(j){ return {status:r.status,dados:j}; });
+    });
+  }
+
+  /* ---------------------------- assinatura ---------------------------- */
   function assinatura(){
-    if(document.getElementById("dp-assinatura"))return;
-    if(!document.body)return;
+    if(document.getElementById("dp-assinatura")||!document.body)return;
     var d=document.createElement("div");
     d.id="dp-assinatura";
     d.innerHTML='por <a href="__SITE__" target="_blank" rel="noopener">__AUTOR__</a>';
     document.body.appendChild(d);
   }
 
-  // Insere a logo no topo da tela de login/cadastro.
+  /* ------------------------- logo no login ---------------------------- */
   function loginLogo(){
     if(document.getElementById("dp-login-logo"))return;
     var campo=document.querySelector(
       'input[type="password"],input[type="email"],input[name="email"]');
     if(!campo)return;
     var anc=campo.closest("form");
-    if(!anc){
-      anc=campo;
-      for(var i=0;i<3&&anc.parentElement;i++)anc=anc.parentElement;
-    }
+    if(!anc){ anc=campo;
+      for(var i=0;i<3&&anc.parentElement;i++)anc=anc.parentElement; }
     if(!anc||!anc.parentNode)return;
     var img=document.createElement("img");
     img.id="dp-login-logo"; img.src=LOGO; img.alt="__MARCA__";
     anc.parentNode.insertBefore(img,anc);
   }
 
+  /* ------- convite de servidor -> convite de conta (sem login) -------- */
+  var m=location.pathname.match(/^\\/invite\\/([A-Za-z0-9_-]+)/);
+  if(m){ try{ sessionStorage.setItem("dp_convite_srv",m[1]); }catch(e){} }
 
-  function tick(){ assinatura(); loginLogo(); }
+  var resgatando=false;
+  function preencheConvite(){
+    var srv=null;
+    try{ srv=sessionStorage.getItem("dp_convite_srv"); }catch(e){}
+    if(!srv||resgatando)return;
+    // campo de codigo de convite na tela de cadastro
+    var alvo=null, ins=document.querySelectorAll("input");
+    for(var i=0;i<ins.length;i++){
+      var el=ins[i], ctx=((el.placeholder||"")+" "+(el.name||"")+" "+
+        (el.getAttribute("aria-label")||"")).toLowerCase();
+      if(/convite|invite/.test(ctx)){ alvo=el; break; }
+    }
+    if(!alvo||alvo.value)return;
+    resgatando=true;
+    api("/resgatar",{method:"POST",body:JSON.stringify({codigo:srv})})
+      .then(function(r){
+        var box=document.createElement("div");
+        box.id="dp-aviso-convite";
+        if(r.status===200&&r.dados.codigo){
+          alvo.value=r.dados.codigo;
+          // avisa os frameworks reativos da mudanca
+          alvo.dispatchEvent(new Event("input",{bubbles:true}));
+          alvo.dispatchEvent(new Event("change",{bubbles:true}));
+          box.textContent="Convite aplicado automaticamente. "+
+            "Basta preencher seus dados para criar a conta.";
+        }else if(r.dados.erro==="sem_cota"){
+          box.className="dp-erro";
+          box.textContent=r.dados.mensagem||
+            "Quem te convidou não tem mais convites disponíveis.";
+        }else{ resgatando=false; return; }
+        var anc=alvo.closest("form")||alvo.parentElement;
+        if(anc&&anc.parentNode&&!document.getElementById("dp-aviso-convite"))
+          anc.parentNode.insertBefore(box,anc);
+      })
+      .catch(function(){ resgatando=false; });
+  }
+
+  /* -------------- painel de convites nas configuracoes ---------------- */
+  function painelConvites(){
+    if(!/^\\/settings/.test(location.pathname))return;
+    if(document.getElementById("dp-convites"))return;
+    if(!TOKEN)return;
+    // ancora: primeiro cabecalho dentro do dialogo de configuracoes
+    var h=document.querySelector('[role="dialog"] h1,[role="dialog"] h2,'+
+      '[role="dialog"] h3,main h1,main h2');
+    if(!h||!h.parentNode)return;
+
+    var cx=document.createElement("div");
+    cx.id="dp-convites";
+    cx.innerHTML='<h3>Seus convites</h3>'+
+      '<div class="dp-sub">Cada conta pode convidar até 5 pessoas para '+
+      'criar conta no Dois Papo.</div>'+
+      '<div class="dp-lin"><span class="dp-n" id="dp-n">–</span>'+
+      '<span>disponíveis</span></div>'+
+      '<button id="dp-gerar">Gerar convite</button>'+
+      '<ul id="dp-lista"></ul>';
+    h.parentNode.insertBefore(cx,h.nextSibling);
+
+    function pinta(d){
+      document.getElementById("dp-n").textContent=d.disponiveis;
+      var b=document.getElementById("dp-gerar");
+      b.disabled=d.disponiveis<=0;
+      if(d.disponiveis<=0)b.textContent="Sem convites disponíveis";
+      var ul=document.getElementById("dp-lista");
+      ul.innerHTML="";
+      (d.codigos||[]).forEach(function(c){
+        var li=document.createElement("li");
+        li.innerHTML='<code title="clique para copiar">'+c.codigo+'</code>'+
+          '<span class="dp-uso">'+(c.usado?"usado":"disponível")+'</span>';
+        li.querySelector("code").addEventListener("click",function(){
+          navigator.clipboard.writeText(
+            location.origin+"/login/create?invite="+c.codigo);
+        });
+        ul.appendChild(li);
+      });
+    }
+    api("/saldo").then(function(r){ if(r.status===200)pinta(r.dados); });
+    document.getElementById("dp-gerar").addEventListener("click",function(){
+      api("/gerar",{method:"POST"}).then(function(r){
+        if(r.status===200||r.status===409)
+          api("/saldo").then(function(x){ if(x.status===200)pinta(x.dados); });
+      });
+    });
+  }
+
+  function tick(){ assinatura(); loginLogo(); preencheConvite();
+                   painelConvites(); }
   if(document.readyState!=="loading")tick();
   else document.addEventListener("DOMContentLoaded",tick);
   new MutationObserver(tick).observe(document.documentElement,
