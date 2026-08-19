@@ -152,6 +152,32 @@
   </div>
 </section>
 
+<section id="fila">
+  <div class="wrap">
+    <h2>Ainda não tem convite?</h2>
+    <p class="lead">Entre na fila de espera. Quando abrirmos novas vagas,
+      chamamos por ordem de inscrição.</p>
+
+    <form class="fila" id="form-fila" novalidate>
+      <label for="f-nome">Seu nome</label>
+      <input id="f-nome" name="nome" type="text" autocomplete="name"
+             maxlength="80" placeholder="Como quer ser chamado" required>
+
+      <label for="f-email">E-mail</label>
+      <input id="f-email" name="email" type="email" autocomplete="email"
+             maxlength="120" placeholder="voce@exemplo.com" required>
+
+      <label for="f-nasc">Data de nascimento</label>
+      <input id="f-nasc" name="nascimento" type="date" required>
+
+      <button type="submit" id="f-enviar">Entrar na fila</button>
+      <div class="aviso" id="f-aviso"></div>
+      <p class="nota">Usamos seu e-mail apenas para avisar quando houver
+        vaga. Nada de spam.</p>
+    </form>
+  </div>
+</section>
+
 <section>
   <div class="wrap">
     <h2>Apoie o projeto</h2>
@@ -173,5 +199,59 @@
   </div>
 </footer>
 
+<script>
+(function(){
+  var f=document.getElementById("form-fila"),
+      av=document.getElementById("f-aviso"),
+      bt=document.getElementById("f-enviar");
+
+  // limita a data: entre 120 e 13 anos atrás
+  var hoje=new Date(), nasc=document.getElementById("f-nasc");
+  function iso(d){ return d.toISOString().slice(0,10); }
+  nasc.max=iso(new Date(hoje.getFullYear()-13,hoje.getMonth(),hoje.getDate()));
+  nasc.min=iso(new Date(hoje.getFullYear()-120,0,1));
+
+  function mostra(txt,ok){
+    av.textContent=txt;
+    av.className="aviso "+(ok?"ok":"err");
+  }
+
+  f.addEventListener("submit",function(e){
+    e.preventDefault();
+    var dados={
+      nome:f.nome.value.trim(),
+      email:f.email.value.trim(),
+      nascimento:f.nascimento.value
+    };
+    if(dados.nome.length<2)  return mostra("Informe seu nome.",false);
+    if(!/^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(dados.email))
+      return mostra("Informe um e-mail válido.",false);
+    if(!dados.nascimento) return mostra("Informe sua data de nascimento.",false);
+
+    bt.disabled=true; bt.textContent="Enviando…";
+    fetch("/api-convites/fila",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(dados)
+    }).then(function(r){ return r.json().then(function(j){
+        return {ok:r.ok,j:j}; }); })
+      .then(function(r){
+        if(r.ok){
+          mostra(r.j.mensagem+(r.j.posicao?" Você é o nº "+r.j.posicao+
+            " da fila.":""),true);
+          if(!r.j.ja_inscrito)f.reset();
+        }else{
+          mostra(r.j.mensagem||"Não foi possível enviar. Tente de novo.",false);
+        }
+      })
+      .catch(function(){
+        mostra("Não foi possível enviar agora. Tente mais tarde.",false);
+      })
+      .finally(function(){
+        bt.disabled=false; bt.textContent="Entrar na fila";
+      });
+  });
+})();
+</script>
 </body>
 </html>

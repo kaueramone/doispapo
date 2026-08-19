@@ -504,6 +504,37 @@ INJECAO = """
   }
 
 
+  /* ------- duplo clique na sala de voz entra na chamada -------------- */
+  // O app exige navegar ate o canal e depois clicar em "Entrar na
+  // chamada". Aqui o duplo clique dispara os dois passos: os cliques
+  // normais ja navegam, e nos so completamos apertando o botao assim
+  // que ele aparecer. Se o alvo nao for um canal de voz, o botao nunca
+  // surge e nada acontece.
+  function botaoEntrarChamada(){
+    var els=document.querySelectorAll("button,[role='button'],a");
+    for(var i=0;i<els.length;i++){
+      var t=(els[i].textContent||"").trim();
+      if(t.length>28)continue;
+      if(/^(entrar na chamada|entrar no canal de voz|join call)$/i.test(t))
+        return els[i];
+    }
+    return null;
+  }
+
+  document.addEventListener("dblclick",function(e){
+    // ignora duplo clique em campos de texto e em mensagens
+    var alvo=e.target;
+    if(alvo.closest&&alvo.closest("input,textarea,[contenteditable='true']"))
+      return;
+    var tentativas=0;
+    var t=setInterval(function(){
+      tentativas++;
+      var b=botaoEntrarChamada();
+      if(b){ clearInterval(t); b.click(); }
+      else if(tentativas>14)clearInterval(t);   // ~2,1s
+    },150);
+  },true);
+
   /* --------------------- editor de imagem ----------------------------- */
   function abrirEditor(arquivo, aoConcluir, aoCancelar){
     var url=URL.createObjectURL(arquivo), img=new Image();

@@ -26,6 +26,17 @@ db  = cli.revolt
 trava = threading.Lock()   # serializa a checagem de cota + emissão
 
 RE_CODIGO = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+RE_EMAIL  = re.compile(r"^[^@\s]{1,64}@[^@\s.]{1,63}(\.[^@\s.]{2,63})+$")
+RE_DATA   = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ADMIN_UID = os.environ.get("ADMIN_UID", "")
+
+
+def idade(nascimento):
+    """Idade em anos a partir de AAAA-MM-DD."""
+    from datetime import date
+    a, m, d = (int(x) for x in nascimento.split("-"))
+    hoje = date.today()
+    return hoje.year - a - ((hoje.month, hoje.day) < (m, d))
 
 
 def usuario_da_sessao(token):
@@ -92,6 +103,20 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/saude":
             return self.responde(200, {"ok": True})
 
+        # Lista da fila de espera — só para o administrador da instância.
+        if self.path == "/fila":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid or (ADMIN_UID and uid != ADMIN_UID):
+                return self.responde(403, {"erro": "sem_permissao"})
+            itens = [
+                {"nome": d.get("nome"), "email": d["_id"],
+                 "nascimento": d.get("nascimento"),
+                 "idade": d.get("idade"),
+                 "em": d.get("em"), "convidado": bool(d.get("convidado"))}
+                for d in db.fila_espera.find().sort("em", 1)
+            ]
+            return self.responde(200, {"total": len(itens), "itens": itens})
+
         if self.path == "/saldo":
             tok = self.headers.get("X-Session-Token")
             uid = usuario_da_sessao(tok)
@@ -110,6 +135,54 @@ class Handler(BaseHTTPRequestHandler):
 
     # --------------------------------------------------------------- POST
     def do_POST(self):
+        # Inscrição na fila de espera. Endpoint público — vem da landing.
+        if self.path == "/fila":
+            c = self.corpo_json()
+            nome = (c.get("nome") or "").strip()[:80]
+            email = (c.get("email") or "").strip().lower()[:120]
+            nasc = (c.get("nascimento") or "").strip()
+
+            if len(nome) < 2:
+                return self.responde(400, {"erro": "nome_invalido",
+                    "mensagem": "Informe seu nome."})
+            if not RE_EMAIL.match(email):
+                return self.responde(400, {"erro": "email_invalido",
+                    "mensagem": "Informe um e-mail válido."})
+            if not RE_DATA.match(nasc):
+                return self.responde(400, {"erro": "data_invalida",
+                    "mensagem": "Informe sua data de nascimento."})
+            try:
+                anos = idade(nasc)
+            except Exception:
+                return self.responde(400, {"erro": "data_invalida",
+                    "mensagem": "Data de nascimento inválida."})
+            if anos < 13 or anos > 120:
+                return self.responde(422, {"erro": "idade_invalida",
+                    "mensagem": "É preciso ter ao menos 13 anos."})
+
+            # e-mail é a chave: reinscrever apenas atualiza os dados e
+            # preserva a posição original na fila
+            ja = db.fila_espera.find_one({"_id": email})
+            if ja:
+                db.fila_espera.update_one({"_id": email},
+                    {"$set": {"nome": nome, "nascimento": nasc,
+                              "idade": anos}})
+                pos = db.fila_espera.count_documents(
+                    {"em": {"$lte": ja.get("em", 0)}})
+                return self.responde(200, {"ja_inscrito": True,
+                    "posicao": pos,
+                    "mensagem": "Você já está na fila. Seus dados foram "
+                                "atualizados."})
+
+            import time
+            agora = time.time()
+            db.fila_espera.insert_one({
+                "_id": email, "nome": nome, "nascimento": nasc,
+                "idade": anos, "em": agora, "convidado": False})
+            pos = db.fila_espera.count_documents({"em": {"$lte": agora}})
+            return self.responde(200, {"posicao": pos,
+                "mensagem": "Pronto! Avisaremos assim que abrirmos vagas."})
+
         # Gera um convite para o próprio usuário autenticado.
         if self.path == "/gerar":
             uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
@@ -160,6 +233,7 @@ class Handler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     db.account_invites.create_index("criado_por")
+    db.fila_espera.create_index("em")
     db.account_invites.create_index("origem")
     print(f"servico de convites em :{PORTA} (limite {LIMITE})", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORTA), Handler).serve_forever()

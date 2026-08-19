@@ -77,6 +77,13 @@
 # Conteúdo estático em /site (bind-mount via compose.override.yml)
 # ---------------------------------------------------------------------
 doispapo.com, www.doispapo.com {
+	# A landing precisa falar com o serviço de convites na mesma origem,
+	# senão o formulário da fila esbarra em CORS.
+	route /api-convites* {
+		uri strip_prefix /api-convites
+		reverse_proxy http://convites:8600
+	}
+
 	root * /site
 	encode gzip zstd
 	file_server
