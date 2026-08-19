@@ -12,6 +12,75 @@
   "use strict";
   var API = "/api-convites";
 
+  /* ------------------------- luz de fala local ------------------------ */
+  /* A luz nativa depende do servidor: o SFU analisa os níveis e transmite
+     de volta a lista de falantes ativos, então há uma ida e volta antes de
+     acender. Aqui acendemos direto do analisador local, em 40 ms.
+     Só a própria luz — o áudio dos outros chega misturado, e analisá-lo
+     individualmente exigiria interceptar a reprodução, com risco de mudo
+     geral. */
+  var meuNome = null, tokenSessao = null;
+
+  var _fetch = window.fetch;
+  window.fetch = function (entrada, init) {
+    try {
+      var h = (init && init.headers) || (entrada && entrada.headers);
+      if (h) {
+        var t = h.get ? h.get("X-Session-Token") : h["X-Session-Token"];
+        if (t) tokenSessao = t;
+      }
+    } catch (e) {}
+    return _fetch.apply(this, arguments);
+  };
+
+  function descobrirNome() {
+    if (meuNome || !tokenSessao) return;
+    _fetch("/api/users/@me", { headers: { "X-Session-Token": tokenSessao } })
+      .then(function (r) { return r.json(); })
+      .then(function (u) { if (u && u.username) meuNome = u.username; })
+      .catch(function () {});
+  }
+
+  var estiloLuz = document.createElement("style");
+  estiloLuz.textContent =
+    ".dp-falando{position:relative}" +
+    ".dp-falando::after{content:'';position:absolute;inset:-3px;" +
+      "border-radius:12px;border:2px solid #3fb950;" +
+      "box-shadow:0 0 10px rgba(63,185,80,.65);pointer-events:none;" +
+      "animation:dp-pulso .9s ease-in-out infinite}" +
+    "@keyframes dp-pulso{0%,100%{opacity:1}50%{opacity:.55}}" +
+    "@media(prefers-reduced-motion:reduce){" +
+      ".dp-falando::after{animation:none}}";
+  document.head.appendChild(estiloLuz);
+
+  function meuBloco() {
+    if (!meuNome) return null;
+    var spans = document.querySelectorAll("span");
+    for (var i = 0; i < spans.length; i++) {
+      if ((spans[i].textContent || "").trim() !== meuNome) continue;
+      var bloco = spans[i].parentElement;
+      // o bloco do participante contém o avatar em <svg>
+      if (bloco && bloco.querySelector("svg")) return bloco;
+    }
+    return null;
+  }
+
+  function luzDeFala() {
+    descobrirNome();
+    var a = window.dpAudio;
+    if (!a || !a.estado.ctx) {           // sem microfone ativo, sem luz
+      document.querySelectorAll(".dp-falando").forEach(function (e) {
+        e.classList.remove("dp-falando");
+      });
+      return;
+    }
+    // independe do portão estar ligado: a luz indica nível de voz
+    var falando = a.estado.nivel >= a.cfg.limiar;
+    var bloco = meuBloco();
+    if (!bloco) return;
+    bloco.classList.toggle("dp-falando", falando);
+  }
+
   /* ------------------------------------------------------ entrar direto */
   var saiuDe = null;   // canal do qual o usuário saiu de propósito
 
@@ -117,6 +186,8 @@
 
   function tick() { entrarDireto(); pintarContadores(); }
   setInterval(tick, 1000);
+  // a luz precisa de cadência bem mais rápida que o resto
+  setInterval(luzDeFala, 40);
   new MutationObserver(entrarDireto).observe(document.documentElement,
     { childList: true, subtree: true });
 })();
