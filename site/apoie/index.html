@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apoie o Dois Papo</title>
+<meta name="description" content="Ajude a manter o Dois Papo no ar. Contribua via PIX.">
+<link rel="icon" href="/logo-color.png">
+<meta name="theme-color" content="#101823">
+<style>
+  :root{--bg:#0b1119;--card:#151f2e;--line:#22304a;--tx:#e8edf6;--tx2:#93a1bb;
+    --azul:#2E8BEB;--roxo:#8C41D9}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);min-height:100vh;
+    display:flex;align-items:center;justify-content:center;padding:28px;
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .box{max-width:430px;width:100%;text-align:center}
+  .logo{width:150px;margin:0 auto 24px;display:block}
+  h1{font-size:25px;letter-spacing:-.015em;margin-bottom:10px}
+  h1 span{background:linear-gradient(100deg,var(--azul),var(--roxo));
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{color:var(--tx2);font-size:15px;margin-bottom:26px}
+  .card{background:var(--card);border:1px solid var(--line);
+    border-radius:16px;padding:26px}
+  .card img{width:210px;height:210px;background:#fff;padding:10px;
+    border-radius:12px;display:block;margin:18px auto}
+  .nome{font-size:14px;color:var(--tx2)}
+  .nome strong{color:var(--tx);display:block;font-size:15px}
+  .chave{margin-top:16px;font-size:14px}
+  .chave strong{display:block;margin-top:3px;font-size:15px}
+  button{margin-top:16px;width:100%;cursor:pointer;
+    background:linear-gradient(100deg,var(--azul),var(--roxo));
+    color:#fff;border:0;border-radius:10px;padding:13px;
+    font:650 14px system-ui,sans-serif}
+  button:hover{filter:brightness(1.1)}
+  code{display:block;margin-top:12px;font-size:10px;color:var(--tx2);
+    word-break:break-all;background:#0b1119;border-radius:8px;padding:11px;
+    line-height:1.45;text-align:left}
+  footer{margin-top:24px;font-size:13px;color:var(--tx2)}
+  footer a{color:var(--roxo);text-decoration:none;font-weight:600}
+  .ok{color:#4ade80}
+</style>
+</head>
+<body>
+<div class="box">
+  <img class="logo" src="/logo.png" alt="Dois Papo">
+  <h1>Apoie o <span>Dois Papo</span></h1>
+  <p class="lead">A plataforma roda em servidor próprio, custeado do bolso.
+    Qualquer valor ajuda a manter tudo no ar.</p>
+
+  <div class="card">
+    <div class="nome">Recebedor<strong>Kaue Da Costa Pacheco</strong></div>
+    <img src="/pix.png" alt="QR Code PIX do Dois Papo">
+    <div class="chave">Chave PIX<strong id="chave">kaueramone@live.com</strong></div>
+    <button id="copiar">Copiar código PIX</button>
+    <code id="payload">00020126410014br.gov.bcb.pix0119kaueramone@live.com5204000053039865802BR5921KAUE DA COSTA PACHECO6013FLORIANOPOLIS62070503***6304B791</code>
+  </div>
+
+  <footer>desenvolvido por
+    <a href="https://kaueramone.dev" target="_blank" rel="noopener">kaueramone.dev</a>
+  </footer>
+</div>
+<script>
+document.getElementById("copiar").addEventListener("click", function(){
+  var t = document.getElementById("payload").textContent.trim(), b = this;
+  navigator.clipboard.writeText(t).then(function(){
+    b.textContent = "✓ Código copiado"; b.classList.add("ok");
+    setTimeout(function(){ b.textContent = "Copiar código PIX";
+      b.classList.remove("ok"); }, 2200);
+  });
+});
+</script>
+</body>
+</html>

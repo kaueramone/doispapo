@@ -165,25 +165,24 @@ conta("index.html", 2)
 
 INJECAO = """
 <style id="dp-marca">
-  #dp-rodape{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;
-    display:flex;justify-content:center;align-items:center;gap:.4em;
-    height:22px;font:11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;
-    color:#8b93a7;background:rgba(16,24,35,.82);
+  /* Assinatura do desenvolvedor — canto superior direito */
+  #dp-assinatura{position:fixed;top:0;right:0;z-index:2147483000;
+    display:flex;align-items:center;gap:.35em;
+    padding:5px 12px 6px;border-radius:0 0 0 10px;
+    font:11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;
+    color:#8b93a7;background:rgba(16,24,35,.78);
     -webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);
     pointer-events:none;user-select:none}
-  #dp-rodape a{color:#8C41D9;text-decoration:none;pointer-events:auto;
-    font-weight:600}
-  #dp-rodape a:hover{text-decoration:underline;color:#2E8BEB}
-  #dp-pix{margin-top:14px;padding:14px;border-radius:12px;
-    background:rgba(140,65,217,.08);border:1px solid rgba(140,65,217,.25);
-    text-align:center;font:13px/1.5 system-ui,sans-serif;color:inherit}
-  #dp-pix img{width:200px;height:200px;border-radius:8px;display:block;
-    margin:10px auto;background:#fff;padding:8px}
-  #dp-pix code{display:block;word-break:break-all;font-size:10px;
-    opacity:.65;margin-top:8px;line-height:1.4}
+  #dp-assinatura a{color:#8C41D9;text-decoration:none;font-weight:650;
+    pointer-events:auto}
+  #dp-assinatura a:hover{color:#2E8BEB;text-decoration:underline}
 
-  /* Rodape do login: remove os links institucionais herdados e o Bluesky.
-     O GitHub fica, apontando para o repositorio proprio (trocado no bundle). */
+  /* Logo na tela de login */
+  #dp-login-logo{display:block;width:min(230px,58vw);height:auto;
+    margin:0 auto 26px}
+
+  /* Rodapé do login: remove links institucionais herdados e o Bluesky.
+     O GitHub fica, apontando para o repositório próprio. */
   a[href*="doispapo.com/sobre"],
   a[href*="doispapo.com/termos"],
   a[href*="doispapo.com/privacidade"],
@@ -194,39 +193,36 @@ INJECAO = """
 </style>
 <script id="dp-marca-js">
 (function(){
-  var QR="__QR__", PAYLOAD="__PAYLOAD__";
+  var LOGO="/assets/web/wordmark.svg";
 
-  function rodape(){
-    if(document.getElementById("dp-rodape"))return;
+  function assinatura(){
+    if(document.getElementById("dp-assinatura"))return;
+    if(!document.body)return;
     var d=document.createElement("div");
-    d.id="dp-rodape";
-    d.innerHTML='desenvolvido por <a href="__SITE__" target="_blank" rel="noopener">__AUTOR__</a>';
+    d.id="dp-assinatura";
+    d.innerHTML='por <a href="__SITE__" target="_blank" rel="noopener">__AUTOR__</a>';
     document.body.appendChild(d);
   }
 
-  // Insere o QR do PIX abaixo do texto de doacao, quando ele aparecer.
-  function pix(){
-    if(!QR)return;
-    var alvos=document.querySelectorAll("h1,h2,h3,h4,p,span,div,button,a");
-    for(var i=0;i<alvos.length;i++){
-      var el=alvos[i], t=(el.textContent||"").trim();
-      if(t.length>60)continue;
-      if(!/^(doar|donate|doa[cç][aã]o|apoiar)\\b/i.test(t))continue;
-      if(el.querySelector("#dp-pix"))continue;
-      var host=el.closest("section,div")||el.parentElement;
-      if(!host||host.querySelector("#dp-pix"))continue;
-      var box=document.createElement("div");
-      box.id="dp-pix";
-      box.innerHTML='<strong>Apoie o __MARCA__ via PIX</strong>'+
-        '<img alt="QR Code PIX" src="'+QR+'">'+
-        '<div>Chave: <strong>kaueramone@live.com</strong></div>'+
-        '<code>'+PAYLOAD+'</code>';
-      host.appendChild(box);
-      return;
+  // Insere a logo no topo da tela de login/cadastro.
+  function loginLogo(){
+    if(document.getElementById("dp-login-logo"))return;
+    var campo=document.querySelector(
+      'input[type="password"],input[type="email"],input[name="email"]');
+    if(!campo)return;
+    var anc=campo.closest("form");
+    if(!anc){
+      anc=campo;
+      for(var i=0;i<3&&anc.parentElement;i++)anc=anc.parentElement;
     }
+    if(!anc||!anc.parentNode)return;
+    var img=document.createElement("img");
+    img.id="dp-login-logo"; img.src=LOGO; img.alt="__MARCA__";
+    anc.parentNode.insertBefore(img,anc);
   }
 
-  function tick(){ rodape(); pix(); }
+
+  function tick(){ assinatura(); loginLogo(); }
   if(document.readyState!=="loading")tick();
   else document.addEventListener("DOMContentLoaded",tick);
   new MutationObserver(tick).observe(document.documentElement,
@@ -234,8 +230,7 @@ INJECAO = """
 })();
 </script>
 """
-INJECAO = (INJECAO.replace("__QR__", qr).replace("__PAYLOAD__", pix_payload)
-           .replace("__SITE__", SITE).replace("__AUTOR__", AUTOR)
+INJECAO = (INJECAO.replace("__SITE__", SITE).replace("__AUTOR__", AUTOR)
            .replace("__MARCA__", MARCA))
 
 if "dp-marca" not in h:
@@ -312,6 +307,19 @@ try:
 
 except ImportError:
     print("AVISO: PIL indisponivel, assets de imagem nao trocados")
+
+# ------------------------- 4c. remove o pop-up de novidades na entrada
+# dN() retorna null quando a resposta nao tem o formato esperado, e com
+# null o modal nao abre. Apontamos para um data: URI que devolve {} —
+# deterministico e sem depender de rede.
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+    s_ = s_.replace("https://changelog.stoat.chat/v1/changelogs/latest",
+                    "data:application/json,%7B%7D")
+    if s_ != o_:
+        conta("popup-novidades-off", 1)
+        open(f, "w", encoding="utf-8").write(s_)
 
 # --------------------------------- 5c. invalidacao do service worker
 # O SW (workbox) guarda os assets por hash de revisao e por nome de cache.
