@@ -190,6 +190,76 @@ if "dp-marca" not in h:
     conta("injecao", 1)
 open(idx, "w", encoding="utf-8").write(h)
 
+# ------------------------------- 4b. idioma padrao = portugues do Brasil
+# O app escolhe pelo navigator.languages e so cai no fallback quando nao
+# reconhece nenhum. Trocamos esse fallback de ENGLISH para pt-BR.
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    novo_, n_ = re.subn(r"\?\?(\w+)\.ENGLISH", r"??\1.PORTUGUESE_BRAZIL", s_)
+    if n_:
+        conta("idioma-padrao", n_)
+        open(f, "w", encoding="utf-8").write(novo_)
+
+# ------------------------------- 5b. assets de imagem da marca
+# Troca os proprios arquivos de logo. Assim a marca aparece no login,
+# na home, no favicon e no PWA sem depender de descobrir qual tela usa
+# qual asset.
+try:
+    from PIL import Image
+    import base64, io
+
+    LOGOS = os.path.join(ASSETS, "logos")
+    simb  = Image.open(os.path.join(LOGOS, "doispapo-simbolo.png")).convert("RGBA")
+    simb_b= Image.open(os.path.join(LOGOS, "doispapo-simbolo-white.png")).convert("RGBA")
+    cheio = Image.open(os.path.join(LOGOS, "doispapo-logo-color.png")).convert("RGBA")
+
+    def quadrado(src, lado, ocupa=0.92, fundo=None):
+        """Centraliza a imagem num canvas quadrado."""
+        c = Image.new("RGBA", (lado, lado), fundo or (0, 0, 0, 0))
+        alvo = int(lado * ocupa)
+        r = src.copy()
+        r.thumbnail((alvo, alvo), Image.LANCZOS)
+        c.paste(r, ((lado - r.width) // 2, (lado - r.height) // 2), r)
+        return c
+
+    web = os.path.join(DST, "assets", "web")
+    if os.path.isdir(web):
+        quadrado(simb, 192).save(os.path.join(web, "android-chrome-192x192.png"))
+        quadrado(simb, 512).save(os.path.join(web, "android-chrome-512x512.png"))
+        # maskable: o SO recorta as bordas, entao o simbolo fica menor
+        # e sobre fundo solido da marca
+        quadrado(simb, 512, 0.58, (16, 24, 35, 255)).save(
+            os.path.join(web, "masking-512x512.png"))
+        conta("icones-pwa", 3)
+
+        def svg_com_png(img, caminho):
+            buf = io.BytesIO(); img.save(buf, "PNG")
+            b64 = base64.b64encode(buf.getvalue()).decode()
+            svg = (f'<svg xmlns="http://www.w3.org/2000/svg" '
+                   f'viewBox="0 0 {img.width} {img.height}" '
+                   f'width="{img.width}" height="{img.height}">'
+                   f'<image href="data:image/png;base64,{b64}" '
+                   f'width="{img.width}" height="{img.height}"/></svg>')
+            open(caminho, "w", encoding="utf-8").write(svg)
+
+        m = simb_b.copy(); m.thumbnail((256, 256), Image.LANCZOS)
+        svg_com_png(m, os.path.join(web, "monochrome.svg"))
+        wm = cheio.copy(); wm.thumbnail((500, 500), Image.LANCZOS)
+        svg_com_png(wm, os.path.join(web, "wordmark.svg"))
+        conta("svgs-marca", 2)
+
+        ico = quadrado(simb, 64)
+        ico.save(os.path.join(web, "icon.ico"), sizes=[(16,16),(32,32),(48,48),(64,64)])
+        conta("favicon", 1)
+
+    # favicon com hash na raiz de assets/
+    for f in glob.glob(os.path.join(DST, "assets", "icon-*.ico")):
+        quadrado(simb, 64).save(f, sizes=[(16,16),(32,32),(48,48),(64,64)])
+        conta("favicon", 1)
+
+except ImportError:
+    print("AVISO: PIL indisponivel, assets de imagem nao trocados")
+
 # ------------------------------------------------- 6. relatorio
 print("\n=== SUBSTITUICOES ===")
 for k, v in stats.items():
