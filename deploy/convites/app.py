@@ -256,7 +256,6 @@ class Handler(BaseHTTPRequestHandler):
                     "mensagem": "Você já está na fila. Seus dados foram "
                                 "atualizados."})
 
-            import time
             agora = time.time()
             db.fila_espera.insert_one({
                 "_id": email, "nome": nome, "nascimento": nasc,

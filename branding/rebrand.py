@@ -166,6 +166,9 @@ HARDCODED = {
     'placeholder:"Search for emojis..."':'placeholder:"Buscar emojis..."',
     'placeholder:"Search for GIFs..."':  'placeholder:"Buscar GIFs..."',
     'placeholder:"Type here :D"':        'placeholder:"Escreva aqui :D"',
+    # entrada composta (texto + variável): o aplicador de traduções só
+    # mexe em texto simples, para não corromper a estrutura. Vai aqui.
+    '"uJTQKq":["With "': '"uJTQKq":["Com "',
 }
 for f in glob.glob(os.path.join(DST, "assets", "*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()

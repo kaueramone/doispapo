@@ -119,21 +119,36 @@
 
   // Ancora abaixo do ajuste de supressão de ruído, que é onde a pessoa
   // já está mexendo em microfone.
+  var ANCORAS = [
+    /supress[ãa]o de ru[íi]do/i,
+    /processamento de voz/i,
+    /sele[çc]ionar entrada de [áa]udio/i,
+    /voz e v[íi]deo/i
+  ];
+  var tentativas = 0;
+
   function procurar() {
     if (document.getElementById("dp-mic")) return;
     var alvos = document.querySelectorAll("div,section,label,span,h1,h2,h3,h4");
-    for (var i = 0; i < alvos.length; i++) {
-      var t = (alvos[i].textContent || "").trim();
-      if (t.length > 60) continue;
-      if (!/supress[ãa]o de ru[íi]do/i.test(t)) continue;
-      var bloco = alvos[i];
-      for (var k = 0; k < 3 && bloco.parentElement; k++) {
-        if (bloco.parentElement.children.length > 1) break;
-        bloco = bloco.parentElement;
+    for (var a = 0; a < ANCORAS.length; a++) {
+      for (var i = 0; i < alvos.length; i++) {
+        var t = (alvos[i].textContent || "").trim();
+        if (t.length > 60 || !ANCORAS[a].test(t)) continue;
+        var bloco = alvos[i];
+        for (var k = 0; k < 3 && bloco.parentElement; k++) {
+          if (bloco.parentElement.children.length > 1) break;
+          bloco = bloco.parentElement;
+        }
+        if (bloco && bloco.parentNode) { montar(bloco); return; }
       }
-      if (bloco && bloco.parentNode) { montar(bloco); return; }
     }
+    // Não achar a âncora deixaria o painel invisível sem explicação.
+    if (/^\/settings/.test(location.pathname) && ++tentativas === 40)
+      console.warn("[Dois Papo] painel do microfone: nenhuma âncora " +
+        "encontrada nas configurações. Rode window.dpAudio para conferir " +
+        "se o processamento está ativo.");
   }
+
 
   new MutationObserver(procurar).observe(document.documentElement,
     { childList: true, subtree: true });

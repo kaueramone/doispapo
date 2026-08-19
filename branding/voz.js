@@ -20,7 +20,12 @@
     for (var i = 0; i < els.length; i++) {
       var t = (els[i].textContent || "").trim();
       if (t.length > 28) continue;
-      if (/^(entrar na chamada|entrar no canal de voz|join call)$/i.test(t))
+      // O texto muda conforme o canal: "Iniciar a chamada" quando vazio,
+      // "Entrar na chamada" ao voltar, e "Com Fulano, Ciclano" quando já
+      // há gente dentro.
+      if (/^(iniciar a chamada|entrar na chamada|entrar no canal de voz|join call|start the call)$/i.test(t))
+        return els[i];
+      if (els[i].tagName === "BUTTON" && /^com .{1,24}$/i.test(t))
         return els[i];
     }
     return null;
