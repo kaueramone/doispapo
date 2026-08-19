@@ -6,7 +6,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use tauri::{
-    image::Image,
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
@@ -108,11 +107,8 @@ fn main() {
 
             // Ícone próprio da bandeja: fundo sólido, para ler bem tanto em
             // barra clara quanto escura.
-            let icone = Image::from_bytes(include_bytes!("../icons/bandeja.png"))
-                .unwrap_or_else(|_| app.default_window_icon().unwrap().clone());
-
             TrayIconBuilder::with_id("principal")
-                .icon(icone)
+                .icon(tauri::include_image!("./icons/bandeja.png"))
                 .tooltip(format!("Dois Papo {VERSAO}"))
                 .menu(&menu)
                 .show_menu_on_left_click(false)
