@@ -56,9 +56,29 @@ video_resolution = [1920, 1080]
 O cliente vem como imagem pré-compilada. `branding/rebrand.py` extrai o
 build, aplica a marca e gera um `dist-patched` que é montado por cima.
 
+**Nunca rode o `rebrand.py` apontando para `dist-patched`.** Esse é o
+diretório que o container serve ao vivo; o script abre cada arquivo em
+modo escrita, o que trunca para zero byte antes de reescrever. Quem
+carregasse a página nesse instante recebia um `index.html` pela metade,
+o service worker guardava aquilo e o navegador passava a exibir o
+código-fonte dos scripts como texto na tela — sem que nenhuma correção
+no servidor alcançasse aquele cliente.
+
+Publique sempre pelo script, que monta o build num diretório novo,
+confere enquanto ele ainda está fora do ar e só então troca de lugar:
+
 ```bash
-python3 branding/rebrand.py dist-orig dist-patched
+branding/publicar.sh              # gerar, conferir e publicar
+deploy/lancar.sh 0.27.0 "…"       # o mesmo, com commit + tag + push
 ```
+
+`branding/verificar.py` é o portão. Reprova o build se o `index.html`
+estiver malformado ou truncado, se alguma tag `<script>`/`<style>` for
+alvo de um seletor `#id` (isso torna o código-fonte visível na tela), se
+houver id repetido, se a revisão de precache divergir do arquivo, ou se
+algum remendo do bundle não tiver encontrado seu alvo. Depois de
+publicar, o `publicar.sh` compara o que o servidor **entrega** com o que
+está em disco e reverte sozinho se divergir.
 
 O que ele faz e **por que é assim**:
 
