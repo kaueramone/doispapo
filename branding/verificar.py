@@ -168,6 +168,13 @@ if bundle:
                          "personalizar): " + ", ".join(_embutidos))
         avisos.append("%d sons de notificacao reconhecidos" % len(_casos))
 
+# ------------------------- 2e. nenhum recurso vindo de host de terceiro
+# O bundle nao pode buscar nada em static.stoat.chat: alem de ser marca
+# de outro projeto, poe a plataforma na dependencia da infraestrutura
+# deles e entrega o IP de cada usuario a um host que nao e nosso.
+if bundle and "static.stoat.chat" in bundle:
+    erros.append("o bundle ainda busca recurso em static.stoat.chat")
+
 # ----------------------------------------- 3. sobras da marca do upstream
 resto = 0
 for raiz, _, arqs in os.walk(os.path.join(DST, "assets")):

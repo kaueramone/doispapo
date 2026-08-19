@@ -137,6 +137,13 @@ SOBRAS = [
     ("https://support.stoat.chat/kb/troubleshooting/connection-issues",
      "https://doispapo.com/ajuda"),
     ("https://stoat.gg/meet-gifbox", "https://doispapo.com/ajuda"),
+    # Emoji: cada um era um <img> buscado no CDN do upstream, a cada
+    # emoji renderizado. Isso deixava a plataforma dependente da
+    # infraestrutura deles - se aquele dominio sair do ar, os emoji
+    # somem de todas as conversas - e fazia o navegador de cada usuario
+    # conversar com um host que nao e nosso. Agora aponta para o
+    # espelho proprio, que guarda em disco na primeira busca.
+    ("https://static.stoat.chat/emoji/", "/emoji/"),
     # a troca cega de marca gerou um rotulo nosso apontando para o webmail
     # do upstream; o ramo so vale para enderecos @stoat.chat, mas o nome
     # errado nao pode ficar
