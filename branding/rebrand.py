@@ -63,6 +63,7 @@ LINKS = [
     ("https://github.com/orgs/stoatchat/discussions",
      "https://github.com/kaueramone/doispapo/discussions"),
     ("https://github.com/stoatchat", "https://github.com/kaueramone/doispapo"),
+    ("https://developers.stoat.chat", "https://developers.doispapo.com"),
     ("https://ko-fi.com/stoatchat", "https://doispapo.com/apoie"),
     ("https://stoat.chat/terms",    "https://doispapo.com/termos"),
     ("https://stoat.chat/privacy",  "https://doispapo.com/privacidade"),
@@ -246,8 +247,7 @@ INJECAO = """
   a[href*="doispapo.com/privacidade"],
   a[href*="doispapo.com/uso-aceitavel"],
   a[href*="bsky.app"],
-  a[href*="translate."],
-  a[href*="developers."]{display:none!important}
+  a[href*="translate."]{display:none!important}
 
   /* Painel de convites nas configuracoes */
   #dp-convites{margin:0 0 18px;padding:18px 20px;border-radius:14px;
