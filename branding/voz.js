@@ -119,6 +119,7 @@
      nativa permanece. Melhor um indicador lento que nenhum.
 
      Desligar: localStorage.setItem("dp_nativa","1"); location.reload();  */
+  var CLASSE_BLOCO = "eQVZMd";   // bloco do participante na lista lateral
   var CLASSES_FALA = ["dKGhWu", "fXciza", "hgBSwO", "GrQgU"];
   var manterNativa = false;
   try { manterNativa = localStorage.getItem("dp_nativa") === "1"; } catch (e) {}
@@ -361,10 +362,22 @@
   function tick() { entrarDireto(); pintarContadores(); }
   setInterval(tick, 1000);
   // a luz precisa de cadência bem mais rápida que o resto
+  // Isolamento por função: uma exceção em qualquer delas parava o ciclo
+  // inteiro a cada 40ms — foi o que apagou o anel quando CLASSE_BLOCO
+  // ficou indefinida, sem nenhum sinal além do console.
+  function protegido(nome, fn) {
+    try { fn(); }
+    catch (e) {
+      if (!protegido[nome]) {
+        protegido[nome] = true;          // avisa uma vez, não 25x/s
+        console.warn("[Dois Papo] falha em " + nome + ":", e);
+      }
+    }
+  }
   setInterval(function () {
-    atualizarMapaBlocos();
-    luzDeFala();
-    luzDosOutros();
+    protegido("mapa", atualizarMapaBlocos);
+    protegido("luzLocal", luzDeFala);
+    protegido("luzOutros", luzDosOutros);
   }, 40);
   // Amortecido: sem isso o observador dispara uma varredura de botões por
   // mutação, e abrir um servidor gera centenas delas de uma vez. Foi esse
