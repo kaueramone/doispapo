@@ -761,6 +761,21 @@ INJECAO = """
 INJECAO = (INJECAO.replace("__SITE__", SITE).replace("__AUTOR__", AUTOR)
            .replace("__MARCA__", MARCA))
 
+# Áudio: precisa ser avaliado ANTES do módulo do app, para embrulhar o
+# getUserMedia antes de o shim do webrtc-adapter embrulhar por cima.
+# Script inline no fim do body roda durante a análise do HTML; módulos
+# são adiados, então a ordem fica garantida.
+_base = os.path.dirname(os.path.abspath(__file__))
+for _arq, _id in (("audio.js", "dp-audio"), ("audio-ui.js", "dp-audio-ui")):
+    _cam = os.path.join(_base, _arq)
+    if not os.path.exists(_cam):
+        continue
+    if _id in h:
+        continue
+    _js = open(_cam, encoding="utf-8").read()
+    INJECAO = f'<script id="{_id}">\n{_js}\n</script>\n' + INJECAO
+    conta("audio", 1)
+
 if "dp-marca" not in h:
     h = h.replace("</body>", INJECAO + "\n</body>")
     conta("injecao", 1)
