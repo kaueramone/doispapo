@@ -640,10 +640,51 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     i_ = s_.find(_ABRE)
     if i_ < 0:
         continue
-    j_ = s_.find("</svg>", i_)
-    if j_ < 0:
+    # O template e C('<svg ...><path d="...">') e termina logo apos o
+    # path — nao ha </svg>, o framework fecha sozinho. Por isso NAO se
+    # pode cortar ate o proximo </svg>: ele pertence a outro template
+    # 47 mil caracteres adiante, e apaga-lo destroi o bundle.
+    # Trocamos exclusivamente o elemento <path>.
+    ip_ = s_.find('<path d="M478.909', i_)
+    if ip_ < 0:
         continue
-    s_ = s_[:i_] + _novo_svg + s_[j_ + 6:]
+    fd_ = s_.find('d="', ip_) + 3
+    fa_ = s_.find('"', fd_)          # fim do atributo d
+    fp_ = s_.find(">", fa_)          # fim da tag <path ...>
+    if fa_ < 0 or fp_ < 0 or fp_ - ip_ > 12000:
+        print("AVISO: limites do path inesperados, wordmark nao trocado")
+        continue
+
+    _img = ('<image href="/assets/web/logo-branco.png" width=%d height=%d '
+            'preserveAspectRatio="xMidYMid meet">' % (_LARG, _ALT))
+    antes_, depois_ = s_[:ip_], s_[fp_ + 1:]
+    s_ = antes_ + _img + depois_
+
+    # a caixa do svg era feita para um logotipo largo; ajusta para a
+    # proporcao da nossa logo, senao ela fica perdida no meio do vao
+    s_ = s_.replace(_ABRE,
+        "<svg xmlns=http://www.w3.org/2000/svg width=%d height=%d "
+        "fill=none viewBox=\"0 0 %d %d\">" % (_LARG, _ALT, _LARG, _ALT), 1)
+    # TRAVA: confirma que o literal do template continua bem fechado.
+    # Uma edicao que estoure os limites da string quebra o bundle inteiro
+    # e o node --check nao necessariamente acusa.
+    _iz = s_.find("var ZUe=C(")
+    if _iz >= 0:
+        _jz = _iz + len("var ZUe=C(")
+        _asp = s_[_jz]
+        _k = _jz + 1
+        while _k < len(s_):
+            if s_[_k] == "\\":
+                _k += 2; continue
+            if s_[_k] == _asp:
+                break
+            _k += 1
+        if s_[_k + 1:_k + 3] != "')" and s_[_k + 1:_k + 2] != ")":
+            raise SystemExit(
+                "ABORTADO: o template do wordmark ficou malformado "
+                "(fecha com %r seguido de %r). Nada foi gravado."
+                % (s_[_k], s_[_k+1:_k+12]))
+
     conta("wordmark-inline", 1)
 
     # Versao exibida nas configuracoes: a do upstream nao diz nada para
