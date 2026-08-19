@@ -93,9 +93,19 @@
 
   var estiloLuz = document.createElement("style");
   estiloLuz.textContent =
-    ".dp-falando{position:relative}" +
-    ".vc_tile.dp-falando::after{border-radius:14px;inset:-2px}" +
-    ".dp-falando::after{content:'';position:absolute;inset:-3px;" +
+    /* dp-fala é carimbada pelo próprio app no quadro do grid, com o
+       mesmo valor que ele usa para o indicador nativo (rebrand.py,
+       seção 1h). No grid não há adivinhação: quem diz quem está
+       falando é quem já sabe. */
+    ".dp-falando,.dp-fala{position:relative}" +
+    ".vc_tile.dp-falando::after,.vc_tile.dp-fala::after{" +
+      "border-radius:14px;inset:-2px}" +
+    /* o indicador nativo do quadro fica verde junto, seja ele borda,
+       contorno ou sombra — sem depender de saber qual das três é */
+    ".vc_tile.dp-fala{outline-color:#3fb950!important;" +
+      "border-color:#3fb950!important}" +
+    ".dp-falando::after,.dp-fala::after{content:'';position:absolute;" +
+      "inset:-3px;" +
       "border-radius:12px;border:2px solid #3fb950;" +
       "box-shadow:0 0 10px rgba(63,185,80,.65);pointer-events:none;" +
       "animation:dp-pulso .9s ease-in-out infinite}" +
@@ -152,40 +162,28 @@
     mapaEm = agora;
     var novo = {};
 
-    // lista lateral: nome em <span>, avatar em <svg> irmão
-    var spans = document.querySelectorAll("span");
+    /* Lista lateral: nome em <span>, avatar em <svg> irmão.
+       O `closest` NÃO é detalhe. Sem ele a varredura casa qualquer
+       elemento da página cujo texto seja o nome do participante — e o
+       nome de quem fala aparece em todas as mensagens do histórico do
+       chat. O resultado era o histórico inteiro acendendo de verde. */
+    var spans = document.querySelectorAll("." + CLASSE_BLOCO + " span");
     for (var i = 0; i < spans.length; i++) {
       var t = (spans[i].textContent || "").trim();
       if (!t || t.length > 40) continue;
       var bloco = spans[i].parentElement;
       if (!bloco || !bloco.querySelector("svg")) continue;
+      if (!bloco.closest("." + CLASSE_BLOCO)) continue;
       (novo[t] = novo[t] || []).push(bloco);
     }
 
-    // grid central: raiz identificada por vc_tile, nome num <div> folha.
-    // Consultar vc_tile custa pouco — são poucos quadros — bem menos que
-    // varrer todos os divs da página.
-    var quadros = document.querySelectorAll(".vc_tile");
-    for (var q = 0; q < quadros.length; q++) {
-      var nome = nomeNoQuadro(quadros[q]);
-      if (nome) (novo[nome] = novo[nome] || []).push(quadros[q]);
-    }
+    /* O grid não entra mais neste mapa. Casar o nome do participante
+       com o texto do quadro era frágil de origem: o mesmo nome aparece
+       no histórico do chat, nas menções e nas notificações de entrada
+       na chamada. Agora o próprio app carimba `dp-fala` no quadro, com
+       o estado que ele já calcula — o contorno é só CSS. */
 
     mapaBlocos = novo;
-  }
-
-  function nomeNoQuadro(quadro) {
-    // primeiro elemento-folha com texto curto; o ícone de estado é
-    // descartado pela classe de símbolo
-    var cands = quadro.querySelectorAll("div,span");
-    for (var i = 0; i < cands.length; i++) {
-      var e = cands[i];
-      if (e.children.length) continue;
-      if ((e.className || "").indexOf("material-symbols") >= 0) continue;
-      var t = (e.textContent || "").trim();
-      if (t && t.length <= 40) return t;
-    }
-    return null;
   }
 
   function blocosDe(nome) { return (nome && mapaBlocos[nome]) || []; }

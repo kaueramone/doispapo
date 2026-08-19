@@ -165,6 +165,29 @@ for f in glob.glob(os.path.join(DST, "assets", "*.js")):
         open(f, "w", encoding="utf-8").write(s_)
 
 
+# ------------------------- 1h. marcador de quem esta falando no grid
+# O grid da chamada tinha o pior tipo de deteccao: varrer a pagina atras
+# de elementos cujo texto e igual ao nome do participante. Isso acendia
+# todo "fulano" do historico do chat junto - o nome aparece em dezenas
+# de lugares que nao tem nada a ver com a chamada.
+#
+# O proprio app ja calcula quem esta falando, e passa isso ao quadro:
+#
+#     LN({speaking:!p()&&v(), ...}) + " vc_tile"
+#
+# Basta ele carimbar uma classe estavel com esse mesmo valor. A partir
+# dai o contorno e so CSS, sem varredura, sem casar texto e sem depender
+# de nome de classe gerado pelo empacotador - que muda a cada build.
+MARCA_FALA = re.compile(r'\+\(p\(\)\?" vc_tile group":" vc_tile"\)')
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    novo_, n = MARCA_FALA.subn(
+        '+(p()?" vc_tile group":" vc_tile")+(!p()&&v()?" dp-fala":"")', s_)
+    if n:
+        conta("marcador-fala", n)
+        open(f, "w", encoding="utf-8").write(novo_)
+
+
 # ---------------------- 1g. compartilhamento de tela sob demanda
 # Numa chamada com duas pessoas transmitindo, quem so quer conversar
 # recebia as duas telas ao vivo. Um blur no CSS nao resolveria: o video
