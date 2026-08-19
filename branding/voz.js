@@ -105,10 +105,10 @@
        falando é quem já sabe. */
     ".dp-falando{position:relative}" +
     ".vc_tile.dp-falando::after{border-radius:14px;inset:-2px}" +
-    /* o indicador nativo do quadro fica verde junto, seja ele borda,
-       contorno ou sombra — sem depender de saber qual das três é */
-    ".vc_tile.dp-fala{outline-color:#3fb950!important;" +
-      "border-color:#3fb950!important}" +
+    /* Nada a recolorir: o indicador nativo do quadro foi desligado no
+       bundle (rebrand.py). Ele desenhava com o tempo do app, atrasado,
+       por cima da nossa luz — duas luzes em ritmos diferentes no mesmo
+       quadro leem como defeito. */
     ".dp-falando::after{content:'';position:absolute;inset:-3px;" +
       "border-radius:12px;border:2px solid #3fb950;" +
       "box-shadow:0 0 10px rgba(63,185,80,.65);pointer-events:none;" +

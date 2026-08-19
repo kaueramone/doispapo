@@ -210,6 +210,20 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
 # aparece no historico do chat inteiro. Com o identificador na mao, a luz
 # pode vir da nossa analise de audio, que responde na hora, em vez do
 # estado do app, que chega suavizado e atrasado.
+# O indicador nativo do quadro e desligado. Ele so troca a cor do
+# contorno (outlineColor), entao apagá-lo nao tira funcao nenhuma - mas
+# tira o ATRASO: o estado de fala do app chega suavizado, e ficava
+# desenhando por cima da nossa luz com outro tempo. Duas luzes com
+# ritmos diferentes no mesmo quadro leem como defeito.
+# A nossa deteccao, a mesma da lista lateral, passa a ser a unica.
+SEM_NATIVO = re.compile(r'\{speaking:!p\(\)&&v\(\),video:')
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    novo_, n = SEM_NATIVO.subn('{speaking:!1,video:', s_)
+    if n:
+        conta("fala-nativa-off", n)
+        open(f, "w", encoding="utf-8").write(novo_)
+
 MARCA_FALA = re.compile(r'\+\(p\(\)\?" vc_tile group":" vc_tile"\)')
 for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
