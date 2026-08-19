@@ -51,6 +51,35 @@ outgoing_friend_requests = 5
 video_resolution = [1920, 1080]
 ```
 
+## Serviços próprios
+
+Em `deploy/`, cada um com seu Dockerfile. Nenhum publica porta — só a
+rede interna, atrás do Caddy.
+
+| Serviço | Porta | Papel |
+|---|---|---|
+| `convites` | 8600 | cota de convites, fila de espera, sons por servidor |
+| `painel` | 8700 | painel administrativo |
+| `emoji` | 8601 | espelho de emoji com cache preguiçoso em disco |
+
+O `compose.override.yml` e o `Caddyfile` que os ligam moram na VPS e não
+são versionados (contêm caminhos e configuração da instância).
+
+Testes rodam dentro do container, contra o serviço de verdade:
+
+```bash
+docker compose cp deploy/convites/teste_som.py convites:/teste_som.py
+docker compose exec -T convites python3 /teste_som.py
+
+docker compose cp deploy/emoji/teste_emoji.py emoji:/teste_emoji.py
+docker compose exec -T emoji python3 /teste_emoji.py
+```
+
+`deploy/verificar_servicos.py` procura variável usada num ramo que só é
+atribuída em outro — os handlers são uma sequência de ramos por rota, e
+esse defeito passa em qualquer linter de escopo porque o nome existe na
+função. Já derrubou o envio de som com 502.
+
 ## Rebranding do cliente web
 
 O cliente vem como imagem pré-compilada. `branding/rebrand.py` extrai o
