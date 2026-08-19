@@ -16,32 +16,51 @@
      de áudio ao respectivo participante. */
   window.dpFalantes = function () {
     var a = window.dpAudio || {};
-    var mids = document.querySelectorAll("audio,video");
+
+    // O atributo trackref vira "[object Object]" ao ser serializado. Se o
+    // framework também tiver atribuído como propriedade, o objeto real
+    // está lá — e com ele o participante.
+    function espiar(obj, prof) {
+      if (obj === null || obj === undefined) return obj;
+      var t = typeof obj;
+      if (t !== "object") return t === "function" ? "<função>" : obj;
+      if (prof > 2) return "<...>";
+      var out = {};
+      var chaves = Object.keys(obj).slice(0, 14);
+      for (var i = 0; i < chaves.length; i++) {
+        try { out[chaves[i]] = espiar(obj[chaves[i]], prof + 1); }
+        catch (e) { out[chaves[i]] = "<erro>"; }
+      }
+      return out;
+    }
+
+    var mids = document.querySelectorAll("audio");
     var lista = [];
     for (var i = 0; i < mids.length; i++) {
-      var m = mids[i], attrs = {};
-      for (var k = 0; k < m.attributes.length; k++)
-        attrs[m.attributes[k].name] = m.attributes[k].value;
+      var m = mids[i];
+      var proprias = Object.keys(m).slice(0, 20);
+      var faixa = m.srcObject && m.srcObject.getAudioTracks
+                  ? m.srcObject.getAudioTracks()[0] : null;
       lista.push({
-        tag: m.tagName,
-        atributos: attrs,
-        temFluxo: !!m.srcObject,
+        fonte: m.getAttribute("data-lk-source"),
+        local: m.getAttribute("data-lk-local-participant"),
         idDoFluxo: m.srcObject ? m.srcObject.id : null,
-        paiClasses: m.parentElement ? m.parentElement.className : null
+        idDaFaixa: faixa ? faixa.id : null,
+        rotuloDaFaixa: faixa ? faixa.label : null,
+        propriedadesProprias: proprias,
+        trackref: espiar(m.trackref, 0),
+        nivel: (function () {
+          var r = (a.remotos || []).filter(function (x) {
+            return m.srcObject && x.stream === m.srcObject; })[0];
+          return r ? Math.round(r.nivel) : null;
+        })()
       });
     }
-    var r = {
-      elementosDeMidia: lista,
-      fluxosMedidos: (a.remotos || []).map(function (x) {
-        return { idDoFluxo: x.stream.id,
-                 nivel: Math.round(x.nivel),
-                 ativo: x.stream.active };
-      }),
-      meuNivel: a.estado ? Math.round(a.estado.nivel) : null
-    };
+    var r = { elementos: lista, meuNivel: a.estado ? Math.round(a.estado.nivel) : null };
     console.log(JSON.stringify(r, null, 2));
     return r;
   };
+
 
   /* ------------------------- luz de fala local ------------------------ */
   /* A luz nativa depende do servidor: o SFU analisa os níveis e transmite
@@ -84,16 +103,61 @@
       ".dp-falando::after{animation:none}}";
   document.head.appendChild(estiloLuz);
 
-  function meuBloco() {
-    if (!meuNome) return null;
+  function blocoDe(nome) {
+    if (!nome) return null;
     var spans = document.querySelectorAll("span");
     for (var i = 0; i < spans.length; i++) {
-      if ((spans[i].textContent || "").trim() !== meuNome) continue;
+      if ((spans[i].textContent || "").trim() !== nome) continue;
       var bloco = spans[i].parentElement;
       // o bloco do participante contém o avatar em <svg>
       if (bloco && bloco.querySelector("svg")) return bloco;
     }
     return null;
+  }
+  function meuBloco() { return blocoDe(meuNome); }
+
+  /* ---- de quem é cada fluxo: o cliente só vê o id da faixa; quem sabe
+     o dono é o servidor, que recebe isso pelos webhooks do LiveKit ---- */
+  var faixas = {};          // TR_xxx -> { participante, fonte }
+  var nomes = {};           // idUsuario -> nome
+  var LIMIAR_REMOTO = -65;  // dB: fala fica bem acima; silêncio, abaixo
+
+  function buscarFaixas() {
+    fetch(API + "/faixas", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (d) { faixas = d.faixas || {}; })
+      .catch(function () {});
+  }
+  buscarFaixas();
+  setInterval(buscarFaixas, 15000);
+
+  function nomeDe(id) {
+    if (!id) return null;
+    if (nomes[id] !== undefined) return nomes[id];
+    if (!tokenSessao) return null;
+    nomes[id] = null;                      // evita repetir a consulta
+    _fetch("/api/users/" + id, { headers: { "X-Session-Token": tokenSessao } })
+      .then(function (r) { return r.json(); })
+      .then(function (u) { if (u && u.username) nomes[id] = u.username; })
+      .catch(function () {});
+    return null;
+  }
+
+  function luzDosOutros() {
+    var a = window.dpAudio;
+    if (!a || !a.remotos) return;
+    for (var i = 0; i < a.remotos.length; i++) {
+      var r = a.remotos[i];
+      var fx = r.stream.getAudioTracks ? r.stream.getAudioTracks()[0] : null;
+      if (!fx) continue;
+      var info = faixas[fx.id];
+      if (!info || (info.fonte || "").toUpperCase() !== "MICROPHONE") continue;
+      var nome = nomeDe(info.participante);
+      if (!nome) continue;
+      var bloco = blocoDe(nome);
+      if (!bloco) continue;
+      bloco.classList.toggle("dp-falando", r.nivel >= LIMIAR_REMOTO);
+    }
   }
 
   function luzDeFala() {
@@ -218,7 +282,7 @@
   function tick() { entrarDireto(); pintarContadores(); }
   setInterval(tick, 1000);
   // a luz precisa de cadência bem mais rápida que o resto
-  setInterval(luzDeFala, 40);
+  setInterval(function () { luzDeFala(); luzDosOutros(); }, 40);
   new MutationObserver(entrarDireto).observe(document.documentElement,
     { childList: true, subtree: true });
 })();

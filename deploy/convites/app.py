@@ -145,6 +145,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/saude":
             return self.responde(200, {"ok": True})
 
+        # Mapa faixa -> participante, para o cliente saber de quem é
+        # cada fluxo de áudio que ele está reproduzindo.
+        if self.path == "/faixas":
+            itens = {d["_id"]: {"participante": d.get("participante"),
+                                "fonte": d.get("fonte")}
+                     for d in db.faixas.find()}
+            return self.responde(200, {"faixas": itens})
+
         # Chamadas em andamento, para o contador de duração.
         if self.path == "/chamadas":
             itens = {
@@ -204,6 +212,21 @@ class Handler(BaseHTTPRequestHandler):
             elif evento == "room_finished":
                 db.chamadas.update_one({"_id": sala},
                     {"$set": {"encerrada": True, "fim": agora}})
+            # track_published traz o par (faixa, participante) — é o que
+            # permite ao navegador saber de quem é cada fluxo de áudio.
+            # O cliente só enxerga o identificador da faixa; quem sabe o
+            # dono é o servidor.
+            elif evento in ("track_published", "track_unpublished"):
+                faixa = (c.get("track") or {}).get("sid")
+                quem = (c.get("participant") or {}).get("identity")
+                tipo = (c.get("track") or {}).get("source") or ""
+                if faixa:
+                    if evento == "track_published" and quem:
+                        db.faixas.update_one({"_id": faixa}, {"$set": {
+                            "participante": quem, "sala": sala,
+                            "fonte": tipo, "em": agora}}, upsert=True)
+                    else:
+                        db.faixas.delete_one({"_id": faixa})
             elif evento in ("participant_joined", "participant_left"):
                 n = (c.get("room") or {}).get("numParticipants", 0)
                 db.chamadas.update_one({"_id": sala},
@@ -316,6 +339,7 @@ if __name__ == "__main__":
     db.account_invites.create_index("criado_por")
     db.fila_espera.create_index("em")
     db.chamadas.create_index("encerrada")
+    db.faixas.create_index("sala")
     db.account_invites.create_index("origem")
     print(f"servico de convites em :{PORTA} (limite {LIMITE})", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORTA), Handler).serve_forever()
