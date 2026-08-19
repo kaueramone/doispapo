@@ -14,6 +14,8 @@ DST   = sys.argv[2] if len(sys.argv) > 2 else "dist-patched"
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
 
 MARCA = "Dois Papo"
+VERSAO_APP = "0.8.0"
+VERSAO_UPSTREAM = "0.14.1"
 SITE  = "https://kaueramone.dev"
 AUTOR = "kaueramone.dev"
 
@@ -386,13 +388,23 @@ INJECAO = """
 
   /* -------------- painel de convites nas configuracoes ---------------- */
   function painelConvites(){
-    if(!/^\\/settings/.test(location.pathname))return;
     if(document.getElementById("dp-convites"))return;
-    if(!TOKEN)return;
-    // ancora: primeiro cabecalho dentro do dialogo de configuracoes
-    var h=document.querySelector('[role="dialog"] h1,[role="dialog"] h2,'+
-      '[role="dialog"] h3,main h1,main h2');
-    if(!h||!h.parentNode)return;
+    // Ancora no item "Encerrar sessao", que so existe na tela de
+    // configuracoes e e estavel — diferente de cabecalhos genericos.
+    var anc=null, cand=document.querySelectorAll("div,li,button,a,span");
+    for(var i=0;i<cand.length;i++){
+      var t=(cand[i].textContent||"").trim();
+      if(t.length>28)continue;
+      if(!/^(encerrar sess|sair da conta|log ?out)/i.test(t))continue;
+      anc=cand[i];
+      // sobe ate um bloco com irmaos, para inserir na lista
+      for(var k=0;k<4&&anc.parentElement;k++){
+        if(anc.parentElement.children.length>1)break;
+        anc=anc.parentElement;
+      }
+      break;
+    }
+    if(!anc||!anc.parentNode)return;
 
     var cx=document.createElement("div");
     cx.id="dp-convites";
@@ -403,10 +415,11 @@ INJECAO = """
       '<span>disponíveis</span></div>'+
       '<button id="dp-gerar">Gerar convite</button>'+
       '<ul id="dp-lista"></ul>';
-    h.parentNode.insertBefore(cx,h.nextSibling);
+    anc.parentNode.insertBefore(cx,anc);
 
     function pinta(d){
-      document.getElementById("dp-n").textContent=d.disponiveis;
+      var n=document.getElementById("dp-n"); if(!n)return;
+      n.textContent=d.disponiveis;
       var b=document.getElementById("dp-gerar");
       b.disabled=d.disponiveis<=0;
       if(d.disponiveis<=0)b.textContent="Sem convites disponíveis";
@@ -414,23 +427,36 @@ INJECAO = """
       ul.innerHTML="";
       (d.codigos||[]).forEach(function(c){
         var li=document.createElement("li");
-        li.innerHTML='<code title="clique para copiar">'+c.codigo+'</code>'+
-          '<span class="dp-uso">'+(c.usado?"usado":"disponível")+'</span>';
+        li.innerHTML='<code title="clique para copiar o link">'+c.codigo+
+          '</code><span class="dp-uso">'+
+          (c.usado?"usado":"disponível")+'</span>';
         li.querySelector("code").addEventListener("click",function(){
           navigator.clipboard.writeText(
             location.origin+"/login/create?invite="+c.codigo);
+          this.textContent="link copiado!";
+          var self=this, txt=c.codigo;
+          setTimeout(function(){ self.textContent=txt; },1600);
         });
         ul.appendChild(li);
       });
     }
-    api("/saldo").then(function(r){ if(r.status===200)pinta(r.dados); });
+    function erro(msg){
+      var n=document.getElementById("dp-n"); if(n)n.textContent="?";
+      var s=cx.querySelector(".dp-sub"); if(s)s.textContent=msg;
+    }
+    function carregar(){
+      api("/saldo").then(function(r){
+        if(r.status===200)pinta(r.dados);
+        else if(r.status===401)erro("Recarregue a página para ver seus convites.");
+        else erro("Não foi possível carregar seus convites.");
+      }).catch(function(){ erro("Serviço de convites indisponível."); });
+    }
+    carregar();
     document.getElementById("dp-gerar").addEventListener("click",function(){
-      api("/gerar",{method:"POST"}).then(function(r){
-        if(r.status===200||r.status===409)
-          api("/saldo").then(function(x){ if(x.status===200)pinta(x.dados); });
-      });
+      api("/gerar",{method:"POST"}).then(carregar).catch(function(){});
     });
   }
+
 
   /* ------------------- auto-atualizacao de versao -------------------- */
   var VERSAO="__BUILD__", avisando=false;
@@ -582,6 +608,52 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     if s_ != o_:
         conta("popup-novidades-off", 1)
         open(f, "w", encoding="utf-8").write(s_)
+
+# ------------- 5d. wordmark inline no bundle + versao do app
+# O logotipo da tela de login e da home NAO e um arquivo: e um <svg>
+# inline dentro de um template do framework (500x94). Trocamos o path
+# vetorial por um <image> que aponta para a nossa logo branca.
+try:
+    from PIL import Image as _Img
+    _branca = _Img.open(os.path.join(ASSETS, "logos",
+                                     "doispapo-logo-white.png")).convert("RGBA")
+    _w = os.path.join(DST, "assets", "web")
+    os.makedirs(_w, exist_ok=True)
+    _r = _branca.copy()
+    _r.thumbnail((520, 520), _Img.LANCZOS)
+    _r.save(os.path.join(_w, "logo-branco.png"))
+    _prop = _r.width / _r.height
+except Exception:
+    _prop = 1.3
+
+_ALT = 94
+_LARG = int(_ALT * _prop)
+_novo_svg = ('<svg xmlns=http://www.w3.org/2000/svg width=%d height=%d '
+             'fill=none viewBox="0 0 %d %d"><image '
+             'href="/assets/web/logo-branco.png" width=%d height=%d '
+             'preserveAspectRatio="xMidYMid meet"></image></svg>'
+             % (_LARG, _ALT, _LARG, _ALT, _LARG, _ALT))
+
+_ABRE = "<svg xmlns=http://www.w3.org/2000/svg width=500 height=94 fill=none>"
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    i_ = s_.find(_ABRE)
+    if i_ < 0:
+        continue
+    j_ = s_.find("</svg>", i_)
+    if j_ < 0:
+        continue
+    s_ = s_[:i_] + _novo_svg + s_[j_ + 6:]
+    conta("wordmark-inline", 1)
+
+    # Versao exibida nas configuracoes: a do upstream nao diz nada para
+    # quem usa a nossa instancia.
+    n_v = s_.count('"%s"' % VERSAO_UPSTREAM)
+    if n_v:
+        s_ = s_.replace('"%s"' % VERSAO_UPSTREAM, '"%s"' % VERSAO_APP)
+        conta("versao-app", n_v)
+
+    open(f, "w", encoding="utf-8").write(s_)
 
 # --------------------------------- 5c. invalidacao do service worker
 # O SW (workbox) guarda os assets por hash de revisao e por nome de cache.
