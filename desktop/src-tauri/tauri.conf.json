@@ -58,7 +58,12 @@
         "languages": [
           "PortugueseBR"
         ],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/instalador-cabecalho.bmp",
+        "sidebarImage": "icons/instalador-lateral.bmp",
+        "startMenuFolder": "Dois Papo",
+        "compression": "lzma"
       }
     }
   }
