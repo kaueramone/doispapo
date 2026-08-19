@@ -386,7 +386,14 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
     o_ = s_
 
-    pares = re.findall(r'case"([a-zA-Z]+)":\{this\.node=new Audio\((\w+)\)', s_)
+    # ATENCAO ao \w: ele NAO casa "$", e o minificador usa cifrao nos
+    # nomes. Com (\w+) quatro sons ficavam de fora - unmute,
+    # userJoinVoice, userLeaveVoice e userMoved, cujas variaveis sao
+    # e$e, t$e, n$e e r$e. Eles seguiam embutidos como data URI, sem
+    # como serem identificados nem trocados, e o diagnostico errado foi
+    # concluir que "nao tocam".
+    pares = re.findall(r'case"([a-zA-Z]+)":\{this\.node=new Audio\(([\w$]+)\)',
+                       s_)
     for nome, var in pares:
         arq = _MAPA_SONS.get(nome)
         if not arq:

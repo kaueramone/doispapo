@@ -17,15 +17,17 @@
   var cache = {};            // servidor -> { evento: url }
   var pendentes = {};
 
-  /* Os eventos que o cliente realmente toca. A configuração do app lista
-     14, mas quatro (unmute, userJoinVoice, userLeaveVoice, userMoved)
-     têm interruptor e nenhum case no switch de reprodução: nunca soam.
-     Oferecer campo para elas seria oferecer um botão sem efeito. */
+  /* Os 14 eventos que o cliente toca, na ordem em que fazem sentido
+     para quem configura: conversa, chamada, microfone, transmissão. */
   var SONS = [
     ["message",           "Nova mensagem"],
     ["ringtoneIncoming",  "Chamada recebida"],
     ["ringtoneOutgoing",  "Chamando"],
+    ["userJoinVoice",     "Alguém entrou na chamada"],
+    ["userLeaveVoice",    "Alguém saiu da chamada"],
+    ["userMoved",         "Alguém mudou de canal"],
     ["mute",              "Microfone silenciado"],
+    ["unmute",            "Microfone religado"],
     ["deafen",            "Áudio desligado"],
     ["undeafen",          "Áudio religado"],
     ["streamStart",       "Transmissão iniciada"],

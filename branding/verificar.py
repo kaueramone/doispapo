@@ -142,25 +142,31 @@ if bundle:
         erros.append(f"link para pagina inexistente no bundle: {d}")
 
 # -------------------------- 2d. os sons por evento existem como arquivo
-# A pagina de sons identifica QUAL evento esta tocando pelo nome do
-# arquivo. Se a conversao de data URI para arquivo falhar, a troca por
-# evento para de funcionar sem nenhum erro visivel.
-SONS_ESPERADOS = ("message", "deafen", "undeafen", "mute",
-                  "ringtoneIncoming", "ringtoneOutgoing",
-                  "streamStart", "streamEnd",
-                  "streamViewerJoin", "streamViewerLeave")
-_faltam = [n for n in SONS_ESPERADOS
-           if not os.path.exists(os.path.join(DST, "assets", "sounds",
-                                              "dp-%s.ogg" % n))]
-if _faltam:
-    erros.append("som por evento sem arquivo: " + ", ".join(_faltam))
+# A pagina identifica QUAL evento esta tocando pelo nome do arquivo. Se
+# a conversao de data URI para arquivo falhar, a troca por evento para
+# de funcionar sem erro visivel.
+#
+# A lista NAO e fixa: sai do proprio bundle. Uma lista escrita a mao ja
+# ficou defasada uma vez - a regex que a alimentava usava \w, que nao
+# casa "$", e quatro sons com cifrao no nome minificado passaram batido
+# por varias versoes.
 if bundle:
-    _sem_url = [n for n in SONS_ESPERADOS
-                if "/assets/sounds/dp-%s.ogg" % n not in bundle
-                and n != "message"]
-    if _sem_url:
-        erros.append("evento ainda embutido como data URI no bundle: "
-                     + ", ".join(_sem_url))
+    _casos = re.findall(r'case"([a-zA-Z]+)":\{this\.node=new Audio\(([\w$]+)\)',
+                        bundle)
+    if not _casos:
+        erros.append("nao encontrei o switch de reproducao de som no bundle")
+    else:
+        _faltam = [n for n, _ in _casos
+                   if not os.path.exists(os.path.join(
+                       DST, "assets", "sounds", "dp-%s.ogg" % n))]
+        if _faltam:
+            erros.append("som sem arquivo proprio: " + ", ".join(_faltam))
+        _embutidos = [n for n, v in _casos
+                      if re.search(re.escape(v) + r'="data:audio', bundle)]
+        if _embutidos:
+            erros.append("som ainda embutido como data URI (nao da para "
+                         "personalizar): " + ", ".join(_embutidos))
+        avisos.append("%d sons de notificacao reconhecidos" % len(_casos))
 
 # ----------------------------------------- 3. sobras da marca do upstream
 resto = 0

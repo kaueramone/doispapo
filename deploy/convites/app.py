@@ -228,13 +228,18 @@ def template_discord(codigo):
 # ------------------------------------------- som próprio do servidor
 LIMITE_SOM = 512 * 1024      # 512 KB: aviso curto, não trilha sonora
 
-# Os sons que o cliente realmente toca — são os `case` do switch de
-# reprodução. A configuração do app lista 14 chaves, mas quatro delas
-# (unmute, userJoinVoice, userLeaveVoice, userMoved) têm interruptor e
-# nenhum `case`: nunca soam. Aceitar essas quatro seria oferecer um
-# campo que não produz efeito nenhum.
-SONS_VALIDOS = ("message", "deafen", "undeafen", "mute",
+# Os 14 sons que o cliente toca — um `case` para cada, no switch de
+# reprodução.
+#
+# Por um tempo esta lista teve só 10. A regex que a extraía do bundle
+# usava \w para o nome da variável minificada, e \w não casa "$":
+# unmute, userJoinVoice, userLeaveVoice e userMoved usam e$e, t$e, n$e e
+# r$e. Some quatro sons da lista e a conclusão parece ser que eles não
+# tocam — mas tocam, e um deles é o de entrar na chamada.
+SONS_VALIDOS = ("message",
                 "ringtoneIncoming", "ringtoneOutgoing",
+                "userJoinVoice", "userLeaveVoice", "userMoved",
+                "mute", "unmute", "deafen", "undeafen",
                 "streamStart", "streamEnd",
                 "streamViewerJoin", "streamViewerLeave")
 

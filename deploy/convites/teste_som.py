@@ -105,8 +105,10 @@ s, _ = chama("POST", "/sons/" + SID,
              {"som": "inexistente", "dados": MP3, "tipo": "audio/mpeg"})
 confere("evento desconhecido -> 400", s, 400)
 s, _ = chama("POST", "/sons/" + SID,
-             {"som": "userMoved", "dados": MP3, "tipo": "audio/mpeg"})
-confere("evento que nunca toca -> 400", s, 400)
+             {"som": "userJoinVoice", "dados": MP3, "tipo": "audio/mpeg"})
+confere("entrar na chamada é personalizável", s, 200)
+chama("POST", "/sons/" + SID, {"som": "userJoinVoice", "remover": True})
+confere("a lista tem os 14 sons", len(app.SONS_VALIDOS), 14)
 s, _ = chama("POST", "/sons/" + SID,
              {"som": "deafen", "dados": MP3, "tipo": "application/pdf"})
 confere("tipo não suportado -> 415", s, 415)
