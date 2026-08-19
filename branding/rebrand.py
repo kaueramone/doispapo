@@ -272,6 +272,39 @@ INJECAO = """
   #dp-convites li .dp-uso{opacity:.6;font-family:system-ui,sans-serif}
   #dp-convites code{cursor:pointer;user-select:all}
 
+  /* Editor de imagem */
+  #dp-ed{position:fixed;inset:0;z-index:2147483002;display:flex;
+    align-items:center;justify-content:center;padding:20px;
+    background:rgba(4,8,14,.82);-webkit-backdrop-filter:blur(4px);
+    backdrop-filter:blur(4px);
+    font:14px/1.5 system-ui,-apple-system,sans-serif;color:#e8edf6}
+  #dp-ed .cx{background:#141d2b;border:1px solid #22304a;border-radius:16px;
+    padding:20px;max-width:min(440px,92vw);width:100%}
+  #dp-ed h4{margin:0 0 3px;font-size:16px;font-weight:700}
+  #dp-ed .ajuda{opacity:.65;font-size:12.5px;margin-bottom:14px}
+  #dp-ed .palco{position:relative;width:100%;aspect-ratio:1;
+    border-radius:12px;overflow:hidden;background:#0b1119;cursor:grab;
+    touch-action:none}
+  #dp-ed .palco.arrastando{cursor:grabbing}
+  #dp-ed canvas{display:block;width:100%;height:100%}
+  #dp-ed .mascara{position:absolute;inset:0;pointer-events:none;
+    box-shadow:0 0 0 9999px rgba(11,17,25,.55);border:2px solid #8C41D9}
+  #dp-ed .mascara.circ{border-radius:50%}
+  #dp-ed .linha{display:flex;align-items:center;gap:10px;margin-top:14px}
+  #dp-ed input[type=range]{flex:1;accent-color:#8C41D9}
+  #dp-ed .abas{display:flex;gap:6px;margin-top:12px}
+  #dp-ed .abas button{flex:1;background:#0b1119;border:1px solid #22304a;
+    color:#93a1bb;font:600 12.5px system-ui;padding:8px;border-radius:8px;
+    cursor:pointer}
+  #dp-ed .abas button.on{border-color:#8C41D9;color:#e8edf6;
+    background:rgba(140,65,217,.16)}
+  #dp-ed .acoes{display:flex;gap:10px;margin-top:16px}
+  #dp-ed .acoes button{flex:1;cursor:pointer;border:0;border-radius:10px;
+    padding:11px;font:650 13.5px system-ui}
+  #dp-ed .cancelar{background:#22304a;color:#c7d1e4}
+  #dp-ed .confirmar{background:linear-gradient(100deg,#2E8BEB,#8C41D9);
+    color:#fff}
+
   /* Banner de nova versao */
   #dp-att{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);
     z-index:2147483001;display:flex;align-items:center;gap:12px;
@@ -444,12 +477,25 @@ INJECAO = """
       var n=document.getElementById("dp-n"); if(n)n.textContent="?";
       var s=cx.querySelector(".dp-sub"); if(s)s.textContent=msg;
     }
+    var tentativas=0;
     function carregar(){
       api("/saldo").then(function(r){
-        if(r.status===200)pinta(r.dados);
-        else if(r.status===401)erro("Recarregue a página para ver seus convites.");
+        if(r.status===200){ pinta(r.dados); return; }
+        if(r.status===401&&tentativas<20){
+          // O token so aparece quando o app faz sua primeira chamada a
+          // API. Insistimos em vez de desistir na primeira negativa.
+          tentativas++;
+          erro("Carregando seus convites…");
+          setTimeout(carregar,1500);
+          return;
+        }
+        if(r.status===401)erro("Não foi possível identificar sua sessão. "+
+          "Recarregue a página.");
         else erro("Não foi possível carregar seus convites.");
-      }).catch(function(){ erro("Serviço de convites indisponível."); });
+      }).catch(function(){
+        if(tentativas<20){ tentativas++; setTimeout(carregar,1500); }
+        else erro("Serviço de convites indisponível.");
+      });
     }
     carregar();
     document.getElementById("dp-gerar").addEventListener("click",function(){
@@ -457,6 +503,148 @@ INJECAO = """
     });
   }
 
+
+  /* --------------------- editor de imagem ----------------------------- */
+  function abrirEditor(arquivo, aoConcluir, aoCancelar){
+    var url=URL.createObjectURL(arquivo), img=new Image();
+    img.onload=function(){ montar(); };
+    img.onerror=function(){ URL.revokeObjectURL(url); aoCancelar(); };
+    img.src=url;
+
+    function montar(){
+      var LADO=512, redondo=true, esc=1, escMin=1, x=0, y=0;
+
+      var ov=document.createElement("div");
+      ov.id="dp-ed";
+      ov.innerHTML=
+        '<div class="cx">'+
+          '<h4>Ajustar imagem</h4>'+
+          '<div class="ajuda">Arraste para escolher o enquadramento e use '+
+          'o controle para aproximar.</div>'+
+          '<div class="palco"><canvas></canvas>'+
+            '<div class="mascara circ"></div></div>'+
+          '<div class="abas">'+
+            '<button data-f="1" class="on">Quadrada</button>'+
+            '<button data-f="1.78">Larga (16:9)</button>'+
+          '</div>'+
+          '<div class="linha"><span>Zoom</span>'+
+            '<input type="range" min="100" max="400" value="100"></div>'+
+          '<div class="acoes">'+
+            '<button class="cancelar">Cancelar</button>'+
+            '<button class="confirmar">Usar imagem</button>'+
+          '</div>'+
+        '</div>';
+      document.body.appendChild(ov);
+
+      var palco=ov.querySelector(".palco"), cv=ov.querySelector("canvas"),
+          ctx=cv.getContext("2d"), masc=ov.querySelector(".mascara"),
+          zoom=ov.querySelector("input[type=range]"), prop=1;
+
+      function dimensionar(){
+        var lc=palco.clientWidth, ac=Math.round(lc/prop);
+        palco.style.aspectRatio=String(prop);
+        cv.width=lc; cv.height=ac;
+        escMin=Math.max(lc/img.width, ac/img.height);
+        if(esc<escMin)esc=escMin;
+        zoom.value=String(Math.round(esc/escMin*100));
+        limitar(); desenhar();
+      }
+      function limitar(){
+        var lc=cv.width, ac=cv.height,
+            li=img.width*esc, ai=img.height*esc;
+        x=Math.min(0,Math.max(x,lc-li));
+        y=Math.min(0,Math.max(y,ac-ai));
+        if(li<lc)x=(lc-li)/2;
+        if(ai<ac)y=(ac-ai)/2;
+      }
+      function desenhar(){
+        ctx.clearRect(0,0,cv.width,cv.height);
+        ctx.drawImage(img,x,y,img.width*esc,img.height*esc);
+      }
+
+      // arrastar
+      var arr=false,px=0,py=0;
+      function ini(e){ arr=true; palco.classList.add("arrastando");
+        var p=e.touches?e.touches[0]:e; px=p.clientX; py=p.clientY; }
+      function mov(e){ if(!arr)return; e.preventDefault();
+        var p=e.touches?e.touches[0]:e;
+        x+=p.clientX-px; y+=p.clientY-py; px=p.clientX; py=p.clientY;
+        limitar(); desenhar(); }
+      function fim(){ arr=false; palco.classList.remove("arrastando"); }
+      palco.addEventListener("mousedown",ini);
+      palco.addEventListener("touchstart",ini,{passive:true});
+      window.addEventListener("mousemove",mov);
+      window.addEventListener("touchmove",mov,{passive:false});
+      window.addEventListener("mouseup",fim);
+      window.addEventListener("touchend",fim);
+
+      zoom.addEventListener("input",function(){
+        var cx=cv.width/2, cy=cv.height/2, antes=esc;
+        esc=escMin*(parseInt(zoom.value,10)/100);
+        // mantem o centro visual estavel ao aproximar
+        x=cx-(cx-x)*(esc/antes);
+        y=cy-(cy-y)*(esc/antes);
+        limitar(); desenhar();
+      });
+
+      ov.querySelectorAll(".abas button").forEach(function(b){
+        b.addEventListener("click",function(){
+          ov.querySelectorAll(".abas button").forEach(function(o){
+            o.classList.remove("on"); });
+          b.classList.add("on");
+          prop=parseFloat(b.dataset.f); redondo=prop===1;
+          masc.classList.toggle("circ",redondo);
+          dimensionar();
+        });
+      });
+
+      function encerrar(){
+        window.removeEventListener("mousemove",mov);
+        window.removeEventListener("touchmove",mov);
+        window.removeEventListener("mouseup",fim);
+        window.removeEventListener("touchend",fim);
+        URL.revokeObjectURL(url); ov.remove();
+      }
+      ov.querySelector(".cancelar").addEventListener("click",function(){
+        encerrar(); aoCancelar(); });
+      ov.querySelector(".confirmar").addEventListener("click",function(){
+        var lf=LADO, af=Math.round(LADO/prop);
+        var saida=document.createElement("canvas");
+        saida.width=lf; saida.height=af;
+        var k=lf/cv.width;
+        saida.getContext("2d").drawImage(img, x*k, y*k,
+          img.width*esc*k, img.height*esc*k);
+        saida.toBlob(function(b){ encerrar(); aoConcluir(b); },
+          "image/png");
+      });
+
+      dimensionar();
+      window.addEventListener("resize",dimensionar);
+    }
+  }
+
+  // Intercepta o envio de imagem antes de o app ler o arquivo.
+  document.addEventListener("change",function(e){
+    var inp=e.target;
+    if(!inp||inp.tagName!=="INPUT"||inp.type!=="file")return;
+    if(inp.getAttribute("data-dp-pronto")){
+      inp.removeAttribute("data-dp-pronto"); return; }
+    var f=inp.files&&inp.files[0];
+    if(!f||!/^image\//.test(f.type))return;
+    if(typeof DataTransfer==="undefined")return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    abrirEditor(f,function(blob){
+      try{
+        var dt=new DataTransfer();
+        dt.items.add(new File([blob],
+          (f.name||"imagem").replace(/\.\w+$/,"")+".png",
+          {type:"image/png"}));
+        inp.setAttribute("data-dp-pronto","1");
+        inp.files=dt.files;
+        inp.dispatchEvent(new Event("change",{bubbles:true}));
+      }catch(err){}
+    },function(){ try{ inp.value=""; }catch(err){} });
+  },true);
 
   /* ------------------- auto-atualizacao de versao -------------------- */
   var VERSAO="__BUILD__", avisando=false;

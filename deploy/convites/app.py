@@ -65,7 +65,11 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):        # silencia o log padrão, ruidoso
         pass
 
+    def registra(self, status, detalhe=""):
+        print(f"{self.command} {self.path} -> {status} {detalhe}", flush=True)
+
     def responde(self, codigo, corpo):
+        self.registra(codigo, corpo.get("erro", "") if isinstance(corpo, dict) else "")
         dados = json.dumps(corpo, ensure_ascii=False).encode()
         self.send_response(codigo)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -89,9 +93,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.responde(200, {"ok": True})
 
         if self.path == "/saldo":
-            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            tok = self.headers.get("X-Session-Token")
+            uid = usuario_da_sessao(tok)
             if not uid:
-                return self.responde(401, {"erro": "sessao_invalida"})
+                return self.responde(401, {
+                    "erro": "sessao_invalida",
+                    "token_enviado": bool(tok)})
             s = saldo(uid)
             s["codigos"] = [
                 {"codigo": d["_id"], "usado": bool(d.get("used"))}
