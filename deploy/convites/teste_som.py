@@ -79,6 +79,17 @@ s, b = chama("GET", "/sons/%s/message/audio" % SID)
 confere("audio baixa", s, 200)
 confere("bytes idênticos ao enviado", b, BRUTO)
 
+# A página pede o áudio com ?v=<versao> para furar o cache do navegador.
+# Sem remover a query antes de fatiar o caminho, o último pedaço vira
+# "audio?v=1", o ramo do áudio não é reconhecido e a resposta cai no
+# catálogo: o navegador recebe JSON e o play() falha em silêncio.
+req = urllib.request.Request(
+    "http://127.0.0.1:8699/sons/%s/message/audio?v=1" % SID,
+    headers={"X-Session-Token": "t"})
+r = urllib.request.urlopen(req)
+confere("com ?v= ainda é áudio", r.headers.get("Content-Type"), "audio/mpeg")
+confere("com ?v= os bytes conferem", r.read(), BRUTO)
+
 print("\nisolamento entre eventos:")
 s, _ = chama("POST", "/sons/" + SID,
              {"som": "deafen", "dados": MP3, "tipo": "audio/ogg", "nome": "d"})

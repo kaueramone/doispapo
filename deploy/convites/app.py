@@ -309,6 +309,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(dados)
 
+    def caminho(self):
+        """O caminho da requisição, sem a query string.
+
+        Fatiar `self.path` direto deixa a query grudada no último
+        pedaço: "/sons/X/message/audio?v=1" vira [..., "audio?v=1"], o
+        ramo do áudio não é reconhecido e a resposta cai no catálogo —
+        o navegador recebe JSON onde esperava som. As rotas de
+        igualdade têm o mesmo problema: "/saldo?x=1" não casa "/saldo".
+        """
+        return self.path.split("?", 1)[0]
+
     def corpo_json(self, limite=8192):
         """Le e decodifica o corpo, ate `limite` bytes.
 
@@ -328,10 +339,11 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------------------------------------------------------------- GET
     def do_GET(self):
+        rota = self.caminho()
         # Proxy do template do Discord. Público dos dois lados: o
         # endpoint do Discord dispensa autenticação, e aqui não há
         # segredo envolvido — só leitura de dado que já é público.
-        if self.path.startswith("/discord-template"):
+        if rota.startswith("/discord-template"):
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             bruto = (q.get("codigo") or [""])[0].strip()
             # aceita link completo ou só o código
@@ -353,8 +365,8 @@ class Handler(BaseHTTPRequestHandler):
 
         # Som próprio do servidor: metadados. Público, porque qualquer
         # membro precisa saber que existe para tocá-lo.
-        if self.path.startswith("/sons/"):
-            partes = self.path.strip("/").split("/")
+        if rota.startswith("/sons/"):
+            partes = rota.strip("/").split("/")
             sid = partes[1] if len(partes) > 1 else ""
             if not RE_CODIGO.match(sid or ""):
                 return self.responde(400, {"erro": "servidor_invalido"})
@@ -388,12 +400,12 @@ class Handler(BaseHTTPRequestHandler):
                     "url": f"/api-convites/sons/{sid}/{som}/audio?v={v}"}
             return self.responde(200, {"sons": sons})
 
-        if self.path == "/saude":
+        if rota == "/saude":
             return self.responde(200, {"ok": True})
 
         # Mapa faixa -> participante, para o cliente saber de quem é
         # cada fluxo de áudio que ele está reproduzindo.
-        if self.path == "/faixas":
+        if rota == "/faixas":
             vivo = faixas_ao_vivo()
             if vivo is not None:
                 return self.responde(200, {"faixas": vivo, "origem": "livekit"})
@@ -403,7 +415,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.responde(200, {"faixas": itens, "origem": "eventos"})
 
         # Chamadas em andamento, para o contador de duração.
-        if self.path == "/chamadas":
+        if rota == "/chamadas":
             itens = {
                 d["_id"]: {"inicio": d.get("inicio"),
                            "participantes": d.get("participantes", 0)}
@@ -413,7 +425,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.responde(200, {"chamadas": itens})
 
         # Lista da fila de espera — só para o administrador da instância.
-        if self.path == "/fila":
+        if rota == "/fila":
             uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
             if not uid or (ADMIN_UID and uid != ADMIN_UID):
                 return self.responde(403, {"erro": "sem_permissao"})
@@ -426,7 +438,7 @@ class Handler(BaseHTTPRequestHandler):
             ]
             return self.responde(200, {"total": len(itens), "itens": itens})
 
-        if self.path == "/saldo":
+        if rota == "/saldo":
             tok = self.headers.get("X-Session-Token")
             uid = usuario_da_sessao(tok)
             if not uid:
@@ -444,9 +456,10 @@ class Handler(BaseHTTPRequestHandler):
 
     # --------------------------------------------------------------- POST
     def do_POST(self):
+        rota = self.caminho()
         # Webhook do LiveKit: registra início e fim das chamadas.
         # Não é exposto pelo Caddy — o LiveKit chama pela rede interna.
-        if self.path == "/livekit":
+        if rota == "/livekit":
             c = self.corpo_json()
             evento = c.get("event")
             sala = (c.get("room") or {}).get("name")
@@ -483,8 +496,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.responde(200, {"ok": True})
 
         # Enviar ou remover o som do servidor. Exige ser o dono.
-        if self.path.startswith("/sons/"):
-            sid = self.path.strip("/").split("/")[1]
+        if rota.startswith("/sons/"):
+            sid = rota.strip("/").split("/")[1]
             # Cada ramo do do_POST le o proprio corpo: o `c` do ramo do
             # webhook nao existe aqui. Ler ANTES de responder 401/403
             # tambem evita fechar a conexao com o corpo pela metade, o
@@ -534,7 +547,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.responde(200, {"ok": True, "tamanho": len(bruto)})
 
         # Inscrição na fila de espera. Endpoint público — vem da landing.
-        if self.path == "/fila":
+        if rota == "/fila":
             c = self.corpo_json()
             nome = (c.get("nome") or "").strip()[:80]
             email = (c.get("email") or "").strip().lower()[:120]
@@ -588,7 +601,7 @@ class Handler(BaseHTTPRequestHandler):
                 "mensagem": "Pronto! Avisaremos assim que abrirmos vagas."})
 
         # Gera um convite para o próprio usuário autenticado.
-        if self.path == "/gerar":
+        if rota == "/gerar":
             uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
             if not uid:
                 return self.responde(401, {"erro": "sessao_invalida"})
@@ -600,7 +613,7 @@ class Handler(BaseHTTPRequestHandler):
         # Troca um convite de SERVIDOR por um convite de CONTA, debitando
         # a cota de quem criou o convite de servidor. Não exige sessão:
         # é justamente o caso de quem ainda não tem conta.
-        if self.path == "/resgatar":
+        if rota == "/resgatar":
             codigo_srv = (self.corpo_json().get("codigo") or "").strip()
             if not RE_CODIGO.match(codigo_srv):
                 return self.responde(400, {"erro": "codigo_invalido"})

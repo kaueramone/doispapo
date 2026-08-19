@@ -206,7 +206,19 @@
 
       ouvir.addEventListener("click", function () {
         var u = linhas[chave].url || ("/assets/sounds/dp-" + chave + ".ogg");
-        new Original(u).play().catch(function () {});
+        /* Engolir a falha aqui custou caro: quando o servidor devolveu
+           JSON no lugar do áudio, o resultado foi silêncio absoluto, sem
+           nenhuma pista do que havia acontecido. */
+        var a = new Original(u);
+        a.addEventListener("error", function () {
+          aviso("Não consegui tocar “" + rotulo + "”: o servidor não " +
+                "devolveu um áudio válido.");
+        });
+        var p = a.play();
+        if (p && p.catch) p.catch(function (e) {
+          aviso("Não consegui tocar “" + rotulo + "”: " +
+                ((e && e.message) || "reprodução bloqueada pelo navegador."));
+        });
       });
       trocar.addEventListener("click", function () { arq.click(); });
       arq.addEventListener("change", function () {
