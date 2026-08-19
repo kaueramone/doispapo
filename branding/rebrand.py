@@ -391,15 +391,27 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
         arq = _MAPA_SONS.get(nome)
         if not arq:
             continue                      # "message" já é arquivo real
-        novo_uri = _uri(arq)
-        if not novo_uri:
+        origem = os.path.join(ASSETS, "sons", arq)
+        if not os.path.exists(origem):
             continue
+        # Vira ARQUIVO, nao data URI. Tres ganhos: o bundle perde ~9
+        # audios em base64; o som passa a ser cacheavel como qualquer
+        # asset; e - o que viabiliza o som por evento - da para saber
+        # QUAL som esta tocando lendo o nome do arquivo. Com data URI
+        # todas as chamadas eram indistinguiveis entre si.
+        # O "message" ja vinha assim no upstream.
+        rel = "assets/sounds/dp-%s.ogg" % nome
+        destino = os.path.join(DST, rel)
+        os.makedirs(os.path.dirname(destino), exist_ok=True)
+        shutil.copyfile(origem, destino)
+        url = "/" + rel
         pad = re.compile(r'\b' + re.escape(var) +
                          r'="data:audio/ogg;base64,[A-Za-z0-9+/=]+"')
-        s2, n = pad.subn(lambda m: f'{var}="{novo_uri}"', s_, count=1)
+        s2, n = pad.subn(lambda m, v=var, u=url: '%s="%s"' % (v, u),
+                         s_, count=1)
         if n:
             s_ = s2
-            conta("sons-embutidos", 1)
+            conta("sons-arquivo", 1)
 
     # Sobram cópias do mesmo silêncio em variáveis que o switch não nomeia.
     # Sem como saber a qual evento pertencem, recebem um aviso neutro —
@@ -415,6 +427,16 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
 
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
+
+# O padrao de "message" ja vem como arquivo, mas com hash no nome. Uma
+# copia com nome previsivel deixa a pagina tocar o som padrao de
+# QUALQUER evento pelo mesmo caminho, sem precisar descobrir o hash.
+_msg = glob.glob(os.path.join(DST, "assets", "message_sound-*.ogg"))
+if _msg:
+    _dest = os.path.join(DST, "assets", "sounds", "dp-message.ogg")
+    os.makedirs(os.path.dirname(_dest), exist_ok=True)
+    shutil.copyfile(_msg[0], _dest)
+    conta("sons-arquivo", 1)
 
 # ------------------------------- 2b. sons de notificação
 # O upstream distribui marcadores silenciosos: 13 dos 14 arquivos têm o

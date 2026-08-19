@@ -227,6 +227,20 @@ def template_discord(codigo):
 
 # ------------------------------------------- som próprio do servidor
 LIMITE_SOM = 512 * 1024      # 512 KB: aviso curto, não trilha sonora
+
+# Os sons que o cliente realmente toca — são os `case` do switch de
+# reprodução. A configuração do app lista 14 chaves, mas quatro delas
+# (unmute, userJoinVoice, userLeaveVoice, userMoved) têm interruptor e
+# nenhum `case`: nunca soam. Aceitar essas quatro seria oferecer um
+# campo que não produz efeito nenhum.
+SONS_VALIDOS = ("message", "deafen", "undeafen", "mute",
+                "ringtoneIncoming", "ringtoneOutgoing",
+                "streamStart", "streamEnd",
+                "streamViewerJoin", "streamViewerLeave")
+
+
+def chave_som(servidor, som):
+    return "%s:%s" % (servidor, som)
 TIPOS_SOM = {"audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/wav": "wav",
              "audio/webm": "webm", "audio/mp4": "m4a"}
 
@@ -330,8 +344,13 @@ class Handler(BaseHTTPRequestHandler):
             sid = partes[1] if len(partes) > 1 else ""
             if not RE_CODIGO.match(sid or ""):
                 return self.responde(400, {"erro": "servidor_invalido"})
-            doc = db.sons.find_one({"_id": sid})
-            if len(partes) > 2 and partes[2] == "audio":
+            # /sons/{sid}              -> catálogo do servidor
+            # /sons/{sid}/{som}/audio  -> os bytes de um som
+            if len(partes) > 3 and partes[3] == "audio":
+                som = partes[2]
+                if som not in SONS_VALIDOS:
+                    return self.responde(404, {"erro": "som_desconhecido"})
+                doc = db.sons.find_one({"_id": chave_som(sid, som)})
                 if not doc:
                     return self.responde(404, {"erro": "sem_som"})
                 dados = base64.b64decode(doc["dados"])
@@ -344,12 +363,16 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(dados)
                 return
-            if not doc:
-                return self.responde(200, {"tem": False})
-            return self.responde(200, {
-                "tem": True, "nome": doc.get("nome"),
-                "tipo": doc.get("tipo"), "versao": int(doc.get("em", 0)),
-                "url": f"/api-convites/sons/{sid}/audio?v={int(doc.get('em', 0))}"})
+            sons = {}
+            for d in db.sons.find({"servidor": sid}, {"dados": 0}):
+                som = d.get("som")
+                if som not in SONS_VALIDOS:
+                    continue
+                v = int(d.get("em", 0))
+                sons[som] = {
+                    "nome": d.get("nome"), "tipo": d.get("tipo"), "versao": v,
+                    "url": f"/api-convites/sons/{sid}/{som}/audio?v={v}"}
+            return self.responde(200, {"sons": sons})
 
         if self.path == "/saude":
             return self.responde(200, {"ok": True})
@@ -456,8 +479,14 @@ class Handler(BaseHTTPRequestHandler):
                     "erro": "sem_permissao",
                     "mensagem": "Só o dono do servidor pode trocar o som."})
 
+            som = (c.get("som") or "").strip()
+            if som not in SONS_VALIDOS:
+                return self.responde(400, {
+                    "erro": "som_desconhecido",
+                    "mensagem": "Som desconhecido."})
+
             if c.get("remover"):
-                db.sons.delete_one({"_id": sid})
+                db.sons.delete_one({"_id": chave_som(sid, som)})
                 return self.responde(200, {"ok": True, "removido": True})
 
             dados = c.get("dados") or ""
@@ -474,7 +503,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self.responde(413, {"erro": "muito_grande",
                     "mensagem": "O arquivo precisa ter menos de 512 KB."})
 
-            db.sons.update_one({"_id": sid}, {"$set": {
+            db.sons.update_one({"_id": chave_som(sid, som)}, {"$set": {
+                "servidor": sid, "som": som,
                 "dados": base64.b64encode(bruto).decode(),
                 "tipo": tipo, "nome": nome, "por": uid,
                 "em": int(time.time())}}, upsert=True)

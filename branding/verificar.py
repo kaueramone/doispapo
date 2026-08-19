@@ -141,6 +141,27 @@ if bundle:
         d = ", ".join(f"/{k} x{v}" for k, v in Counter(mortos).items())
         erros.append(f"link para pagina inexistente no bundle: {d}")
 
+# -------------------------- 2d. os sons por evento existem como arquivo
+# A pagina de sons identifica QUAL evento esta tocando pelo nome do
+# arquivo. Se a conversao de data URI para arquivo falhar, a troca por
+# evento para de funcionar sem nenhum erro visivel.
+SONS_ESPERADOS = ("message", "deafen", "undeafen", "mute",
+                  "ringtoneIncoming", "ringtoneOutgoing",
+                  "streamStart", "streamEnd",
+                  "streamViewerJoin", "streamViewerLeave")
+_faltam = [n for n in SONS_ESPERADOS
+           if not os.path.exists(os.path.join(DST, "assets", "sounds",
+                                              "dp-%s.ogg" % n))]
+if _faltam:
+    erros.append("som por evento sem arquivo: " + ", ".join(_faltam))
+if bundle:
+    _sem_url = [n for n in SONS_ESPERADOS
+                if "/assets/sounds/dp-%s.ogg" % n not in bundle
+                and n != "message"]
+    if _sem_url:
+        erros.append("evento ainda embutido como data URI no bundle: "
+                     + ", ".join(_sem_url))
+
 # ----------------------------------------- 3. sobras da marca do upstream
 resto = 0
 for raiz, _, arqs in os.walk(os.path.join(DST, "assets")):
