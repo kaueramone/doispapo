@@ -204,6 +204,21 @@ m["lang"] = "pt-BR"
 json.dump(m, open(mf, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
 conta("manifest", 3)
 
+# ------------------------------- 2b. sons de notificação
+# O upstream distribui marcadores silenciosos: 13 dos 14 arquivos têm o
+# mesmo MD5 e 1,000s de duração. Só o som de mensagem é real — por isso
+# apenas ele tocava. Substituímos pelos tons sintetizados, afinados entre
+# si e sem questão de licença.
+_sons = os.path.join(ASSETS, "sons")
+_destino_sons = os.path.join(DST, "assets", "sounds")
+if os.path.isdir(_sons) and os.path.isdir(_destino_sons):
+    for _f in sorted(os.listdir(_sons)):
+        if not _f.endswith(".ogg"):
+            continue
+        shutil.copy2(os.path.join(_sons, _f),
+                     os.path.join(_destino_sons, _f))
+        conta("sons", 1)
+
 # ------------------------------------------------- 3. service worker
 sw = os.path.join(DST, "serviceWorker.js")
 s = open(sw, encoding="utf-8").read()
@@ -414,11 +429,24 @@ INJECAO = """
   var m=location.pathname.match(/^\\/invite\\/([A-Za-z0-9_-]+)/);
   if(m){ try{ sessionStorage.setItem("dp_convite_srv",m[1]); }catch(e){} }
 
+  // O link entregue ao convidado traz o código na consulta:
+  // /login/create?invite=CODIGO. Sem ler daqui, o campo ficava vazio e a
+  // pessoa tinha de copiar o código do endereço que acabou de abrir —
+  // justamente o atrito que o link pronto deveria eliminar.
+  var codigoDireto=null;
+  try{
+    codigoDireto=new URLSearchParams(location.search).get("invite");
+    if(codigoDireto&&!/^[A-Za-z0-9_-]{1,64}$/.test(codigoDireto))
+      codigoDireto=null;
+    if(codigoDireto)sessionStorage.setItem("dp_convite_conta",codigoDireto);
+    else codigoDireto=sessionStorage.getItem("dp_convite_conta");
+  }catch(e){}
+
   var resgatando=false;
   function preencheConvite(){
     var srv=null;
     try{ srv=sessionStorage.getItem("dp_convite_srv"); }catch(e){}
-    if(!srv||resgatando)return;
+    if((!srv&&!codigoDireto)||resgatando)return;
     // campo de codigo de convite na tela de cadastro
     var alvo=null, ins=document.querySelectorAll("input");
     for(var i=0;i<ins.length;i++){
@@ -427,6 +455,14 @@ INJECAO = """
       if(/convite|invite/.test(ctx)){ alvo=el; break; }
     }
     if(!alvo||alvo.value)return;
+    // código de conta já veio pronto no link: preenche sem consultar
+    if(codigoDireto){
+      alvo.value=codigoDireto;
+      alvo.dispatchEvent(new Event("input",{bubbles:true}));
+      alvo.dispatchEvent(new Event("change",{bubbles:true}));
+      return;
+    }
+
     resgatando=true;
     api("/resgatar",{method:"POST",body:JSON.stringify({codigo:srv})})
       .then(function(r){
