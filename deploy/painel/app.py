@@ -6,6 +6,7 @@ Autenticação própria, sem relação com as contas da plataforma: usuário e
 senha guardados como hash scrypt, sessão em cookie HttpOnly.
 """
 import hashlib, hmac, json, os, re, secrets, threading, time, urllib.parse
+import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pymongo import MongoClient
 
@@ -152,6 +153,37 @@ def lista_usuarios():
     return out
 
 # ------------------------------------------------------------- handler
+# ------------------------------------------------------- Turnstile
+TURNSTILE_SECRET = os.environ.get("TURNSTILE_SECRET", "")
+TURNSTILE_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+
+def turnstile_ok(token, ip=None):
+    """Valida o token do Turnstile junto à Cloudflare.
+
+    Sem segredo configurado a verificação é ignorada, para o serviço não
+    ficar inacessível caso a chave ainda não tenha sido provisionada.
+    """
+    if not TURNSTILE_SECRET:
+        return True
+    if not token or len(token) > 4096:
+        return False
+    dados = {"secret": TURNSTILE_SECRET, "response": token}
+    if ip:
+        dados["remoteip"] = ip
+    try:
+        req = urllib.request.Request(
+            TURNSTILE_URL,
+            data=urllib.parse.urlencode(dados).encode(),
+            headers={"Content-Type": "application/x-www-form-urlencoded"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return bool(json.loads(r.read()).get("success"))
+    except Exception as e:
+        # Falha de rede não pode virar porta aberta: nega e registra.
+        print(f"turnstile: falha ao verificar ({e})", flush=True)
+        return False
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -299,6 +331,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.responde(429, {
                     "erro": "bloqueado",
                     "mensagem": "Muitas tentativas. Aguarde um minuto."})
+            if not turnstile_ok(c.get("turnstile"), ip):
+                return self.responde(403, {"erro": "captcha",
+                    "mensagem": "Verificação de segurança falhou. "
+                                "Recarregue a página e tente de novo."})
             a = admin()
             if (c.get("usuario") or "").strip() != (a or {}).get("usuario") \
                     or not confere_senha(c.get("senha") or "", a):

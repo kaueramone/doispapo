@@ -171,6 +171,7 @@
     color:var(--tx2);font-size:14px}
   footer a{font-weight:600;color:var(--roxo)}
 </style>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 
@@ -270,6 +271,9 @@
             <input id="f-nasc" name="nascimento" type="date" required>
           </div>
 
+          <div class="cf-turnstile" data-sitekey="0x4AAAAAAEVZja1P9j3NHUfc" data-theme="dark"
+               data-language="pt-br" style="margin:4px 0 14px"></div>
+
           <button type="submit" id="f-enviar">Quero meu convite</button>
           <div class="aviso" id="f-aviso"></div>
           <p class="nota">Seu e-mail serve só para avisar quando houver vaga.
@@ -320,11 +324,15 @@
 
   f.addEventListener("submit",function(e){
     e.preventDefault();
+    var campoT=f.querySelector('[name="cf-turnstile-response"]');
     var dados={
       nome:f.nome.value.trim(),
       email:f.email.value.trim(),
-      nascimento:f.nascimento.value
+      nascimento:f.nascimento.value,
+      turnstile: campoT ? campoT.value : ""
     };
+    if(!dados.turnstile)
+      return mostra("Aguarde a verificação de segurança concluir.",false);
     if(dados.nome.length<2)  return mostra("Informe seu nome.",false);
     if(!/^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(dados.email))
       return mostra("Informe um e-mail válido.",false);
@@ -350,7 +358,9 @@
         mostra("Não foi possível enviar agora. Tente mais tarde.",false);
       })
       .finally(function(){
-        bt.disabled=false; bt.textContent="Entrar na fila";
+        bt.disabled=false; bt.textContent="Quero meu convite";
+        // o token do Turnstile é de uso único
+        if(window.turnstile) try{ turnstile.reset(); }catch(e){}
       });
   });
 })();

@@ -99,6 +99,7 @@
   .flex{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
   .flex > div{flex:1;min-width:150px}
 </style>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
 <body>
 
@@ -113,6 +114,8 @@
       <input id="u" autocomplete="username" required>
       <label for="p">Senha</label>
       <input id="p" type="password" autocomplete="current-password" required>
+      <div class="cf-turnstile" data-sitekey="0x4AAAAAAEVZja1P9j3NHUfc" data-theme="dark"
+           data-language="pt-br" style="margin:16px 0 0"></div>
       <button class="bt" id="b-entrar">Entrar</button>
       <div class="msg" id="m-login"></div>
     </form>

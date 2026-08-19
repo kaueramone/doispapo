@@ -14,6 +14,7 @@ Quando alguém sem conta abre um convite de servidor, consultamos quem o
 criou e, havendo cota, emitimos um convite de conta em nome dessa pessoa.
 """
 import json, os, re, secrets, threading
+import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pymongo import MongoClient
 
@@ -78,6 +79,37 @@ def emitir(uid, origem=None):
             doc["origem"] = origem
         db.account_invites.insert_one(doc)
         return codigo, saldo(uid)
+
+
+# ------------------------------------------------------- Turnstile
+TURNSTILE_SECRET = os.environ.get("TURNSTILE_SECRET", "")
+TURNSTILE_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+
+
+def turnstile_ok(token, ip=None):
+    """Valida o token do Turnstile junto à Cloudflare.
+
+    Sem segredo configurado a verificação é ignorada, para o serviço não
+    ficar inacessível caso a chave ainda não tenha sido provisionada.
+    """
+    if not TURNSTILE_SECRET:
+        return True
+    if not token or len(token) > 4096:
+        return False
+    dados = {"secret": TURNSTILE_SECRET, "response": token}
+    if ip:
+        dados["remoteip"] = ip
+    try:
+        req = urllib.request.Request(
+            TURNSTILE_URL,
+            data=urllib.parse.urlencode(dados).encode(),
+            headers={"Content-Type": "application/x-www-form-urlencoded"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return bool(json.loads(r.read()).get("success"))
+    except Exception as e:
+        # Falha de rede não pode virar porta aberta: nega e registra.
+        print(f"turnstile: falha ao verificar ({e})", flush=True)
+        return False
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -151,6 +183,13 @@ class Handler(BaseHTTPRequestHandler):
             nome = (c.get("nome") or "").strip()[:80]
             email = (c.get("email") or "").strip().lower()[:120]
             nasc = (c.get("nascimento") or "").strip()
+
+            ip = self.headers.get("X-Forwarded-For",
+                                  self.client_address[0]).split(",")[0].strip()
+            if not turnstile_ok(c.get("turnstile"), ip):
+                return self.responde(403, {"erro": "captcha",
+                    "mensagem": "Verificação de segurança falhou. "
+                                "Recarregue a página e tente de novo."})
 
             if len(nome) < 2:
                 return self.responde(400, {"erro": "nome_invalido",

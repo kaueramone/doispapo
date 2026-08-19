@@ -35,13 +35,19 @@ function dataBr(ts){
 function entrar(e){
   e.preventDefault();
   var b = $("#b-entrar"); b.disabled = true;
-  api("/api/login",{corpo:{usuario:$("#u").value, senha:$("#p").value}})
+  var t = document.querySelector('[name="cf-turnstile-response"]');
+  api("/api/login",{corpo:{usuario:$("#u").value, senha:$("#p").value,
+                           turnstile: t ? t.value : ""}})
     .then(function(r){
       if(r.status === 200){ abrirApp(r.d.trocar_senha); }
       else msg($("#m-login"), r.d.mensagem || "Não foi possível entrar.");
     })
     .catch(function(){ msg($("#m-login"),"Falha de conexão."); })
-    .finally(function(){ b.disabled = false; });
+    .finally(function(){
+      b.disabled = false;
+      // o token do Turnstile é de uso único: renova para a próxima tentativa
+      if(window.turnstile) try{ turnstile.reset(); }catch(e){}
+    });
 }
 function abrirApp(trocar){
   $("#login").style.display = "none";
