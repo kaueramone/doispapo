@@ -224,6 +224,21 @@ def template_discord(codigo):
     }
 
 
+
+# ------------------------------------------- som próprio do servidor
+LIMITE_SOM = 512 * 1024      # 512 KB: aviso curto, não trilha sonora
+TIPOS_SOM = {"audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/wav": "wav",
+             "audio/webm": "webm", "audio/mp4": "m4a"}
+
+
+def dono_do_servidor(uid, servidor):
+    """Só o dono troca o som — vale para todos os membros."""
+    if not uid or not servidor:
+        return False
+    s = db.servers.find_one({"_id": servidor}, {"owner": 1})
+    return bool(s and s.get("owner") == uid)
+
+
 # ------------------------------------------------------- Turnstile
 TURNSTILE_SECRET = os.environ.get("TURNSTILE_SECRET", "")
 TURNSTILE_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
@@ -307,6 +322,34 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 return self.responde(502, {"erro": "indisponivel",
                     "mensagem": "Não foi possível consultar o Discord agora."})
+
+        # Som próprio do servidor: metadados. Público, porque qualquer
+        # membro precisa saber que existe para tocá-lo.
+        if self.path.startswith("/sons/"):
+            partes = self.path.strip("/").split("/")
+            sid = partes[1] if len(partes) > 1 else ""
+            if not RE_CODIGO.match(sid or ""):
+                return self.responde(400, {"erro": "servidor_invalido"})
+            doc = db.sons.find_one({"_id": sid})
+            if len(partes) > 2 and partes[2] == "audio":
+                if not doc:
+                    return self.responde(404, {"erro": "sem_som"})
+                dados = base64.b64decode(doc["dados"])
+                self.send_response(200)
+                self.send_header("Content-Type", doc.get("tipo", "audio/mpeg"))
+                self.send_header("Content-Length", str(len(dados)))
+                # o nome do arquivo não muda; a versão no endereço é que
+                # obriga o navegador a buscar de novo após a troca
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(dados)
+                return
+            if not doc:
+                return self.responde(200, {"tem": False})
+            return self.responde(200, {
+                "tem": True, "nome": doc.get("nome"),
+                "tipo": doc.get("tipo"), "versao": int(doc.get("em", 0)),
+                "url": f"/api-convites/sons/{sid}/audio?v={int(doc.get('em', 0))}"})
 
         if self.path == "/saude":
             return self.responde(200, {"ok": True})
@@ -401,6 +444,41 @@ class Handler(BaseHTTPRequestHandler):
                 db.chamadas.update_one({"_id": sala},
                     {"$set": {"participantes": n}}, upsert=True)
             return self.responde(200, {"ok": True})
+
+        # Enviar ou remover o som do servidor. Exige ser o dono.
+        if self.path.startswith("/sons/"):
+            sid = self.path.strip("/").split("/")[1]
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            if not dono_do_servidor(uid, sid):
+                return self.responde(403, {
+                    "erro": "sem_permissao",
+                    "mensagem": "Só o dono do servidor pode trocar o som."})
+
+            if c.get("remover"):
+                db.sons.delete_one({"_id": sid})
+                return self.responde(200, {"ok": True, "removido": True})
+
+            dados = c.get("dados") or ""
+            tipo = (c.get("tipo") or "").split(";")[0].strip().lower()
+            nome = (c.get("nome") or "som")[:60]
+            if tipo not in TIPOS_SOM:
+                return self.responde(415, {"erro": "tipo_invalido",
+                    "mensagem": "Envie um arquivo MP3, OGG, WAV ou M4A."})
+            try:
+                bruto = base64.b64decode(dados, validate=True)
+            except Exception:
+                return self.responde(400, {"erro": "dados_invalidos"})
+            if not bruto or len(bruto) > LIMITE_SOM:
+                return self.responde(413, {"erro": "muito_grande",
+                    "mensagem": "O arquivo precisa ter menos de 512 KB."})
+
+            db.sons.update_one({"_id": sid}, {"$set": {
+                "dados": base64.b64encode(bruto).decode(),
+                "tipo": tipo, "nome": nome, "por": uid,
+                "em": int(time.time())}}, upsert=True)
+            return self.responde(200, {"ok": True, "tamanho": len(bruto)})
 
         # Inscrição na fila de espera. Endpoint público — vem da landing.
         if self.path == "/fila":

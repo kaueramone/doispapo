@@ -868,7 +868,8 @@ _scripts = ""
 for _arq, _id in (("audio.js", "dp-audio"),
                   ("audio-ui.js", "dp-audio-ui"),
                   ("voz.js", "dp-voz"),
-                  ("discord.js", "dp-discord")):
+                  ("discord.js", "dp-discord"),
+                  ("som-servidor.js", "dp-som")):
     _cam = os.path.join(_base, _arq)
     if not os.path.exists(_cam) or _id in h:
         continue
