@@ -199,13 +199,16 @@
       <div class="bloco" style="max-width:420px">
         <h3>Alterar senha</h3>
         <form id="f-senha">
+          <label for="su">Usuário</label>
+          <input id="su" autocomplete="username">
           <label for="s1">Senha atual</label>
           <input id="s1" type="password" autocomplete="current-password">
-          <label for="s2">Nova senha</label>
+          <label for="s2">Nova senha <span style="opacity:.6">(opcional)</span></label>
           <input id="s2" type="password" autocomplete="new-password">
           <p class="sub" style="margin:6px 0 0;font-size:12.5px">
-            Mínimo de 10 caracteres. Alterar encerra todas as sessões.</p>
-          <button class="bt" id="b-senha">Alterar senha</button>
+            Senha: mínimo de 10 caracteres. Deixe em branco para alterar
+            apenas o usuário. Qualquer alteração encerra todas as sessões.</p>
+          <button class="bt" id="b-senha">Salvar credenciais</button>
           <div class="msg" id="m-senha"></div>
         </form>
       </div>

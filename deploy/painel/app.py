@@ -230,9 +230,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.responde(200, {"ok": True})
         if r == "/api/sessao":
             a = admin()
-            return self.responde(200, {
-                "autenticado": self.autenticado(),
-                "trocar_senha": bool(a and a.get("trocar_senha"))})
+            corpo = {"autenticado": self.autenticado(),
+                     "trocar_senha": bool(a and a.get("trocar_senha"))}
+            if corpo["autenticado"]:
+                corpo["usuario"] = (a or {}).get("usuario")
+            return self.responde(200, corpo)
 
         if not r.startswith("/api/"):
             return self.responde(404, {"erro": "nao_encontrado"})
@@ -325,19 +327,40 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if r == "/api/senha":
-            atual, nova = c.get("atual") or "", c.get("nova") or ""
+            atual = c.get("atual") or ""
+            nova = c.get("nova") or ""
+            usuario = (c.get("usuario") or "").strip()
             a = admin()
             if not confere_senha(atual, a):
                 return self.responde(401, {"mensagem": "Senha atual incorreta."})
-            if len(nova) < 10:
-                return self.responde(400, {
-                    "mensagem": "A nova senha precisa de ao menos 10 caracteres."})
-            d = hash_senha(nova)
-            db.painel_admin.update_one({"_id": "admin"}, {"$set": {
-                "sal": d["sal"], "hash": d["hash"], "trocar_senha": False}})
-            db.painel_sessoes.delete_many({})   # derruba outras sessões
+
+            mudou = {}
+            if usuario and usuario != a.get("usuario"):
+                if not re.fullmatch(r"[A-Za-z0-9._-]{3,32}", usuario):
+                    return self.responde(400, {"mensagem":
+                        "Usuário: 3 a 32 caracteres, letras, números, "
+                        ". _ -"})
+                mudou["usuario"] = usuario
+            if nova:
+                if len(nova) < 10:
+                    return self.responde(400, {"mensagem":
+                        "A nova senha precisa de ao menos 10 caracteres."})
+                d = hash_senha(nova)
+                mudou.update({"sal": d["sal"], "hash": d["hash"],
+                              "trocar_senha": False})
+            if not mudou:
+                return self.responde(400, {"mensagem": "Nada a alterar."})
+
+            db.painel_admin.update_one({"_id": "admin"}, {"$set": mudou})
+            db.painel_sessoes.delete_many({})   # derruba todas as sessões
+            partes = []
+            if "usuario" in mudou:
+                partes.append("Usuário alterado")
+            if "hash" in mudou:
+                partes.append("senha alterada")
             return self.responde(200, {"ok": True,
-                "mensagem": "Senha alterada. Entre novamente."})
+                "mensagem": ". ".join(partes).capitalize() +
+                            ". Entre novamente."})
 
         # ---- fila de espera
         if r == "/api/fila/convidar":

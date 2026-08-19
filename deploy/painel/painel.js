@@ -46,6 +46,9 @@ function entrar(e){
 function abrirApp(trocar){
   $("#login").style.display = "none";
   $("#app").style.display = "block";
+  api("/api/sessao").then(function(r){
+    if(r.d && r.d.usuario) $("#su").value = r.d.usuario;
+  });
   carregarVisao();
   if(trocar){
     aba("conta");
@@ -289,7 +292,8 @@ $("#b-gerar").addEventListener("click", function(){
 });
 $("#f-senha").addEventListener("submit", function(e){
   e.preventDefault();
-  api("/api/senha",{corpo:{atual:$("#s1").value, nova:$("#s2").value}})
+  api("/api/senha",{corpo:{atual:$("#s1").value, nova:$("#s2").value,
+                           usuario:$("#su").value}})
     .then(function(r){
       msg($("#m-senha"), r.d.mensagem || "Erro.", r.status===200);
       if(r.status===200) setTimeout(function(){ location.reload(); }, 1800);
