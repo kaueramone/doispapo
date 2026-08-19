@@ -204,11 +204,18 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
 # Basta ele carimbar uma classe estavel com esse mesmo valor. A partir
 # dai o contorno e so CSS, sem varredura, sem casar texto e sem depender
 # de nome de classe gerado pelo empacotador - que muda a cada build.
+#
+# O quadro tambem passa a carimbar de QUEM ele e. Sem isso o unico jeito
+# de ligar um participante ao seu quadro era casar texto - e o mesmo nome
+# aparece no historico do chat inteiro. Com o identificador na mao, a luz
+# pode vir da nossa analise de audio, que responde na hora, em vez do
+# estado do app, que chega suavizado e atrasado.
 MARCA_FALA = re.compile(r'\+\(p\(\)\?" vc_tile group":" vc_tile"\)')
 for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
     novo_, n = MARCA_FALA.subn(
-        '+(p()?" vc_tile group":" vc_tile")+(!p()&&v()?" dp-fala":"")', s_)
+        '+(p()?" vc_tile group":" vc_tile")+(!p()&&v()?" dp-fala":"")'
+        '+(w.setAttribute("data-dp-uid",r.identity),"")', s_)
     if n:
         conta("marcador-fala", n)
         open(f, "w", encoding="utf-8").write(novo_)

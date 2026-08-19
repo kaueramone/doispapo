@@ -69,7 +69,7 @@
      Só a própria luz — o áudio dos outros chega misturado, e analisá-lo
      individualmente exigiria interceptar a reprodução, com risco de mudo
      geral. */
-  var meuNome = null, tokenSessao = null;
+  var meuNome = null, meuUid = null, tokenSessao = null;
 
   var _fetch = window.fetch;
   window.fetch = function (entrada, init) {
@@ -87,7 +87,13 @@
     if (meuNome || !tokenSessao) return;
     _fetch("/api/users/@me", { headers: { "X-Session-Token": tokenSessao } })
       .then(function (r) { return r.json(); })
-      .then(function (u) { if (u && u.username) meuNome = u.username; })
+      .then(function (u) {
+        if (!u) return;
+        if (u.username) meuNome = u.username;
+        // o id é o que casa com data-dp-uid no quadro do grid; o nome
+        // só serve para a lista lateral
+        if (u._id || u.id) meuUid = u._id || u.id;
+      })
       .catch(function () {});
   }
 
@@ -97,15 +103,13 @@
        mesmo valor que ele usa para o indicador nativo (rebrand.py,
        seção 1h). No grid não há adivinhação: quem diz quem está
        falando é quem já sabe. */
-    ".dp-falando,.dp-fala{position:relative}" +
-    ".vc_tile.dp-falando::after,.vc_tile.dp-fala::after{" +
-      "border-radius:14px;inset:-2px}" +
+    ".dp-falando{position:relative}" +
+    ".vc_tile.dp-falando::after{border-radius:14px;inset:-2px}" +
     /* o indicador nativo do quadro fica verde junto, seja ele borda,
        contorno ou sombra — sem depender de saber qual das três é */
     ".vc_tile.dp-fala{outline-color:#3fb950!important;" +
       "border-color:#3fb950!important}" +
-    ".dp-falando::after,.dp-fala::after{content:'';position:absolute;" +
-      "inset:-3px;" +
+    ".dp-falando::after{content:'';position:absolute;inset:-3px;" +
       "border-radius:12px;border:2px solid #3fb950;" +
       "box-shadow:0 0 10px rgba(63,185,80,.65);pointer-events:none;" +
       "animation:dp-pulso .9s ease-in-out infinite}" +
@@ -187,13 +191,42 @@
   }
 
   function blocosDe(nome) { return (nome && mapaBlocos[nome]) || []; }
-  function meusBlocos() { return blocosDe(meuNome); }
+  function meusBlocos() {
+    return quadrosDe(meuUid).concat(blocosDe(meuNome));
+  }
 
   /* ---- de quem é cada fluxo: o cliente só vê o id da faixa; quem sabe
      o dono é o servidor, que recebe isso pelos webhooks do LiveKit ---- */
   var faixas = {};          // TR_xxx -> { participante, fonte }
   var nomes = {};           // idUsuario -> nome
-  var LIMIAR_REMOTO = -65;  // dB: fala fica bem acima; silêncio, abaixo
+  /* Dois limiares e um tempo de espera. Um limiar só faz a luz piscar
+     em cada respiro e sílaba: o nível cruza a linha dezenas de vezes por
+     frase. Liga em -63, só desliga abaixo de -68 e nunca antes de 280ms
+     — acende na hora e larga com calma. */
+  var LIMIAR_REMOTO = -63;
+  var LIMIAR_SOLTA = -68;
+  var SEGURA_MS = 280;
+
+  var estadoFala = {};
+  function decidirFala(chave, nivel, liga, solta) {
+    if (liga === undefined) { liga = LIMIAR_REMOTO; solta = LIMIAR_SOLTA; }
+    var e = estadoFala[chave] || (estadoFala[chave] = {on: false, ate: 0});
+    var agora = Date.now();
+    if (nivel >= liga) { e.on = true; e.ate = agora + SEGURA_MS; }
+    else if (e.on && agora >= e.ate && nivel < solta) { e.on = false; }
+    return e.on;
+  }
+
+  /* Quadros do grid, achados pelo identificador que o app carimba
+     (rebrand.py, seção 1h) — sem casar texto, sem depender de classe
+     gerada pelo empacotador. */
+  function quadrosDe(uid) {
+    if (!uid) return [];
+    try {
+      return Array.prototype.slice.call(
+        document.querySelectorAll('[data-dp-uid="' + uid + '"]'));
+    } catch (e) { return []; }
+  }
 
   function buscarFaixas() {
     fetch(API + "/faixas", { cache: "no-store" })
@@ -225,13 +258,15 @@
       if (!fx) continue;
       var info = faixas[fx.id];
       if (!info || (info.fonte || "").toUpperCase() !== "MICROPHONE") continue;
-      var nome = nomeDe(info.participante);
-      if (!nome) continue;
-      var blocos = blocosDe(nome);
-      var falando = r.nivel >= LIMIAR_REMOTO;
-      for (var b = 0; b < blocos.length; b++) {
-        limparNativa(blocos[b]);
-        blocos[b].classList.toggle("dp-falando", falando);
+      var uid = info.participante;
+      var alvos = quadrosDe(uid);
+      var nome = nomeDe(uid);
+      if (nome) alvos = alvos.concat(blocosDe(nome));
+      if (!alvos.length) continue;
+      var falando = decidirFala(uid, r.nivel);
+      for (var b = 0; b < alvos.length; b++) {
+        limparNativa(alvos[b]);
+        alvos[b].classList.toggle("dp-falando", falando);
       }
     }
   }
@@ -245,8 +280,11 @@
       });
       return;
     }
-    // independe do portão estar ligado: a luz indica nível de voz
-    var falando = a.estado.nivel >= a.cfg.limiar;
+    // independe do portão estar ligado: a luz indica nível de voz.
+    // Mesmo amortecimento dos outros, ancorado no limiar do portão:
+    // sem ele a própria luz pisca a cada sílaba.
+    var falando = decidirFala("eu", a.estado.nivel,
+                              a.cfg.limiar, a.cfg.limiar - 5);
     var blocos = meusBlocos();
     for (var i = 0; i < blocos.length; i++) {
       limparNativa(blocos[i]);
