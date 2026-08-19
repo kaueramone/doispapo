@@ -407,7 +407,15 @@ sw, n_rev = re.subn(r'\{"revision":"([^"]*)","url":"([^"]*)"\}', corrige, sw)
 conta("precache-revisoes", n_rev)
 
 # id de build: muda o nome dos caches, fazendo o workbox descartar os antigos
-build_id = hashlib.md5("".join(sorted(os.listdir(os.path.join(DST, "assets")))).encode()).hexdigest()[:8]
+# O id precisa refletir o CONTEUDO, nao os nomes: os nomes dos arquivos
+# nao mudam entre rebuilds, entao hashear a listagem manteria o mesmo nome
+# de cache para sempre e o navegador nunca buscaria a versao nova.
+_h = hashlib.md5()
+for _f in sorted(glob.glob(os.path.join(DST, "assets", "index-*.js")) +
+                 glob.glob(os.path.join(DST, "assets", "messages-*.js")) +
+                 [os.path.join(DST, "index.html")]):
+    _h.update(md5(_f).encode())
+build_id = _h.hexdigest()[:10]
 sw, n_cn = re.subn(r'precache-v\d+', f"precache-dp-{build_id}", sw)
 conta("cache-renomeado", n_cn)
 
