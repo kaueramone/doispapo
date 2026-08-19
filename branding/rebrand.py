@@ -49,22 +49,65 @@ for f in glob.glob(os.path.join(DST, "assets", "*.css")):
 # --------------------------- 1c. links do upstream -> destinos proprios
 # ko-fi do upstream vira a pagina de apoio propria; institucionais viram
 # o dominio proprio. Sao links VISIVEIS na interface.
-LINKS = {
-    "https://ko-fi.com/stoatchat": "https://doispapo.com/apoie",
-    "https://stoat.chat/terms":    "https://doispapo.com/termos",
-    "https://stoat.chat/privacy":  "https://doispapo.com/privacidade",
-    "https://stoat.chat/about":    "https://doispapo.com/sobre",
-    "https://stoat.chat/aup":      "https://doispapo.com/uso-aceitavel",
-}
+LINKS = [
+    # ORDEM IMPORTA: as URLs mais especificas primeiro, senao a troca
+    # generica de github.com/<org> corrompe os caminhos mais longos.
+    ("https://github.com/stoatchat/for-web/issues",
+     "https://github.com/kaueramone/doispapo/issues"),
+    ("https://github.com/orgs/stoatchat/discussions/categories/feature-suggestions",
+     "https://github.com/kaueramone/doispapo/discussions"),
+    ("https://github.com/orgs/stoatchat/discussions/categories/feedback",
+     "https://github.com/kaueramone/doispapo/discussions"),
+    ("https://github.com/orgs/stoatchat/discussions",
+     "https://github.com/kaueramone/doispapo/discussions"),
+    ("https://github.com/stoatchat", "https://github.com/kaueramone/doispapo"),
+    ("https://ko-fi.com/stoatchat", "https://doispapo.com/apoie"),
+    ("https://stoat.chat/terms",    "https://doispapo.com/termos"),
+    ("https://stoat.chat/privacy",  "https://doispapo.com/privacidade"),
+    ("https://stoat.chat/about",    "https://doispapo.com/sobre"),
+    ("https://stoat.chat/aup",      "https://doispapo.com/uso-aceitavel"),
+]
 for f in glob.glob(os.path.join(DST, "assets", "*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
     o_ = s_
-    for de, para in LINKS.items():
+    for de, para in LINKS:
         if de in s_:
             conta("links", s_.count(de))
             s_ = s_.replace(de, para)
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
+
+# ------------------------- 1d. completar a traducao pt-BR
+# O catalogo pt-BR do upstream vem com ~31% das entradas iguais ao ingles
+# (nao traduzidas). Aplicamos as traducoes proprias por msgId.
+trad_p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                      "traducoes_pt_br.json")
+if os.path.exists(trad_p):
+    trad = json.load(open(trad_p, encoding="utf-8"))
+    for f in glob.glob(os.path.join(DST, "assets", "messages-*.js")):
+        s_ = open(f, encoding="utf-8", errors="replace").read()
+        # so mexe no catalogo que ja esta em portugues do Brasil
+        if "[Ontem \u00e0s]" not in s_ and "[Ontem às]" not in s_:
+            continue
+        n_ = 0
+        for chave, texto in trad.items():
+            alvo = '"%s":[' % chave
+            i = s_.find(alvo)
+            if i < 0:
+                continue
+            j = s_.index("]", i)
+            atual = s_[i + len(alvo):j]
+            # so substitui entradas de string simples
+            if not (atual.startswith('"') and atual.endswith('"')):
+                continue
+            novo_val = json.dumps(texto, ensure_ascii=False)
+            # dentro de template literal: escapar crase e cifrao
+            novo_val = novo_val.replace("\\", "\\\\").replace("`", "\\`")
+            s_ = s_[:i + len(alvo)] + novo_val + s_[j:]
+            n_ += 1
+        conta("traducoes-pt-br", n_)
+        open(f, "w", encoding="utf-8").write(s_)
+        break
 
 # ---------------------------------------------------- 2. manifest do PWA
 mf = os.path.join(DST, "manifest.webmanifest")
@@ -138,6 +181,16 @@ INJECAO = """
     margin:10px auto;background:#fff;padding:8px}
   #dp-pix code{display:block;word-break:break-all;font-size:10px;
     opacity:.65;margin-top:8px;line-height:1.4}
+
+  /* Rodape do login: remove os links institucionais herdados e o Bluesky.
+     O GitHub fica, apontando para o repositorio proprio (trocado no bundle). */
+  a[href*="doispapo.com/sobre"],
+  a[href*="doispapo.com/termos"],
+  a[href*="doispapo.com/privacidade"],
+  a[href*="doispapo.com/uso-aceitavel"],
+  a[href*="bsky.app"],
+  a[href*="translate."],
+  a[href*="developers."]{display:none!important}
 </style>
 <script id="dp-marca-js">
 (function(){
@@ -259,6 +312,45 @@ try:
 
 except ImportError:
     print("AVISO: PIL indisponivel, assets de imagem nao trocados")
+
+# --------------------------------- 5c. invalidacao do service worker
+# O SW (workbox) guarda os assets por hash de revisao e por nome de cache.
+# Trocamos o CONTEUDO dos arquivos mantendo os NOMES, entao sem isso o
+# navegador continua servindo a copia antiga para sempre.
+import hashlib
+sw_p = os.path.join(DST, "serviceWorker.js")
+sw = open(sw_p, encoding="utf-8", errors="replace").read()
+
+def md5(caminho):
+    h = hashlib.md5()
+    with open(caminho, "rb") as fh:
+        for pedaco in iter(lambda: fh.read(8192), b""):
+            h.update(pedaco)
+    return h.hexdigest()
+
+def corrige(m):
+    url = m.group(2)
+    alvo = os.path.join(DST, url)
+    if os.path.exists(alvo):
+        return '{"revision":"%s","url":"%s"}' % (md5(alvo), url)
+    return m.group(0)
+
+sw, n_rev = re.subn(r'\{"revision":"([^"]*)","url":"([^"]*)"\}', corrige, sw)
+conta("precache-revisoes", n_rev)
+
+# id de build: muda o nome dos caches, fazendo o workbox descartar os antigos
+build_id = hashlib.md5("".join(sorted(os.listdir(os.path.join(DST, "assets")))).encode()).hexdigest()[:8]
+sw, n_cn = re.subn(r'precache-v\d+', f"precache-dp-{build_id}", sw)
+conta("cache-renomeado", n_cn)
+
+# assume o controle imediatamente, sem esperar todas as abas fecharem
+if "skipWaiting" not in sw[:400]:
+    sw = ("self.addEventListener('install',function(){self.skipWaiting()});\n"
+          "self.addEventListener('activate',function(e){"
+          "e.waitUntil(self.clients.claim())});\n") + sw
+    conta("skipWaiting", 1)
+
+open(sw_p, "w", encoding="utf-8").write(sw)
 
 # ------------------------------------------------- 6. relatorio
 print("\n=== SUBSTITUICOES ===")
