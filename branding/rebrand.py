@@ -14,7 +14,21 @@ DST   = sys.argv[2] if len(sys.argv) > 2 else "dist-patched"
 ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "assets")
 
 MARCA = "Dois Papo"
-VERSAO_APP = "0.8.0"
+# Versão exibida nas configurações: vem da tag mais recente do git, para
+# não depender de eu lembrar de atualizar uma constante a cada release.
+def _versao_do_git():
+    import subprocess
+    try:
+        t = subprocess.run(
+            ["git", "describe", "--tags", "--abbrev=0", "--match", "v*"],
+            cwd=os.path.dirname(os.path.abspath(__file__)),
+            capture_output=True, text=True, timeout=8)
+        v = (t.stdout or "").strip().lstrip("v")
+        return v if re.fullmatch(r"\d+(\.\d+)*", v or "") else None
+    except Exception:
+        return None
+
+VERSAO_APP = _versao_do_git() or "0.0.0"
 VERSAO_UPSTREAM = "0.14.1"
 SITE  = "https://kaueramone.dev"
 AUTOR = "kaueramone.dev"

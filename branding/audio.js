@@ -23,7 +23,8 @@
 
   var PADRAO = { ativo: true, limiar: -50, sensibilidade: 1 };
   var cfg = carregar();
-  var estado = { nivel: -100, aberto: false, ctx: null, analisador: null };
+  var estado = { nivel: -100, aberto: false, ctx: null, analisador: null,
+               ganho: 1, cortes: 0 };
 
   function carregar() {
     try {
@@ -92,19 +93,31 @@
       }
 
       var agora = Date.now();
-      if (db >= cfg.limiar) {
+      var HISTERESE = 6;   // dB abaixo do limiar para fechar
+      var abre = db >= cfg.limiar;
+      var fecha = db < cfg.limiar - HISTERESE;
+
+      if (abre) {
         caiuEm = 0;
-        estado.aberto = true;
+        if (!estado.aberto) estado.aberto = true;
+        estado.ganho = 1;
         ganho.gain.setTargetAtTime(1, ctx.currentTime, ATAQUE);
-      } else {
+      } else if (fecha || !estado.aberto) {
         if (!caiuEm) caiuEm = agora;
         if (agora - caiuEm > ESPERA_MS) {
+          if (estado.aberto) estado.cortes++;
           estado.aberto = false;
+          estado.ganho = 0;
           ganho.gain.setTargetAtTime(0, ctx.currentTime, LIBERACAO);
         }
       }
     }
-    var relogio = setInterval(medir, 40);
+    var relogio = setInterval(function () {
+      medir();
+      // valor efetivo no nó, não o que pretendíamos: é isso que prova
+      // se o portão está mesmo no caminho do que se transmite
+      estado.ganhoReal = Math.round(ganho.gain.value * 1000) / 1000;
+    }, 40);
 
     // Encerrar o contexto junto com a trilha evita vazar recurso a cada
     // entrada e saída de canal de voz.

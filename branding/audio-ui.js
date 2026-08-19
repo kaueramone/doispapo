@@ -37,6 +37,7 @@
     '#dp-mic .liga{display:flex;align-items:center;gap:9px;' +
       'margin-bottom:14px;font-size:13px;cursor:pointer}' +
     '#dp-mic .liga input{accent-color:#8C41D9;width:16px;height:16px}' +
+    '#dp-mic .direcao{display:flex;justify-content:space-between;font-size:11px;opacity:.55;margin:-4px 0 2px}' +
     '#dp-mic .dica{font-size:11.5px;opacity:.6;margin-top:12px;' +
       'line-height:1.5}';
 
@@ -57,8 +58,7 @@
     painel.id = "dp-mic";
     painel.innerHTML =
       '<h3>Sensibilidade do microfone</h3>' +
-      '<div class="sub">Fale normalmente e arraste o limiar até a barra ' +
-      'acender só com a sua voz — não com o ruído do ambiente.</div>' +
+      '<div class="sub">Fique em silêncio e veja até onde a barra chega: esse é o seu ruído de fundo. Arraste o corte para a <b>direita</b> desse ponto. Depois fale e confirme que acende.</div>' +
       '<div class="trilho"><div class="barra" id="dp-barra"></div>' +
         '<div class="marca" id="dp-marca"></div></div>' +
       '<div class="legenda"><span>silêncio</span>' +
@@ -66,9 +66,11 @@
         '<span>alto</span></div>' +
       '<label class="liga"><input type="checkbox" id="dp-liga">' +
         '<span>Cortar o som quando eu não estiver falando</span></label>' +
-      '<label><span>Limiar</span>' +
+      '<label><span>Corte</span>' +
         '<input type="range" id="dp-lim" min="' + MIN + '" max="' + MAX +
         '" step="1"><span class="val" id="dp-lim-v"></span></label>' +
+      '<div class="direcao"><span>&#8592; deixa passar mais</span>' +
+        '<span>corta mais &#8594;</span></div>' +
       '<div class="dica">O corte só vale para o que você transmite. ' +
       'Funciona junto com a supressão de ruído acima.</div>';
     ancora.parentNode.insertBefore(painel, ancora.nextSibling);
@@ -170,8 +172,13 @@
       var txt, cls;
       if (mon.erro && !emChamada) { txt = mon.erro; cls = "off"; }
       else if (nivel === null) { txt = "abrindo microfone…"; cls = "off"; }
-      else if (aberto) { txt = emChamada ? "transmitindo" : "acima do limiar";
-                         cls = "on"; }
+      else if (aberto) {
+        txt = emChamada
+          ? "transmitindo" + (e.ganhoReal !== undefined
+              ? " (ganho " + e.ganhoReal + ")" : "")
+          : "acima do corte";
+        cls = "on";
+      }
       else { txt = "em silêncio"; cls = "off"; }
       sit.textContent = txt;
       sit.className = "situacao " + cls;
@@ -252,6 +259,9 @@
       contextoAudio: window.dpAudio && window.dpAudio.estado.ctx
                      ? "ativo" : "inativo",
       nivel: window.dpAudio ? window.dpAudio.estado.nivel : null,
+      emChamada: !!(window.dpAudio && window.dpAudio.estado.ctx),
+      ganhoReal: window.dpAudio ? window.dpAudio.estado.ganhoReal : null,
+      cortesAplicados: window.dpAudio ? window.dpAudio.estado.cortes : null,
       config: window.dpAudio ? window.dpAudio.cfg : null
     };
     console.table(d);
