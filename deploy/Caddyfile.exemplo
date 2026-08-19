@@ -116,3 +116,51 @@ doispapo.com, www.doispapo.com {
 	header @estatico Cache-Control "public, max-age=604800"
 	header /index.html Cache-Control "no-cache"
 }
+
+# ---------------------------------------------------------------------
+# Portal do desenvolvedor — gerado a partir do OpenAPI da instância
+# ---------------------------------------------------------------------
+developers.doispapo.com {
+	log {
+		output file /data/acessos.log {
+			roll_size 20mb
+			roll_keep 6
+		}
+		format json
+	}
+
+	root * /developers
+	encode gzip zstd
+	file_server
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+	}
+	@estatico path *.png *.svg *.ico
+	header @estatico Cache-Control "public, max-age=604800"
+	header /index.html Cache-Control "no-cache"
+}
+
+# ---------------------------------------------------------------------
+# Painel administrativo — acesso restrito
+# ---------------------------------------------------------------------
+painel.doispapo.com {
+	log {
+		output file /data/acessos.log {
+			roll_size 20mb
+			roll_keep 6
+		}
+		format json
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		X-Robots-Tag "noindex, nofollow"
+		Cache-Control "no-store"
+	}
+
+	reverse_proxy http://painel:8700
+}

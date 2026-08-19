@@ -47,12 +47,22 @@ def usuario_da_sessao(token):
     return s.get("user_id") if s else None
 
 
+def limite_de(uid):
+    """Cota individual definida no painel; cai no padrão se não houver."""
+    c = db.painel_cotas.find_one({"_id": uid})
+    try:
+        return int(c["limite"]) if c and "limite" in c else LIMITE
+    except (TypeError, ValueError):
+        return LIMITE
+
+
 def saldo(uid):
     usados = db.account_invites.count_documents({"criado_por": uid})
+    LIMITE_U = limite_de(uid)
     return {
-        "limite": LIMITE,
+        "limite": LIMITE_U,
         "usados": usados,
-        "disponiveis": max(0, LIMITE - usados),
+        "disponiveis": max(0, LIMITE_U - usados),
     }
 
 

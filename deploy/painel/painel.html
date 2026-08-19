@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Painel · Dois Papo</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+  :root{--bg:#0b1119;--bg2:#0f1724;--card:#141d2b;--line:#22304a;
+    --tx:#e8edf6;--tx2:#93a1bb;--azul:#2E8BEB;--roxo:#8C41D9;
+    --ok:#3fb950;--al:#d29922;--er:#f85149;
+    --grad:linear-gradient(100deg,var(--azul),var(--roxo))}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);
+    font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  button{font:inherit;cursor:pointer}
+  code{font-family:ui-monospace,monospace;font-size:12.5px}
+
+  /* ---------- login ---------- */
+  #login{min-height:100vh;display:flex;align-items:center;
+    justify-content:center;padding:24px}
+  #login .cx{width:100%;max-width:370px;background:var(--card);
+    border:1px solid var(--line);border-radius:16px;padding:30px}
+  #login h1{font-size:21px;margin-bottom:4px}
+  #login p.s{color:var(--tx2);font-size:13.5px;margin-bottom:20px}
+  label{display:block;font-size:12.5px;color:var(--tx2);margin:12px 0 5px}
+  input,select{width:100%;background:var(--bg);color:var(--tx);
+    border:1px solid var(--line);border-radius:9px;padding:10px 12px;
+    font:15px system-ui}
+  input:focus,select:focus{outline:0;border-color:var(--roxo)}
+  .bt{width:100%;margin-top:18px;border:0;border-radius:10px;padding:12px;
+    font:650 14px system-ui;color:#fff;background:var(--grad)}
+  .bt[disabled]{opacity:.5;cursor:progress}
+  .msg{margin-top:14px;padding:10px 12px;border-radius:8px;font-size:13.5px;
+    display:none}
+  .msg.on{display:block;background:rgba(248,81,73,.12);
+    border:1px solid rgba(248,81,73,.35);color:#ffb3b3}
+  .msg.ok{background:rgba(63,185,80,.12);border-color:rgba(63,185,80,.35);
+    color:#8df0b0}
+
+  /* ---------- app ---------- */
+  #app{display:none}
+  .topo{display:flex;align-items:center;gap:16px;padding:14px 22px;
+    border-bottom:1px solid var(--line);background:var(--bg2);
+    position:sticky;top:0;z-index:10;flex-wrap:wrap}
+  .topo b{font-size:16px}
+  .topo .sp{flex:1}
+  .abas{display:flex;gap:4px;flex-wrap:wrap}
+  .abas button{background:transparent;border:1px solid transparent;
+    color:var(--tx2);padding:7px 13px;border-radius:8px;font-size:13.5px}
+  .abas button.on{background:var(--card);border-color:var(--line);
+    color:var(--tx)}
+  .sair{background:transparent;border:1px solid var(--line);color:var(--tx2);
+    padding:7px 13px;border-radius:8px;font-size:13px}
+  main{max-width:1200px;margin:0 auto;padding:24px 22px 70px}
+  .pg{display:none}.pg.on{display:block}
+  h2{font-size:19px;margin-bottom:4px}
+  .sub{color:var(--tx2);font-size:13.5px;margin-bottom:18px}
+
+  .cards{display:grid;gap:12px;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:24px}
+  .c{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:16px}
+  .c .n{font-size:26px;font-weight:750;line-height:1.15;
+    background:var(--grad);-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  .c .r{font-size:12.5px;color:var(--tx2);margin-top:2px}
+
+  .bloco{background:var(--card);border:1px solid var(--line);
+    border-radius:13px;padding:18px;margin-bottom:16px}
+  .bloco h3{font-size:15px;margin-bottom:12px}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;color:var(--tx2);font-size:11.5px;text-transform:uppercase;
+    letter-spacing:.06em;padding:7px 8px;border-bottom:1px solid var(--line);
+    white-space:nowrap}
+  td{padding:8px;border-bottom:1px solid rgba(34,48,74,.5);
+    vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  .vazio{color:var(--tx2);font-size:13.5px;padding:18px 0;text-align:center}
+
+  .tag{font-size:11.5px;padding:2px 8px;border-radius:999px;
+    border:1px solid var(--line);color:var(--tx2);white-space:nowrap}
+  .tag.ok{color:#8df0b0;border-color:rgba(63,185,80,.4)}
+  .tag.al{color:#f0d48a;border-color:rgba(210,153,34,.4)}
+  .tag.er{color:#ffb3b3;border-color:rgba(248,81,73,.4)}
+
+  .ac{background:var(--bg2);border:1px solid var(--line);color:var(--tx2);
+    border-radius:7px;padding:5px 10px;font-size:12.5px;margin-right:5px}
+  .ac:hover{color:var(--tx);border-color:var(--roxo)}
+  .ac.perigo:hover{color:#ffb3b3;border-color:rgba(248,81,73,.5)}
+
+  .barra{height:9px;border-radius:5px;background:var(--grad);min-width:3px}
+  .linhaB{display:flex;align-items:center;gap:10px;margin-bottom:7px;
+    font-size:13px}
+  .linhaB .rot{flex:0 0 auto;color:var(--tx2);min-width:60px}
+  .linhaB .val{flex:0 0 auto;color:var(--tx2);min-width:44px;text-align:right}
+  .linhaB .cx{flex:1;background:var(--bg2);border-radius:5px;overflow:hidden}
+
+  .flex{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .flex > div{flex:1;min-width:150px}
+</style>
+</head>
+<body>
+
+<!-- ------------------------------------------------------------ login -->
+<div id="login">
+  <div class="cx">
+    <h1>Painel administrativo</h1>
+    <p class="s">Acesso restrito. Credenciais próprias, independentes da
+      plataforma.</p>
+    <form id="f-login">
+      <label for="u">Usuário</label>
+      <input id="u" autocomplete="username" required>
+      <label for="p">Senha</label>
+      <input id="p" type="password" autocomplete="current-password" required>
+      <button class="bt" id="b-entrar">Entrar</button>
+      <div class="msg" id="m-login"></div>
+    </form>
+  </div>
+</div>
+
+<!-- -------------------------------------------------------------- app -->
+<div id="app">
+  <div class="topo">
+    <b>Dois Papo</b>
+    <div class="abas">
+      <button data-p="visao" class="on">Visão geral</button>
+      <button data-p="acessos">Acessos</button>
+      <button data-p="fila">Fila de espera</button>
+      <button data-p="usuarios">Usuários</button>
+      <button data-p="convites">Convites</button>
+      <button data-p="conta">Conta</button>
+    </div>
+    <div class="sp"></div>
+    <button class="sair" id="b-sair">Sair</button>
+  </div>
+
+  <main>
+    <section class="pg on" id="pg-visao">
+      <h2>Visão geral</h2>
+      <p class="sub">Estado atual da instância.</p>
+      <div class="cards" id="cards"></div>
+    </section>
+
+    <section class="pg" id="pg-acessos">
+      <h2>Acessos</h2>
+      <p class="sub">Agregado do log do servidor. Chamadas internas da
+        plataforma são descartadas para não inflar os números.</p>
+      <div class="flex" style="margin-bottom:16px">
+        <div style="max-width:180px">
+          <label for="dias">Período</label>
+          <select id="dias">
+            <option value="1">Último dia</option>
+            <option value="7" selected>7 dias</option>
+            <option value="30">30 dias</option>
+            <option value="90">90 dias</option>
+          </select>
+        </div>
+      </div>
+      <div id="met"></div>
+    </section>
+
+    <section class="pg" id="pg-fila">
+      <h2>Fila de espera</h2>
+      <p class="sub">Quem pediu acesso pela página inicial, por ordem de
+        inscrição.</p>
+      <div class="bloco"><div id="t-fila"></div></div>
+    </section>
+
+    <section class="pg" id="pg-usuarios">
+      <h2>Usuários</h2>
+      <p class="sub">Contas da plataforma, cota de convites e moderação.</p>
+      <div class="bloco"><div id="t-users"></div></div>
+    </section>
+
+    <section class="pg" id="pg-convites">
+      <h2>Convites</h2>
+      <p class="sub">Todos os convites de conta da instância.</p>
+      <div class="bloco">
+        <h3>Gerar convites avulsos</h3>
+        <div class="flex">
+          <div style="max-width:130px">
+            <label for="qtd">Quantidade</label>
+            <input id="qtd" type="number" min="1" max="20" value="1">
+          </div>
+          <div style="flex:0 0 auto">
+            <button class="bt" style="width:auto;margin:0;padding:10px 18px"
+                    id="b-gerar">Gerar</button>
+          </div>
+        </div>
+        <div class="msg" id="m-conv"></div>
+      </div>
+      <div class="bloco"><div id="t-conv"></div></div>
+    </section>
+
+    <section class="pg" id="pg-conta">
+      <h2>Conta</h2>
+      <p class="sub">Credenciais deste painel.</p>
+      <div class="bloco" style="max-width:420px">
+        <h3>Alterar senha</h3>
+        <form id="f-senha">
+          <label for="s1">Senha atual</label>
+          <input id="s1" type="password" autocomplete="current-password">
+          <label for="s2">Nova senha</label>
+          <input id="s2" type="password" autocomplete="new-password">
+          <p class="sub" style="margin:6px 0 0;font-size:12.5px">
+            Mínimo de 10 caracteres. Alterar encerra todas as sessões.</p>
+          <button class="bt" id="b-senha">Alterar senha</button>
+          <div class="msg" id="m-senha"></div>
+        </form>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="/painel.js"></script>
+</body>
+</html>
