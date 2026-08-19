@@ -109,6 +109,66 @@ if os.path.exists(trad_p):
         open(f, "w", encoding="utf-8").write(s_)
         break
 
+# --------------- 1e. traduz o catalogo de FALLBACK embutido no bundle
+# Alguns componentes leem do catalogo ingles compilado dentro do
+# index-*.js, e nao do chunk pt-BR carregado sob demanda — por isso
+# apareciam telas em ingles mesmo com o resto traduzido. Como a instancia
+# e monolingue pt-BR, tornamos o proprio fallback portugues, usando o
+# catalogo pt-BR (ja completado na etapa anterior) como fonte.
+pad_simples = re.compile(r'"([A-Za-z0-9+/_-]{6})":\["((?:[^"\\]|\\.)*)"\]')
+
+fonte = {}
+for f in glob.glob(os.path.join(DST, "assets", "messages-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    if "[Ontem" not in s_:
+        continue
+    fonte = {m.group(1): m.group(2) for m in pad_simples.finditer(s_)}
+    break
+
+if fonte:
+    for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+        s_ = open(f, encoding="utf-8", errors="replace").read()
+        n_ = 0
+        def troca(m):
+            global n_
+            chave, ingles = m.group(1), m.group(2)
+            pt = fonte.get(chave)
+            if pt is None or pt == ingles:
+                return m.group(0)
+            n_ += 1
+            return '"%s":["%s"]' % (chave, pt)
+        novo_ = pad_simples.sub(troca, s_)
+        if n_:
+            conta("fallback-traduzido", n_)
+            open(f, "w", encoding="utf-8").write(novo_)
+
+# ------------- 1f. strings hardcoded (fora do sistema de traducao)
+# Alguns componentes do upstream tem texto em ingles direto no codigo,
+# sem passar pelo i18n — por isso apareciam em ingles em TODOS os idiomas.
+# Casamos o par propriedade:"valor" para nao pegar chave interna homonima
+# (ex.: id:"default" continua intacto; so title:"Default" muda).
+HARDCODED = {
+    'title:"Create a group or server"': 'title:"Criar um grupo ou servidor"',
+    'title:"Create or join a server"':  'title:"Criar ou entrar em um servidor"',
+    'text:"Group"':    'text:"Grupo"',
+    'text:"Server"':   'text:"Servidor"',
+    'text:"Create"':   'text:"Criar"',
+    'text:"Join"':     'text:"Entrar"',
+    'title:"Incoming"':'title:"Recebidos"',
+    'title:"Outgoing"':'title:"Enviados"',
+    'title:"Blocked"': 'title:"Bloqueados"',
+    'title:"Default"': 'title:"Padr\u00e3o"',
+}
+for f in glob.glob(os.path.join(DST, "assets", "*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+    for de, para in HARDCODED.items():
+        if de in s_:
+            conta("hardcoded", s_.count(de))
+            s_ = s_.replace(de, para)
+    if s_ != o_:
+        open(f, "w", encoding="utf-8").write(s_)
+
 # ---------------------------------------------------- 2. manifest do PWA
 mf = os.path.join(DST, "manifest.webmanifest")
 m = json.load(open(mf, encoding="utf-8"))
