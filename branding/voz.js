@@ -62,6 +62,52 @@
   };
 
 
+  /* ---------------- remoção da luz nativa (duplicada) ----------------- */
+  /* Comparando o bloco do participante em silêncio e falando, o estado de
+     fala acrescenta exatamente estas quatro classes. Retirá-las devolve o
+     bloco ao visual de silêncio, e quem indica passa a ser o nosso anel —
+     que reage em 40 ms em vez de esperar o servidor.
+
+     A remoção é restrita a blocos de participante (identificados pela
+     classe base): duas dessas classes são utilitárias e aparecem em outros
+     elementos, onde não devem ser tocadas.
+
+     Desligar sem recompilar:
+       localStorage.setItem("dp_nativa","1"); location.reload();          */
+  var CLASSE_BLOCO = "eQVZMd";
+  var CLASSES_FALA = ["dKGhWu", "fXciza", "hgBSwO", "GrQgU"];
+  var manterNativa = false;
+  try { manterNativa = localStorage.getItem("dp_nativa") === "1"; } catch (e) {}
+
+  function limparNativa(el) {
+    if (manterNativa || !el || !el.classList) return;
+    if (!el.classList.contains(CLASSE_BLOCO)) return;
+    for (var i = 0; i < CLASSES_FALA.length; i++)
+      el.classList.remove(CLASSES_FALA[i]);
+  }
+
+  if (!manterNativa) {
+    new MutationObserver(function (regs) {
+      for (var i = 0; i < regs.length; i++) {
+        var r = regs[i];
+        if (r.type === "attributes") limparNativa(r.target);
+        else if (r.addedNodes) {
+          for (var k = 0; k < r.addedNodes.length; k++) {
+            var n = r.addedNodes[k];
+            if (n.nodeType !== 1) continue;
+            limparNativa(n);
+            var f = n.querySelectorAll
+                    ? n.querySelectorAll("." + CLASSE_BLOCO) : [];
+            for (var j = 0; j < f.length; j++) limparNativa(f[j]);
+          }
+        }
+      }
+    }).observe(document.documentElement, {
+      subtree: true, childList: true,
+      attributes: true, attributeFilter: ["class"]
+    });
+  }
+
   /* ------------------------- luz de fala local ------------------------ */
   /* A luz nativa depende do servidor: o SFU analisa os níveis e transmite
      de volta a lista de falantes ativos, então há uma ida e volta antes de
