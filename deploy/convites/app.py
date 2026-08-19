@@ -13,7 +13,7 @@ Ponte entre os dois tipos de convite do produto:
 Quando alguém sem conta abre um convite de servidor, consultamos quem o
 criou e, havendo cota, emitimos um convite de conta em nome dessa pessoa.
 """
-import json, os, re, secrets, threading
+import json, os, re, secrets, threading, time
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pymongo import MongoClient
@@ -145,6 +145,16 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/saude":
             return self.responde(200, {"ok": True})
 
+        # Chamadas em andamento, para o contador de duração.
+        if self.path == "/chamadas":
+            itens = {
+                d["_id"]: {"inicio": d.get("inicio"),
+                           "participantes": d.get("participantes", 0)}
+                for d in db.chamadas.find({"encerrada": {"$ne": True}})
+                if d.get("inicio")
+            }
+            return self.responde(200, {"chamadas": itens})
+
         # Lista da fila de espera — só para o administrador da instância.
         if self.path == "/fila":
             uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
@@ -177,6 +187,29 @@ class Handler(BaseHTTPRequestHandler):
 
     # --------------------------------------------------------------- POST
     def do_POST(self):
+        # Webhook do LiveKit: registra início e fim das chamadas.
+        # Não é exposto pelo Caddy — o LiveKit chama pela rede interna.
+        if self.path == "/livekit":
+            c = self.corpo_json()
+            evento = c.get("event")
+            sala = (c.get("room") or {}).get("name")
+            if not sala:
+                return self.responde(200, {"ok": True})
+            agora = time.time()
+            if evento == "room_started":
+                db.chamadas.update_one(
+                    {"_id": sala},
+                    {"$set": {"inicio": agora, "encerrada": False}},
+                    upsert=True)
+            elif evento == "room_finished":
+                db.chamadas.update_one({"_id": sala},
+                    {"$set": {"encerrada": True, "fim": agora}})
+            elif evento in ("participant_joined", "participant_left"):
+                n = (c.get("room") or {}).get("numParticipants", 0)
+                db.chamadas.update_one({"_id": sala},
+                    {"$set": {"participantes": n}}, upsert=True)
+            return self.responde(200, {"ok": True})
+
         # Inscrição na fila de espera. Endpoint público — vem da landing.
         if self.path == "/fila":
             c = self.corpo_json()
@@ -283,6 +316,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     db.account_invites.create_index("criado_por")
     db.fila_espera.create_index("em")
+    db.chamadas.create_index("encerrada")
     db.account_invites.create_index("origem")
     print(f"servico de convites em :{PORTA} (limite {LIMITE})", flush=True)
     ThreadingHTTPServer(("0.0.0.0", PORTA), Handler).serve_forever()

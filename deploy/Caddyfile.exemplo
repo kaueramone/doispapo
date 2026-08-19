@@ -75,6 +75,12 @@
 	# Serviço de cota de convites (Dois Papo)
 	route /api-convites* {
 		uri strip_prefix /api-convites
+		# O webhook do LiveKit chega pela rede interna. Exposto na web,
+		# qualquer um poderia forjar início e fim de chamada.
+		# Precisa ficar DENTRO do route: fora dele o Caddy reordena as
+		# diretivas e o respond nunca é alcançado.
+		@livekit path /livekit*
+		respond @livekit 404
 		reverse_proxy http://convites:8600
 	}
 
@@ -99,6 +105,12 @@ doispapo.com, www.doispapo.com {
 	# senão o formulário da fila esbarra em CORS.
 	route /api-convites* {
 		uri strip_prefix /api-convites
+		# O webhook do LiveKit chega pela rede interna. Exposto na web,
+		# qualquer um poderia forjar início e fim de chamada.
+		# Precisa ficar DENTRO do route: fora dele o Caddy reordena as
+		# diretivas e o respond nunca é alcançado.
+		@livekit path /livekit*
+		respond @livekit 404
 		reverse_proxy http://convites:8600
 	}
 
