@@ -187,17 +187,21 @@ def remove_rodape(s_):
     return padrao.subn(troca, s_)
 
 
-ANCORA_AUP = ('C("<a href=https://doispapo.com/uso-aceitavel '
-              'target=_blank rel=noreferrer>")')
+# Os gabaritos <a> das quatro rotas viram <span>. Isso resolve os dois
+# casos de uma vez: o link no meio da frase perde so o link, e os
+# gabaritos do rodape - que ficam definidos mas sem referencia depois da
+# remocao do grupo - param de carregar a URL morta no arquivo.
+GABARITO = re.compile(
+    r'C\("<a href=https://doispapo\.com/'
+    r'(?:sobre|termos|privacidade|uso-aceitavel)[^"]*"\)')
 
 for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
     o_ = s_
     s_, n_r = remove_rodape(s_)
     conta("rodape-institucional", n_r)
-    if ANCORA_AUP in s_:
-        conta("link-uso-aceitavel", s_.count(ANCORA_AUP))
-        s_ = s_.replace(ANCORA_AUP, 'C("<span>")')
+    s_, n_g = GABARITO.subn('C("<span>")', s_)
+    conta("link-institucional", n_g)
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
 
