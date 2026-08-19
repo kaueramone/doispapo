@@ -158,6 +158,50 @@ for f in glob.glob(os.path.join(DST, "assets", "*.js")):
         open(f, "w", encoding="utf-8").write(s_)
 
 
+# ------------------------------ 1f. links institucionais que nao existem
+# O projeto nao tem paginas Sobre / Termos / Privacidade / Uso aceitavel.
+# Elas nunca foram escritas, e apontar para 404 e pior do que nao ter o
+# link. Aqui os links somem sem deixar buraco visual.
+#
+# Sao dois casos diferentes:
+#
+#   - No rodape do login os tres links formam um grupo proprio, com o
+#     separador antes. Remove-se o grupo inteiro e sobra o icone do
+#     repositorio, que continua fazendo sentido sozinho.
+#   - Nos formularios o link de uso aceitavel esta NO MEIO de uma frase.
+#     Remover o elemento comeria as palavras junto, entao o gabarito vira
+#     um <span>: o texto continua igual, sem virar link.
+
+def remove_rodape(s_):
+    """Tira o grupo de links institucionais do rodape do login."""
+    padrao = re.compile(
+        r',c\([\w$]+,\{\}\),c\([\w$]+,\{get children\(\)\{return\['
+        r'(.{0,400}?)\]\}\}\)')
+    ids = ('uyJsf6', 'xowcRf', 'LcET2C')   # Sobre, Termos, Privacidade
+
+    def troca(m):
+        # so remove se o grupo for exatamente o dos tres institucionais;
+        # qualquer outra coisa fica intacta
+        return "" if all(i in m.group(1) for i in ids) else m.group(0)
+
+    return padrao.subn(troca, s_)
+
+
+ANCORA_AUP = ('C("<a href=https://doispapo.com/uso-aceitavel '
+              'target=_blank rel=noreferrer>")')
+
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+    s_, n_r = remove_rodape(s_)
+    conta("rodape-institucional", n_r)
+    if ANCORA_AUP in s_:
+        conta("link-uso-aceitavel", s_.count(ANCORA_AUP))
+        s_ = s_.replace(ANCORA_AUP, 'C("<span>")')
+    if s_ != o_:
+        open(f, "w", encoding="utf-8").write(s_)
+
+
 # ------------- 1e. "Som de notificacao" como pagina nativa das configuracoes
 # O app mantem um registro das paginas de configuracao do servidor: um
 # switch em render() e uma lista de entradas em list(). Acrescentar nos

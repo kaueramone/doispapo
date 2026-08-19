@@ -130,6 +130,17 @@ if bundle:
     if 'case"dpsom"' not in bundle:
         erros.append("a pagina de Som nao entrou no switch de render")
 
+# ------------------- 2c. nenhum link para pagina institucional inexistente
+# O projeto nao tem Sobre / Termos / Privacidade / Uso aceitavel. Um link
+# para elas e um 404 na cara do usuario, em pagina de login e formulario.
+if bundle:
+    mortos = re.findall(r'doispapo\.com/(sobre|termos|privacidade|'
+                        r'uso-aceitavel)', bundle)
+    if mortos:
+        from collections import Counter
+        d = ", ".join(f"/{k} x{v}" for k, v in Counter(mortos).items())
+        erros.append(f"link para pagina inexistente no bundle: {d}")
+
 # ----------------------------------------- 3. sobras da marca do upstream
 resto = 0
 for raiz, _, arqs in os.walk(os.path.join(DST, "assets")):
