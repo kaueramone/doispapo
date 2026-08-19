@@ -1,0 +1,21 @@
+[package]
+name = "doispapo"
+version = "0.1.0"
+description = "Dois Papo — plataforma de comunicação"
+authors = ["kaueramone"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+
+[profile.release]
+opt-level = "s"     # otimiza tamanho: é um invólucro, não há computação pesada
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
