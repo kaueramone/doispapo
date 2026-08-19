@@ -96,29 +96,89 @@
         pct(window.dpAudio.cfg.limiar) + "%";
     }
 
+    abrirMicrofone();
     if (!animando) { animando = true; animar(); }
   }
 
+  /* --------- microfone próprio do painel, para calibrar sem chamada ----- */
+  var mon = { ctx: null, analisador: null, trilhas: [], nivel: -100,
+              buf: null, erro: null };
+
+  function abrirMicrofone() {
+    if (mon.ctx || !window.dpAudio || !window.dpAudio.original) return;
+    var Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) { mon.erro = "navegador sem Web Audio"; return; }
+    window.dpAudio.original({ audio: true }).then(function (st) {
+      if (!document.getElementById("dp-mic")) {   // painel já fechou
+        st.getTracks().forEach(function (t) { t.stop(); });
+        return;
+      }
+      mon.ctx = new Ctx();
+      var src = mon.ctx.createMediaStreamSource(st);
+      mon.analisador = mon.ctx.createAnalyser();
+      mon.analisador.fftSize = 1024;
+      mon.analisador.smoothingTimeConstant = 0.2;
+      src.connect(mon.analisador);
+      mon.buf = new Float32Array(mon.analisador.fftSize);
+      mon.trilhas = st.getTracks();
+      if (mon.ctx.state === "suspended") mon.ctx.resume().catch(function(){});
+    }).catch(function (e) {
+      mon.erro = (e && e.name === "NotAllowedError")
+        ? "permissão de microfone negada"
+        : "não foi possível abrir o microfone";
+    });
+  }
+
+  // Soltar o microfone ao sair é obrigatório: senão o indicador de
+  // gravação do sistema fica aceso depois de fechar as configurações.
+  function fecharMicrofone() {
+    mon.trilhas.forEach(function (t) { try { t.stop(); } catch (e) {} });
+    if (mon.ctx) { try { mon.ctx.close(); } catch (e) {} }
+    mon = { ctx: null, analisador: null, trilhas: [], nivel: -100,
+            buf: null, erro: null };
+  }
+
+  function medirProprio() {
+    if (!mon.analisador) return null;
+    mon.analisador.getFloatTimeDomainData(mon.buf);
+    var soma = 0;
+    for (var i = 0; i < mon.buf.length; i++) soma += mon.buf[i] * mon.buf[i];
+    var rms = Math.sqrt(soma / mon.buf.length);
+    mon.nivel = rms > 0 ? 20 * Math.log10(rms) : -100;
+    return mon.nivel;
+  }
+
   function animar() {
-    if (!document.getElementById("dp-mic")) { animando = false; return; }
+    var painelVivo = document.getElementById("dp-mic");
+    if (!painelVivo) { animando = false; fecharMicrofone(); return; }
+
     var e = window.dpAudio.estado;
+    // Em chamada, o nível vem da cadeia real; fora dela, do microfone
+    // que o painel abriu só para calibração.
+    var emChamada = !!e.ctx;
+    var nivel = emChamada ? e.nivel : medirProprio();
+    var aberto = emChamada ? e.aberto
+                           : (nivel !== null && nivel >= window.dpAudio.cfg.limiar);
+
     var barra = document.getElementById("dp-barra");
     var sit = document.getElementById("dp-sit");
     if (barra) {
-      barra.style.width = pct(e.nivel) + "%";
-      barra.classList.toggle("fechado", !e.aberto);
+      barra.style.width = pct(nivel === null ? -100 : nivel) + "%";
+      barra.classList.toggle("fechado", !aberto);
     }
     if (sit) {
-      var ativo = e.ctx && e.aberto;
-      sit.textContent = !e.ctx ? "microfone inativo"
-                               : (e.aberto ? "transmitindo" : "em silêncio");
-      sit.className = "situacao " + (ativo ? "on" : "off");
+      var txt, cls;
+      if (mon.erro && !emChamada) { txt = mon.erro; cls = "off"; }
+      else if (nivel === null) { txt = "abrindo microfone…"; cls = "off"; }
+      else if (aberto) { txt = emChamada ? "transmitindo" : "acima do limiar";
+                         cls = "on"; }
+      else { txt = "em silêncio"; cls = "off"; }
+      sit.textContent = txt;
+      sit.className = "situacao " + cls;
     }
     requestAnimationFrame(animar);
   }
 
-  // Ancora abaixo do ajuste de supressão de ruído, que é onde a pessoa
-  // já está mexendo em microfone.
   var ANCORAS = [
     /supress[ãa]o de ru[íi]do/i,
     /processamento de voz/i,

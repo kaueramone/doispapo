@@ -139,6 +139,9 @@
     cfg: cfg,
     estado: estado,
     salvar: salvar,
+    // getUserMedia sem o nosso processamento, para o painel medir o sinal
+    // cru na calibração sem passar duas vezes pela mesma cadeia
+    original: original,
     desligar: function () {
       try { localStorage.setItem("dp_audio_off", "1"); } catch (e) {}
       location.reload();
