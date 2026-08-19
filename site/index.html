@@ -32,8 +32,32 @@
   header::before{content:"";position:absolute;inset:-40% 20% auto;height:520px;
     background:radial-gradient(closest-side,rgba(140,65,217,.28),transparent);
     filter:blur(30px);pointer-events:none}
+  /* vídeo de fundo do hero */
+  .video-fundo{position:absolute;inset:0;overflow:hidden;pointer-events:none;
+    z-index:0}
+  .video-fundo iframe{position:absolute;top:50%;left:50%;
+    width:max(100vw,177.78vh);height:max(100vh,56.25vw);
+    transform:translate(-50%,-50%);border:0;pointer-events:none}
+  /* véu na cor do fundo: deixa o vídeo em ~30% de visibilidade */
+  .video-fundo::after{content:"";position:absolute;inset:0;
+    background:linear-gradient(180deg,
+      rgba(11,17,25,.62) 0%,
+      rgba(11,17,25,.70) 55%,
+      rgba(11,17,25,.94) 100%)}
+  header > .wrap{position:relative;z-index:1}
+
   header img{position:relative;width:min(300px,68vw);height:auto;
-    margin:0 auto 26px;display:block}
+    margin:0 auto 26px;display:block;
+    filter:drop-shadow(0 18px 34px rgba(140,65,217,.45))
+           drop-shadow(0 4px 12px rgba(0,0,0,.55));
+    animation:flutuar 6s ease-in-out infinite}
+  @keyframes flutuar{
+    0%,100%{transform:translateY(0)}
+    50%{transform:translateY(-12px)}
+  }
+  @media(prefers-reduced-motion:reduce){
+    header img{animation:none}
+  }
   h1{position:relative;font-size:clamp(30px,5.2vw,50px);line-height:1.15;
     letter-spacing:-.02em;margin-bottom:18px}
   h1 span{background:var(--grad);-webkit-background-clip:text;
@@ -88,6 +112,59 @@
     word-break:break-all;background:var(--bg2);border-radius:8px;
     padding:11px;margin-top:12px;line-height:1.45}
 
+  /* ---------------- fila de espera ---------------- */
+  #fila{position:relative;overflow:hidden}
+  #fila::before{content:"";position:absolute;left:50%;top:6%;
+    width:min(620px,90vw);height:320px;transform:translateX(-50%);
+    background:radial-gradient(closest-side,rgba(46,139,235,.15),transparent);
+    filter:blur(26px);pointer-events:none}
+  .fila-cx{position:relative;max-width:520px;margin:0 auto}
+  /* borda em gradiente: camada externa colorida, miolo na cor do cartão */
+  .fila{position:relative;border-radius:20px;padding:1.5px;
+    background:linear-gradient(150deg,var(--azul),var(--roxo) 55%,
+      rgba(140,65,217,.25));
+    box-shadow:0 26px 60px -28px rgba(140,65,217,.7)}
+  .fila-int{background:var(--card);border-radius:18.5px;padding:32px 30px}
+  @media(max-width:520px){.fila-int{padding:26px 20px}}
+
+  .fila-selo{display:flex;align-items:center;justify-content:center;
+    width:54px;height:54px;margin:0 auto 16px;border-radius:16px;
+    background:var(--grad);font-size:24px;
+    box-shadow:0 12px 26px -10px rgba(140,65,217,.85)}
+  .fila h3{text-align:center;font-size:19px;letter-spacing:-.01em;
+    margin-bottom:6px}
+  .fila .intro{text-align:center;color:var(--tx2);font-size:14px;
+    margin-bottom:24px}
+
+  .campo{margin-bottom:16px}
+  .campo label{display:block;font-size:12px;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--tx2);margin-bottom:7px}
+  .campo input{width:100%;background:var(--bg);color:var(--tx);
+    border:1px solid var(--line);border-radius:11px;padding:13px 15px;
+    font:15px system-ui,sans-serif;
+    transition:border-color .16s,box-shadow .16s}
+  .campo input::placeholder{color:#5b6980}
+  .campo input:focus{outline:0;border-color:var(--roxo);
+    box-shadow:0 0 0 3px rgba(140,65,217,.18)}
+  .campo input::-webkit-calendar-picker-indicator{filter:invert(.7)}
+
+  .fila button{width:100%;margin-top:8px;cursor:pointer;border:0;
+    border-radius:12px;padding:14px;font:650 15px system-ui;color:#fff;
+    background:var(--grad);transition:transform .15s,box-shadow .15s}
+  .fila button:hover{transform:translateY(-1px);
+    box-shadow:0 14px 30px -12px rgba(140,65,217,.85)}
+  .fila button[disabled]{opacity:.55;cursor:progress;transform:none}
+
+  .fila .aviso{margin-top:16px;padding:13px 15px;border-radius:11px;
+    font-size:13.5px;display:none;line-height:1.5}
+  .fila .aviso.ok{display:block;background:rgba(74,222,128,.1);
+    border:1px solid rgba(74,222,128,.32);color:#8df0b0}
+  .fila .aviso.err{display:block;background:rgba(235,68,68,.1);
+    border:1px solid rgba(235,68,68,.32);color:#ffb3b3}
+  .fila .nota{font-size:12px;color:var(--tx2);margin-top:16px;
+    text-align:center;line-height:1.5}
+  .fila .nota b{color:#a9b6cd;font-weight:600}
+
   footer{border-top:1px solid var(--line);padding:34px 0;text-align:center;
     color:var(--tx2);font-size:14px}
   footer a{font-weight:600;color:var(--roxo)}
@@ -96,8 +173,14 @@
 <body>
 
 <header>
+  <div class="video-fundo" aria-hidden="true">
+    <iframe
+      src="https://www.youtube-nocookie.com/embed/cuL5gwokePA?autoplay=1&mute=1&loop=1&playlist=cuL5gwokePA&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1&disablekb=1&iv_load_policy=3&fs=0"
+      title="" tabindex="-1" allow="autoplay; encrypted-media"
+      referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>
+  </div>
   <div class="wrap">
-    <img src="/logo.png" alt="Dois Papo">
+    <img src="/logo-color.png" alt="Dois Papo">
     <h1>Conversa de verdade,<br><span>sem ruído.</span></h1>
     <p class="sub">Texto, voz e compartilhamento de tela em 1080p. Um lugar
       fechado, feito para quem você realmente quer por perto — não para
@@ -155,26 +238,41 @@
 <section id="fila">
   <div class="wrap">
     <h2>Ainda não tem convite?</h2>
-    <p class="lead">Entre na fila de espera. Quando abrirmos novas vagas,
-      chamamos por ordem de inscrição.</p>
+    <p class="lead">O acesso é por convite. Se ninguém te convidou ainda,
+      deixe seus dados e entramos em contato.</p>
 
-    <form class="fila" id="form-fila" novalidate>
-      <label for="f-nome">Seu nome</label>
-      <input id="f-nome" name="nome" type="text" autocomplete="name"
-             maxlength="80" placeholder="Como quer ser chamado" required>
+    <div class="fila-cx">
+      <form class="fila" id="form-fila" novalidate>
+        <div class="fila-int">
+          <div class="fila-selo">✉️</div>
+          <h3>Entre na fila de espera</h3>
+          <p class="intro">Chamamos por ordem de inscrição, conforme
+            abrimos vagas.</p>
 
-      <label for="f-email">E-mail</label>
-      <input id="f-email" name="email" type="email" autocomplete="email"
-             maxlength="120" placeholder="voce@exemplo.com" required>
+          <div class="campo">
+            <label for="f-nome">Seu nome</label>
+            <input id="f-nome" name="nome" type="text" autocomplete="name"
+                   maxlength="80" placeholder="Como quer ser chamado" required>
+          </div>
 
-      <label for="f-nasc">Data de nascimento</label>
-      <input id="f-nasc" name="nascimento" type="date" required>
+          <div class="campo">
+            <label for="f-email">E-mail</label>
+            <input id="f-email" name="email" type="email" autocomplete="email"
+                   maxlength="120" placeholder="voce@exemplo.com" required>
+          </div>
 
-      <button type="submit" id="f-enviar">Entrar na fila</button>
-      <div class="aviso" id="f-aviso"></div>
-      <p class="nota">Usamos seu e-mail apenas para avisar quando houver
-        vaga. Nada de spam.</p>
-    </form>
+          <div class="campo">
+            <label for="f-nasc">Data de nascimento</label>
+            <input id="f-nasc" name="nascimento" type="date" required>
+          </div>
+
+          <button type="submit" id="f-enviar">Quero meu convite</button>
+          <div class="aviso" id="f-aviso"></div>
+          <p class="nota">Seu e-mail serve só para avisar quando houver vaga.
+            <b>Sem spam, sem repasse a terceiros.</b></p>
+        </div>
+      </form>
+    </div>
   </div>
 </section>
 
