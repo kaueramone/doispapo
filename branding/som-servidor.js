@@ -77,6 +77,38 @@
     return cache[sid][evento] || null;
   }
 
+  /* Os sons do servidor são buscados AO ENTRAR NELE, não na hora de
+     tocar. Buscar sob demanda parecia econômico e era uma corrida: a
+     requisição é assíncrona, então a primeira chamada devolvia null e
+     tocava o padrão — o personalizado só valia da segunda vez em
+     diante. Como entrar numa chamada costuma ser o primeiro som depois
+     de carregar a página, era justamente ele que saía errado, e o
+     defeito sumia assim que qualquer outro som aquecesse o cache. */
+  var ultimoServidor = null;
+  function acompanharServidor() {
+    var sid = servidorAtual();
+    if (sid === ultimoServidor) return;
+    ultimoServidor = sid;
+    if (sid) buscar(sid);
+  }
+  acompanharServidor();
+  setInterval(acompanharServidor, 1500);
+
+  /* Últimos eventos, para diagnosticar sem precisar adivinhar. */
+  var historico = [];
+  function anotar(evento, usouProprio) {
+    historico.push({evento: evento, proprio: usouProprio,
+                    em: new Date().toLocaleTimeString()});
+    if (historico.length > 20) historico.shift();
+  }
+  window.dpSom = function () {
+    var sid = servidorAtual();
+    return {servidor: sid,
+            cacheCarregado: sid ? cache[sid] !== undefined : false,
+            personalizados: sid && cache[sid] ? Object.keys(cache[sid]) : [],
+            ultimos: historico.slice().reverse()};
+  };
+
   /* ------------------------------------------------- interceptação */
   var Original = window.Audio;
 
@@ -92,6 +124,7 @@
     var evento = nomeDoSom(src);
     if (evento) {
       var proprio = personalizado(evento);
+      anotar(evento, !!proprio);
       if (proprio) return new Original(proprio);
     }
     return arguments.length ? new Original(src) : new Original();
