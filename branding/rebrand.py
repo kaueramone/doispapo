@@ -135,8 +135,8 @@ SOBRAS = [
     ("https://support.stoat.chat/kb/safety/blocked-for-spam",
      "https://doispapo.com/uso-aceitavel"),
     ("https://support.stoat.chat/kb/troubleshooting/connection-issues",
-     "https://doispapo.com/ajuda"),
-    ("https://stoat.gg/meet-gifbox", "https://doispapo.com/ajuda"),
+     "https://github.com/kaueramone/doispapo/discussions"),
+    ("https://stoat.gg/meet-gifbox", "https://github.com/kaueramone/doispapo/discussions"),
     # Emoji: cada um era um <img> buscado no CDN do upstream, a cada
     # emoji renderizado. Isso deixava a plataforma dependente da
     # infraestrutura deles - se aquele dominio sair do ar, os emoji
@@ -161,6 +161,64 @@ for f in glob.glob(os.path.join(DST, "assets", "*.js")):
             s_ = s_.replace(de, para)
     s_, n_b = remove_bsky(s_)
     conta("bluesky-removido", n_b)
+    if s_ != o_:
+        open(f, "w", encoding="utf-8").write(s_)
+
+
+# ---------------------- 1g. compartilhamento de tela sob demanda
+# Numa chamada com duas pessoas transmitindo, quem so quer conversar
+# recebia as duas telas ao vivo. Um blur no CSS nao resolveria: o video
+# continuaria sendo baixado e decodificado. A economia vem de nao
+# assinar a faixa.
+#
+# O app JA gerencia assinatura por visibilidade (IntersectionObserver a
+# 80%, com 3s de carencia). Nao ha sistema novo aqui - so uma segunda
+# condicao nos tres pontos em que ele assina. A decisao mora em
+# tela.js, atras de window.dpTelaBloqueia; se aquele script nao tiver
+# sido avaliado, todas as expressoes viram falso e o comportamento
+# volta a ser exatamente o de antes.
+TELA = [
+    # 1) sala do LiveKit: entrega a instancia para o script
+    (re.compile(r'(this\.remoteParticipants=new Map,this\.sidToIdentity='
+                r'new Map,this\.options=Object\.assign\(Object\.assign\('
+                r'\{\},[\w$]+\),e\))'),
+     r'\1,(window.dpSalaNova&&window.dpSalaNova(this))',
+     "tela-sala"),
+
+    # 2) video: so assina se o usuario tiver pedido para assistir
+    (re.compile(r'je\(\(\)=>\{i&&o\.publication instanceof ([\w$]+)&&'
+                r'u\(\)&&o\.publication\.setSubscribed\(!0\)\}\)'),
+     r'je(()=>{i&&o.publication instanceof \1&&u()&&!(window.dpTelaBloqueia'
+     r'&&window.dpTelaBloqueia(o.publication))&&'
+     r'o.publication.setSubscribed(!0)})',
+     "tela-assina"),
+
+    # 3) video: desassina tambem quando bloqueado, nao so quando some
+    #    da tela - no caso relatado os dois quadros estao VISIVEIS
+    (re.compile(r'je\(\(\)=>\{i&&o\.publication instanceof ([\w$]+)&&'
+                r'd\(\)===!1&&u\(\)===!1&&'
+                r'o\.publication\.setSubscribed\(!1\)\}\)'),
+     r'je(()=>{i&&o.publication instanceof \1&&((d()===!1&&u()===!1)||'
+     r'(window.dpTelaBloqueia&&window.dpTelaBloqueia(o.publication)))&&'
+     r'o.publication.setSubscribed(!1)})',
+     "tela-desassina"),
+
+    # 4) audio: o componente de audio assinava tudo a forca, inclusive
+    #    o som da tela compartilhada
+    (re.compile(r'for\(const s of i\)s\.publication\.setSubscribed\(!0\),'
+                r'console\.info\(s\.publication\)'),
+     r'for(const s of i)(window.dpTelaBloqueia&&'
+     r'window.dpTelaBloqueia(s.publication))||'
+     r'(s.publication.setSubscribed(!0),console.info(s.publication))',
+     "tela-audio"),
+]
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+    for padrao, troca, rotulo in TELA:
+        s_, n = padrao.subn(troca, s_)
+        if n:
+            conta(rotulo, n)
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
 
@@ -1062,7 +1120,8 @@ for _arq, _id in (("guarda.js", "dp-js-guarda"),
                   ("audio-ui.js", "dp-js-audio-ui"),
                   ("voz.js", "dp-js-voz"),
                   ("discord.js", "dp-js-discord"),
-                  ("som-servidor.js", "dp-js-som")):
+                  ("som-servidor.js", "dp-js-som"),
+                  ("tela.js", "dp-js-tela")):
     _cam = os.path.join(_base, _arq)
     if not os.path.exists(_cam) or _id in h:
         continue

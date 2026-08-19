@@ -134,8 +134,10 @@ if bundle:
 # O projeto nao tem Sobre / Termos / Privacidade / Uso aceitavel. Um link
 # para elas e um 404 na cara do usuario, em pagina de login e formulario.
 if bundle:
+    # /ajuda entrou nesta lista depois: foi uma rota que EU inventei ao
+    # redirecionar os artigos de ajuda do upstream, e que nunca existiu.
     mortos = re.findall(r'doispapo\.com/(sobre|termos|privacidade|'
-                        r'uso-aceitavel)', bundle)
+                        r'uso-aceitavel|ajuda)', bundle)
     if mortos:
         from collections import Counter
         d = ", ".join(f"/{k} x{v}" for k, v in Counter(mortos).items())
