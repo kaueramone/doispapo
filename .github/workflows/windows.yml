@@ -1,10 +1,8 @@
 # Compila o instalador do Dois Papo para Windows.
 #
-# Não é possível gerar binário do Windows na VPS Linux, então a compilação
-# roda aqui, num runner Windows do GitHub. Repositório público tem minutos
-# gratuitos.
-#
-# Dispara ao publicar uma tag desktop-v* ou manualmente pela aba Actions.
+# Passos deliberadamente granulares: sem acesso de admin ao log, a API de
+# jobs só informa QUAL passo falhou. Quanto menor cada passo, mais preciso
+# fica o diagnóstico.
 name: Instalador Windows
 
 on:
@@ -31,14 +29,32 @@ jobs:
         with:
           workspaces: desktop/src-tauri
 
-      - name: Compilar e empacotar
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: desktop
-          tauriScript: cargo tauri
-          args: --verbose
+      - name: Conferir estrutura do projeto
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          Get-ChildItem -Recurse -File | Select-Object FullName
+          if (!(Test-Path src-tauri/tauri.conf.json)) { throw "tauri.conf.json ausente" }
+          if (!(Test-Path frontend/index.html))       { throw "frontend ausente" }
+
+      - name: Instalar a CLI do Tauri
+        run: cargo install tauri-cli --version "^2.0" --locked
+
+      - name: Verificar se o Rust compila
+        working-directory: desktop/src-tauri
+        run: cargo check --release
+
+      - name: Empacotar o instalador
+        working-directory: desktop
+        run: cargo tauri build
+
+      - name: Listar o que foi gerado
+        if: always()
+        shell: pwsh
+        run: |
+          $p = "desktop/src-tauri/target/release/bundle"
+          if (Test-Path $p) { Get-ChildItem -Recurse $p | Select-Object FullName, Length }
+          else { Write-Host "nenhum pacote gerado" }
 
       - name: Publicar os instaladores
         uses: actions/upload-artifact@v4
