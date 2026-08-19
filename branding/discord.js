@@ -25,15 +25,45 @@
     return _fetch.apply(this, arguments);
   };
 
-  function api(rota, opc) {
-    opc = opc || {};
+  /* A API permite 20 requisições por 10 segundos e informa o estado nos
+     cabeçalhos. A primeira versão espaçava 260ms às cegas — o dobro da
+     velocidade permitida — e, ao receber 429, contava como falha e seguia
+     adiante, perdendo o canal. Agora seguimos o que a própria API informa
+     e repetimos o que foi recusado. */
+  var limite = {restante: 20, resetEm: 0};
+
+  function api(rota, opc, tentativa) {
+    opc = opc || {}; tentativa = tentativa || 0;
     opc.headers = Object.assign({"Content-Type": "application/json"},
       opc.headers || {}, token ? {"X-Session-Token": token} : {});
     if (opc.corpo) { opc.method = opc.method || "POST";
                      opc.body = JSON.stringify(opc.corpo); delete opc.corpo; }
-    return _fetch(rota, opc).then(function (r) {
-      return r.json().catch(function () { return {}; })
-        .then(function (j) { return {status: r.status, d: j}; });
+
+    // pausa preventiva quando a cota está no fim
+    var pausa = 0;
+    if (limite.restante <= 1 && limite.resetEm > Date.now())
+      pausa = limite.resetEm - Date.now() + 150;
+
+    return esperar(pausa).then(function () {
+      return _fetch(rota, opc).then(function (r) {
+        var rem = parseInt(r.headers.get("x-ratelimit-remaining"), 10);
+        var reset = parseInt(r.headers.get("x-ratelimit-reset-after"), 10);
+        if (!isNaN(rem)) limite.restante = rem;
+        if (!isNaN(reset)) limite.resetEm = Date.now() + reset;
+
+        if (r.status === 429 && tentativa < 8) {
+          var ra = parseInt(r.headers.get("retry-after"), 10);
+          // retry-after pode vir em segundos; normalizamos
+          if (!isNaN(ra) && ra < 100) ra = ra * 1000;
+          var d = !isNaN(ra) ? ra : (!isNaN(reset) ? reset : 3000);
+          return esperar(d + 300).then(function () {
+            return api(rota, {method: opc.method, body: opc.body,
+                              headers: opc.headers}, tentativa + 1);
+          });
+        }
+        return r.json().catch(function () { return {}; })
+          .then(function (j) { return {status: r.status, d: j}; });
+      });
     });
   }
 
@@ -203,112 +233,152 @@
     var srv = servidorAtual();
     if (!srv) return msg("Abra as configurações de um servidor para importar.");
     if (!previa || rodando) return;
-    if (!confirm("Isto vai criar " + previa.resumo.categorias + " categorias, " +
-                 (previa.resumo.texto + previa.resumo.voz) + " canais e " +
-                 previa.resumo.cargos + " cargos neste servidor.\n\n" +
-                 "Nada existente é apagado. Continuar?")) return;
 
     rodando = true;
     document.getElementById("dp-imp-go").disabled = true;
-    var criados = [], categorias = [], falhas = 0;
+    progresso("Lendo o que já existe no servidor…");
 
-    // Cargos primeiro: nome e cor. Permissões ficam em branco de
-    // propósito — os bitfields do Discord e daqui são incompatíveis, e
-    // converter geraria autorização errada com aparência de correta.
-    var cargos = previa.cargos.slice();
-    var todos = previa.categorias.slice();
-    var soltos = previa.sem_categoria.slice();
+    var criados = 0, pulados = 0, falhas = 0;
+    var porNome = {}, cargosPorNome = {}, catsExistentes = [];
 
     function corHex(n) {
       if (!n) return null;
       return "#" + ("000000" + (n >>> 0).toString(16)).slice(-6);
     }
 
+    // Uma chamada devolve o servidor com os canais completos. Sem isso,
+    // repetir a importação duplicaria tudo que já tinha sido criado.
+    api("/api/servers/" + srv + "?include_channels=true").then(function (r) {
+      if (r.status === 200 && r.d) {
+        (r.d.channels || []).forEach(function (c) {
+          if (c && c.name) porNome[c.name] = c._id || c.id;
+        });
+        (r.d.roles ? Object.keys(r.d.roles) : []).forEach(function (id) {
+          var nm = r.d.roles[id] && r.d.roles[id].name;
+          if (nm) cargosPorNome[nm] = id;
+        });
+        catsExistentes = (r.d.categories || []).slice();
+      }
+      return seguir();
+    }).catch(function () { rodando = false; msg("Não consegui ler o servidor."); });
+
+    function seguir() {
+      var total = previa.resumo.texto + previa.resumo.voz;
+      if (!confirm("Serão criados até " + total + " canais, " +
+            previa.resumo.categorias + " categorias e " +
+            previa.resumo.cargos + " cargos.\n\n" +
+            "O que já existir com o mesmo nome será reaproveitado, não " +
+            "duplicado. Nada é apagado.\n\nContinuar?")) {
+        rodando = false;
+        document.getElementById("dp-imp-go").disabled = false;
+        return;
+      }
+      return fazerCargos(0);
+    }
+
     function fazerCargos(i) {
-      if (i >= cargos.length) return fazerCategorias(0);
+      var cargos = previa.cargos;
+      if (i >= cargos.length) return fazerCanais();
       var c = cargos[i];
-      progresso("Criando cargos… " + (i + 1) + "/" + cargos.length);
+      progresso("Cargos… " + (i + 1) + "/" + cargos.length);
+      if (cargosPorNome[c.nome]) { pulados++; return fazerCargos(i + 1); }
       return api("/api/servers/" + srv + "/roles", {corpo: {name: c.nome}})
         .then(function (r) {
           var id = r.d && (r.d.id || r.d._id);
-          var cor = corHex(c.cor);
           if (r.status !== 200 || !id) { falhas++; return; }
+          criados++;
+          var cor = corHex(c.cor);
           if (!cor) return;
           return api("/api/servers/" + srv + "/roles/" + id,
                      {method: "PATCH", corpo: {colour: cor}});
         })
         .catch(function () { falhas++; })
-        // ritmo: 63 canais e 6 cargos de enxurrada batem no limite de taxa
-        .then(function () { return esperar(260); })
         .then(function () { return fazerCargos(i + 1); });
     }
 
-    function criarCanal(ch) {
+    var fila = [], catsNovas = [];
+
+    function fazerCanais() {
+      fila = [];
+      previa.categorias.forEach(function (cat) {
+        cat.canais.forEach(function (ch) { fila.push({cat: cat.titulo, ch: ch}); });
+      });
+      previa.sem_categoria.forEach(function (ch) { fila.push({cat: null, ch: ch}); });
+      return proximo(0);
+    }
+
+    function proximo(i) {
+      if (i >= fila.length) return finalizar();
+      var item = fila[i], ch = item.ch;
+      progresso("Canais… " + (i + 1) + "/" + fila.length + "  (" + ch.nome + ")");
+
+      var existente = porNome[ch.nome];
+      if (existente) {
+        pulados++;
+        registrar(item.cat, existente);
+        return proximo(i + 1);
+      }
       var corpo = {name: ch.nome, type: ch.tipo};
       if (ch.descricao) corpo.description = ch.descricao;
       if (ch.nsfw) corpo.nsfw = true;
       return api("/api/servers/" + srv + "/channels", {corpo: corpo})
         .then(function (r) {
           var id = r.d && (r.d._id || r.d.id);
-          if (r.status !== 200 || !id) { falhas++; return null; }
-          criados.push(id);
-          return id;
+          if (r.status !== 200 || !id) { falhas++; return; }
+          criados++; porNome[ch.nome] = id;
+          registrar(item.cat, id);
         })
-        .catch(function () { falhas++; return null; })
-        .then(function (id) { return esperar(260).then(function () { return id; }); });
+        .catch(function () { falhas++; })
+        .then(function () { return proximo(i + 1); });
     }
 
-    function fazerCategorias(i) {
-      if (i >= todos.length) return fazerSoltos(0);
-      var cat = todos[i];
-      progresso("Criando canais… categoria " + (i + 1) + "/" + todos.length +
-                " (" + cat.titulo + ")");
-      var ids = [];
-      var seq = Promise.resolve();
-      cat.canais.forEach(function (ch) {
-        seq = seq.then(function () {
-          return criarCanal(ch).then(function (id) { if (id) ids.push(id); });
-        });
-      });
-      return seq.then(function () {
-        categorias.push({
-          id: "dp" + Date.now().toString(36) + i,
-          title: cat.titulo,
-          channels: ids
-        });
-        return fazerCategorias(i + 1);
-      });
-    }
-
-    function fazerSoltos(i) {
-      if (i >= soltos.length) return finalizar();
-      progresso("Criando canais sem categoria… " + (i + 1) + "/" + soltos.length);
-      return criarCanal(soltos[i]).then(function () { return fazerSoltos(i + 1); });
+    function registrar(titulo, id) {
+      if (!titulo) return;
+      var c = catsNovas.filter(function (x) { return x.title === titulo; })[0];
+      if (!c) { c = {title: titulo, channels: []}; catsNovas.push(c); }
+      if (c.channels.indexOf(id) < 0) c.channels.push(id);
     }
 
     function finalizar() {
       progresso("Organizando categorias…");
-      // Categoria aqui não é canal: é estrutura gravada no servidor.
+      // O PATCH substitui a lista inteira: mesclamos com as que já
+      // existiam, senão a importação apagaria a organização anterior.
+      var finais = catsExistentes.map(function (c) {
+        return {id: c.id, title: c.title, channels: (c.channels || []).slice()};
+      });
+      catsNovas.forEach(function (nova) {
+        var igual = finais.filter(function (x) { return x.title === nova.title; })[0];
+        if (igual) {
+          nova.channels.forEach(function (id) {
+            if (igual.channels.indexOf(id) < 0) igual.channels.push(id);
+          });
+        } else {
+          finais.push({id: "dp" + Math.random().toString(36).slice(2, 10),
+                       title: nova.title, channels: nova.channels});
+        }
+      });
+
       return api("/api/servers/" + srv, {method: "PATCH",
-                 corpo: {categories: categorias}})
+                 corpo: {categories: finais}})
         .then(function (r) {
           rodando = false;
+          document.getElementById("dp-imp-go").disabled = false;
+          progresso("");
           if (r.status !== 200) {
-            msg("Canais criados, mas não consegui gravar as categorias.");
+            msg("Canais criados, mas não consegui gravar as categorias. " +
+                "Rode de novo: o que já existe será reaproveitado.");
             return;
           }
-          progresso("");
-          msg("Importado: " + criados.length + " canais e " +
-              categorias.length + " categorias." +
-              (falhas ? " " + falhas + " item(ns) falharam." : ""), true);
+          msg("Pronto. " + criados + " criados, " + pulados +
+              " já existiam, " + finais.length + " categorias." +
+              (falhas ? " " + falhas + " falharam — rode de novo para completar." : ""),
+              !falhas);
         })
         .catch(function () {
           rodando = false;
-          msg("Canais criados, mas falhou ao organizar categorias.");
+          msg("Falhou ao organizar categorias. Rode de novo.");
         });
     }
-
-    fazerCargos(0);
   }
 
   /* -------------------------------------------------------- gatilho */
