@@ -114,6 +114,36 @@
     word-break:break-all;background:var(--bg2);border-radius:8px;
     padding:11px;margin-top:12px;line-height:1.45}
 
+  /* ---------------- downloads ---------------- */
+  .plats{display:grid;gap:14px;max-width:900px;margin:0 auto;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .plat{position:relative;display:flex;flex-direction:column;
+    align-items:center;gap:10px;padding:24px 16px;border-radius:15px;
+    border:1px solid var(--line);background:var(--card);
+    text-align:center;transition:transform .16s,border-color .16s,
+      box-shadow .16s}
+  .plat svg{width:38px;height:38px;display:block}
+  .plat .nome{font-size:14.5px;font-weight:650}
+  .plat .obs{font-size:11.5px;color:var(--tx2)}
+
+  /* disponível */
+  a.plat{color:inherit;text-decoration:none;
+    border-color:rgba(140,65,217,.45);
+    background:linear-gradient(160deg,rgba(46,139,235,.12),
+      rgba(140,65,217,.12))}
+  a.plat:hover{transform:translateY(-3px);border-color:var(--roxo);
+    text-decoration:none;box-shadow:0 16px 34px -16px rgba(140,65,217,.8)}
+  a.plat svg{color:var(--tx)}
+  a.plat .obs{color:#a9b6cd}
+
+  /* em breve */
+  .plat.breve{opacity:.5;cursor:default}
+  .plat.breve svg{color:var(--tx2)}
+  .plat.breve .nome{color:var(--tx2)}
+  .plat .selo-breve{position:absolute;top:9px;right:9px;font-size:9.5px;
+    letter-spacing:.06em;text-transform:uppercase;color:var(--tx2);
+    border:1px solid var(--line);border-radius:999px;padding:2px 7px}
+
   /* ---------------- fila de espera ---------------- */
   #fila{position:relative;overflow:hidden}
   #fila::before{content:"";position:absolute;left:50%;top:6%;
@@ -236,6 +266,42 @@
       <div class="regra"><span class="num">5</span>
         <strong>Amigos por conta</strong>
         <span class="lbl">Limite desta fase inicial.</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="baixar">
+  <div class="wrap">
+    <h2>Leve o Dois Papo com você</h2>
+    <p class="lead">Aplicativo próprio, com janela dedicada e ícone na
+      bandeja. O navegador continua funcionando normalmente.</p>
+
+    <div class="plats">
+      <a class="plat" href="/baixar/windows">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="2" y="3" width="9" height="8" rx="1"/><rect x="13" y="3" width="9" height="8" rx="1"/><rect x="2" y="13" width="9" height="8" rx="1"/><rect x="13" y="13" width="9" height="8" rx="1"/></svg>
+        <span class="nome">Windows</span>
+        <span class="obs">Baixar &middot; última versão</span>
+      </a>
+
+      <div class="plat breve"><span class="selo-breve">em breve</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="19" height="16" rx="2.5"/><path d="M7 9.5l3 2.5-3 2.5"/><path d="M12.5 15h4.5"/></svg>
+        <span class="nome">Linux</span><span class="obs">em breve</span>
+      </div>
+
+      <div class="plat breve"><span class="selo-breve">em breve</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="11" rx="1.6"/><path d="M1.5 19h21"/><path d="M10 19l.6-1.5h2.8L14 19"/></svg>
+        <span class="nome">macOS</span><span class="obs">em breve</span>
+      </div>
+
+      <div class="plat breve"><span class="selo-breve">em breve</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6.5" y="2" width="11" height="20" rx="2.6"/><path d="M10.3 4.6h3.4"/><path d="M10 19.4h4"/></svg>
+        <span class="nome">iOS</span><span class="obs">em breve</span>
+      </div>
+
+      <div class="plat breve"><span class="selo-breve">em breve</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="6" width="12" height="16" rx="2.4"/><path d="M8.5 3l1.4 2.2"/><path d="M15.5 3l-1.4 2.2"/><path d="M10 18.6h4"/></svg>
+        <span class="nome">Android</span><span class="obs">em breve</span>
+      </div>
     </div>
   </div>
 </section>

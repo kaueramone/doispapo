@@ -102,6 +102,12 @@ doispapo.com, www.doispapo.com {
 		reverse_proxy http://convites:8600
 	}
 
+	# Download sempre da última versão publicada. Fica no nosso domínio
+	# para a página não depender de URL do GitHub — se um dia mudarmos de
+	# hospedagem, troca-se aqui e o link divulgado continua valendo.
+	redir /baixar/windows https://github.com/kaueramone/doispapo/releases/latest/download/DoisPapo-Setup.exe temporary
+	redir /baixar        /#baixar temporary
+
 	root * /site
 	encode gzip zstd
 	file_server
