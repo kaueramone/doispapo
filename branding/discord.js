@@ -67,6 +67,20 @@
     });
   }
 
+  // O limite de 32 é contado em bytes pela API. "╔═╬ BEM VINDO ╬═╗" tem
+  // 18 caracteres e 30 bytes; um título cheio de caracteres decorados
+  // estouraria sem que a contagem por caractere percebesse.
+  function corta32(txt) {
+    txt = String(txt == null ? "" : txt);
+    if (new Blob([txt]).size <= 32) return txt;
+    var out = "";
+    for (var i = 0; i < txt.length; i++) {
+      if (new Blob([out + txt[i]]).size > 32) break;
+      out += txt[i];
+    }
+    return out;
+  }
+
   function servidorAtual() {
     var m = location.pathname.match(/\/server\/([A-Z0-9]+)/i);
     return m ? m[1] : null;
@@ -239,7 +253,7 @@
     progresso("Lendo o que já existe no servidor…");
 
     var criados = 0, pulados = 0, falhas = 0;
-    var porNome = {}, cargosPorNome = {}, catsExistentes = [];
+    var porNome = {}, cargosPorNome = {}, catsExistentes = [], validos = {};
 
     function corHex(n) {
       if (!n) return null;
@@ -251,7 +265,10 @@
     api("/api/servers/" + srv + "?include_channels=true").then(function (r) {
       if (r.status === 200 && r.d) {
         (r.d.channels || []).forEach(function (c) {
-          if (c && c.name) porNome[c.name] = c._id || c.id;
+          var id = c && (c._id || c.id);
+          if (!id) return;
+          validos[id] = true;
+          if (c.name) porNome[c.name] = id;
         });
         (r.d.roles ? Object.keys(r.d.roles) : []).forEach(function (id) {
           var nm = r.d.roles[id] && r.d.roles[id].name;
@@ -343,18 +360,38 @@
       progresso("Organizando categorias…");
       // O PATCH substitui a lista inteira: mesclamos com as que já
       // existiam, senão a importação apagaria a organização anterior.
+      /* As categorias existentes podiam apontar para canais já apagados —
+         no servidor de teste, 11 dos 14 identificados não existiam mais.
+         O PATCH inteiro era rejeitado com 400 por causa disso. Filtramos
+         contra os canais que a própria API acabou de listar, e garantimos
+         que cada canal apareça em uma única categoria. */
+      var vistos = {};
+      function limpar(ids) {
+        var out = [];
+        (ids || []).forEach(function (id) {
+          if (!validos[id] || vistos[id]) return;
+          vistos[id] = true;
+          out.push(id);
+        });
+        return out;
+      }
+
       var finais = catsExistentes.map(function (c) {
-        return {id: c.id, title: c.title, channels: (c.channels || []).slice()};
+        return {id: c.id, title: corta32(c.title),
+                channels: limpar(c.channels)};
       });
       catsNovas.forEach(function (nova) {
-        var igual = finais.filter(function (x) { return x.title === nova.title; })[0];
+        var igual = finais.filter(function (x) {
+          return x.title === corta32(nova.title); })[0];
         if (igual) {
-          nova.channels.forEach(function (id) {
+          limpar(nova.channels).forEach(function (id) {
             if (igual.channels.indexOf(id) < 0) igual.channels.push(id);
           });
         } else {
+          var ids = limpar(nova.channels);
+          if (!ids.length) return;      // categoria vazia não serve de nada
           finais.push({id: "dp" + Math.random().toString(36).slice(2, 10),
-                       title: nova.title, channels: nova.channels});
+                       title: corta32(nova.title), channels: ids});
         }
       });
 
