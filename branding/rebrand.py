@@ -270,7 +270,17 @@ INJECAO = """
     padding:6px 9px;border-radius:7px;background:rgba(0,0,0,.16);
     margin-top:5px;font:12px/1.4 ui-monospace,monospace}
   #dp-convites li .dp-uso{opacity:.6;font-family:system-ui,sans-serif}
-  #dp-convites code{cursor:pointer;user-select:all}
+  #dp-convites li .dir{display:flex;align-items:center;gap:9px;
+    flex-shrink:0}
+  #dp-convites code{user-select:all}
+  #dp-convites .copiar{cursor:pointer;border:1px solid rgba(140,65,217,.4);
+    background:rgba(140,65,217,.12);color:inherit;border-radius:7px;
+    padding:4px 10px;font:600 11.5px system-ui,sans-serif;white-space:nowrap;
+    transition:background .15s,border-color .15s}
+  #dp-convites .copiar:hover{background:rgba(140,65,217,.25);
+    border-color:rgba(140,65,217,.7)}
+  #dp-convites .copiar.feito{background:rgba(74,222,128,.16);
+    border-color:rgba(74,222,128,.45)}
 
   /* Editor de imagem */
   #dp-ed{position:fixed;inset:0;z-index:2147483002;display:flex;
@@ -460,15 +470,26 @@ INJECAO = """
       ul.innerHTML="";
       (d.codigos||[]).forEach(function(c){
         var li=document.createElement("li");
-        li.innerHTML='<code title="clique para copiar o link">'+c.codigo+
-          '</code><span class="dp-uso">'+
-          (c.usado?"usado":"disponível")+'</span>';
-        li.querySelector("code").addEventListener("click",function(){
+        li.innerHTML='<code>'+c.codigo+'</code>'+
+          '<span class="dir"><span class="dp-uso">'+
+          (c.usado?"usado":"disponível")+'</span>'+
+          (c.usado?'':'<button type="button" class="copiar">'+
+                     'copiar link</button>')+'</span>';
+        var bt=li.querySelector(".copiar");
+        if(bt)bt.addEventListener("click",function(e){
+          e.preventDefault(); e.stopPropagation();
+          var b=this;
           navigator.clipboard.writeText(
-            location.origin+"/login/create?invite="+c.codigo);
-          this.textContent="link copiado!";
-          var self=this, txt=c.codigo;
-          setTimeout(function(){ self.textContent=txt; },1600);
+            location.origin+"/login/create?invite="+c.codigo
+          ).then(function(){
+            b.textContent="copiado!"; b.classList.add("feito");
+            setTimeout(function(){
+              b.textContent="copiar link"; b.classList.remove("feito");
+            },1800);
+          }).catch(function(){
+            b.textContent="não deu"; 
+            setTimeout(function(){ b.textContent="copiar link"; },1800);
+          });
         });
         ul.appendChild(li);
       });
