@@ -94,6 +94,103 @@ for f in glob.glob(os.path.join(DST, "assets", "*.js")):
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
 
+
+# --------------------------- 1d. sobras que a troca de URL nao alcanca
+def remove_bsky(s_):
+    """Remove o icone do Bluesky do rodape do login.
+
+    Apontava para o perfil do upstream e nao temos conta equivalente.
+    Casa parenteses em vez de cortar por posicao fixa: o bundle e
+    minificado e os identificadores mudam a cada build. Se qualquer
+    conferencia falhar, devolve o texto intacto - preferimos o icone
+    errado a um bundle corrompido.
+    """
+    i = s_.find('href:"https://bsky.app')
+    if i < 0:
+        return s_, 0
+    ini = s_.rfind(",c(", 0, i)
+    if ini < 0 or i - ini > 40:
+        return s_, 0
+    j = s_.index("(", ini)
+    prof, k = 0, j
+    while k < len(s_):
+        if s_[k] == "(":
+            prof += 1
+        elif s_[k] == ")":
+            prof -= 1
+            if prof == 0:
+                break
+        k += 1
+    if prof != 0 or not (0 < k - ini < 600):
+        return s_, 0
+    if "bsky.app" not in s_[ini:k]:
+        return s_, 0
+    return s_[:ini] + s_[k + 1:], 1
+
+
+SOBRAS = [
+    # sem plataforma de traducao propria; a conversa acontece no repositorio
+    ("https://translate.stoat.chat/projects/revolt/",
+     "https://github.com/kaueramone/doispapo/discussions"),
+    ("https://support.stoat.chat/kb/safety/blocked-for-spam",
+     "https://doispapo.com/uso-aceitavel"),
+    ("https://support.stoat.chat/kb/troubleshooting/connection-issues",
+     "https://doispapo.com/ajuda"),
+    ("https://stoat.gg/meet-gifbox", "https://doispapo.com/ajuda"),
+    # a troca cega de marca gerou um rotulo nosso apontando para o webmail
+    # do upstream; o ramo so vale para enderecos @stoat.chat, mas o nome
+    # errado nao pode ficar
+    ('"Stoat Mail","https://webmail.revolt.wtf"',
+     '"Webmail","https://webmail.revolt.wtf"'),
+    ('"Dois Papo Mail","https://webmail.revolt.wtf"',
+     '"Webmail","https://webmail.revolt.wtf"'),
+]
+for f in glob.glob(os.path.join(DST, "assets", "*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+    for de, para in SOBRAS:
+        if de in s_:
+            conta("sobras", s_.count(de))
+            s_ = s_.replace(de, para)
+    s_, n_b = remove_bsky(s_)
+    conta("bluesky-removido", n_b)
+    if s_ != o_:
+        open(f, "w", encoding="utf-8").write(s_)
+
+
+# ------------- 1e. "Som de notificacao" como pagina nativa das configuracoes
+# O app mantem um registro das paginas de configuracao do servidor: um
+# switch em render() e uma lista de entradas em list(). Acrescentar nos
+# dois lugares deixa a funcao no mesmo lugar que o usuario ja procura -
+# grupo Personalizacao, ao lado de Emojis - em vez de um botao flutuante.
+# Os identificadores minificados sao casados por padrao, nao literalmente,
+# para o remendo sobreviver a um rebuild do upstream.
+PG_LISTA = re.compile(
+    r'(entries:\[\{id:"emojis",icon:c\([A-Za-z_$][\w$]*,\{size:20\}\),'
+    r'title:c\(b,\{id:"etgedT"\}\)\})\]')
+PG_RENDER = re.compile(
+    r'(case"emojis":return c\([A-Za-z_$][\w$]*,\{server:e\}\);)')
+
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+    # As chamadas sao protegidas: se o script da pagina nao tiver sido
+    # avaliado, a lista de configuracoes continua funcionando sem a
+    # entrada, em vez de quebrar inteira.
+    # Substituicao por funcao: o texto tem acento, e re trataria "\\u"
+    # numa string de template como escape invalido.
+    s_, n1 = PG_LISTA.subn(
+        lambda m: m.group(1) + ',{id:"dpsom",'
+        'icon:(window.dpSomIcone?window.dpSomIcone():null),'
+        'title:"Som de notifica\u00e7\u00e3o"}]', s_)
+    s_, n2 = PG_RENDER.subn(
+        lambda m: m.group(1) + 'case"dpsom":return window.dpSomPagina?'
+        'window.dpSomPagina(e):null;', s_)
+    if n1 or n2:
+        conta("pagina-som", n1 + n2)
+    if s_ != o_:
+        open(f, "w", encoding="utf-8").write(s_)
+
 # ------------------------- 1d. completar a traducao pt-BR
 # O catalogo pt-BR do upstream vem com ~31% das entradas iguais ao ingles
 # (nao traduzidas). Aplicamos as traducoes proprias por msgId.
@@ -331,7 +428,9 @@ h = h.replace('<html lang="en">', '<html lang="pt-BR">')
 conta("index.html", 2)
 
 INJECAO = """
-<style id="dp-marca">
+<style id="dp-css-marca">
+  /* Nenhum seletor pode tornar visivel o codigo-fonte de um script. */
+  script,style{display:none!important}
   #dp-assinatura{position:fixed;top:0;right:0;z-index:2147483000;
     display:flex;align-items:center;gap:.35em;
     padding:5px 12px 6px;border-radius:0 0 0 10px;
@@ -437,7 +536,7 @@ INJECAO = """
   #dp-aviso-convite.dp-erro{background:rgba(235,68,68,.12);
     border-color:rgba(235,68,68,.35)}
 </style>
-<script id="dp-marca-js">
+<script id="dp-js-marca">
 (function(){
   var LOGO="/assets/web/wordmark.svg", API="/api-convites", TOKEN=null;
 
@@ -826,24 +925,8 @@ INJECAO = """
       .addEventListener("click",function(){ limparERecarregar(nova); });
   }
 
-  /* Autocura: se um HTML truncado for guardado em cache, a página passa
-     a mostrar o próprio código como texto e nenhuma correção no servidor
-     alcança o navegador — o cache não é descartado porque o identificador
-     de build não mudou. Detectamos a falta do marcador final e limpamos
-     uma vez. */
-  function paginaIntegra(){
-    return !!document.getElementById("dp-marca-js");
-  }
-  function verificarIntegridade(){
-    if(paginaIntegra())return;
-    var chave="dp_recuperado";
-    try{
-      if(sessionStorage.getItem(chave))return;   // evita laço
-      sessionStorage.setItem(chave,"1");
-    }catch(e){}
-    console.warn("[Dois Papo] página incompleta em cache; limpando.");
-    limparERecarregar("integridade");
-  }
+  /* A verificação de integridade vive em guarda.js, o primeiro bloco
+     injetado — aqui ela seria vítima da quebra que deveria consertar. */
 
   function checarVersao(inicial){
     fetch("/versao.json",{cache:"no-store"})
@@ -860,8 +943,6 @@ INJECAO = """
   }
 
   checarVersao(true);
-  // roda depois da análise do HTML, quando o marcador final já existiria
-  setTimeout(verificarIntegridade, 1500);
   setInterval(function(){ checarVersao(false); }, 300000);
 
   function tick(){ assinatura(); loginLogo(); preencheConvite();
@@ -886,11 +967,18 @@ _base = os.path.dirname(os.path.abspath(__file__))
 # dentro do laço a inverteria, e a interface sairia na primeira linha por
 # não encontrar o módulo ainda.
 _scripts = ""
-for _arq, _id in (("audio.js", "dp-audio"),
-                  ("audio-ui.js", "dp-audio-ui"),
-                  ("voz.js", "dp-voz"),
-                  ("discord.js", "dp-discord"),
-                  ("som-servidor.js", "dp-som")):
+# Os ids das TAGS vivem num espaco reservado "dp-js-"/"dp-css-".
+# Um id de tag igual a um id de elemento da interface faz o seletor
+# "#id" casar tambem com a tag: o <script> herda position/display do
+# painel e o proprio codigo-fonte vira uma sobreposicao em tela cheia.
+# Foi o que aconteceu com "dp-som", que era ao mesmo tempo a tag do
+# script e o modal de som por servidor.
+for _arq, _id in (("guarda.js", "dp-js-guarda"),
+                  ("audio.js", "dp-js-audio"),
+                  ("audio-ui.js", "dp-js-audio-ui"),
+                  ("voz.js", "dp-js-voz"),
+                  ("discord.js", "dp-js-discord"),
+                  ("som-servidor.js", "dp-js-som")):
     _cam = os.path.join(_base, _arq)
     if not os.path.exists(_cam) or _id in h:
         continue
@@ -899,7 +987,7 @@ for _arq, _id in (("audio.js", "dp-audio"),
     conta("audio", 1)
 INJECAO = _scripts + INJECAO
 
-if "dp-marca" not in h:
+if "dp-css-marca" not in h:
     h = h.replace("</body>", INJECAO + "\n</body>")
     conta("injecao", 1)
 open(idx, "w", encoding="utf-8").write(h)
@@ -1089,16 +1177,6 @@ def md5(caminho):
             h.update(pedaco)
     return h.hexdigest()
 
-def corrige(m):
-    url = m.group(2)
-    alvo = os.path.join(DST, url)
-    if os.path.exists(alvo):
-        return '{"revision":"%s","url":"%s"}' % (md5(alvo), url)
-    return m.group(0)
-
-sw, n_rev = re.subn(r'\{"revision":"([^"]*)","url":"([^"]*)"\}', corrige, sw)
-conta("precache-revisoes", n_rev)
-
 # id de build: muda o nome dos caches, fazendo o workbox descartar os antigos
 # O id precisa refletir o CONTEUDO, nao os nomes: os nomes dos arquivos
 # nao mudam entre rebuilds, entao hashear a listagem manteria o mesmo nome
@@ -1126,11 +1204,38 @@ _h = open(_idx, encoding="utf-8").read()
 if "__BUILD__" in _h:
     open(_idx, "w", encoding="utf-8").write(_h.replace("__BUILD__", build_id))
 
+# As revisoes do precache SO podem ser calculadas depois do carimbo acima.
+# O index.html muda quando o build id entra nele; calcular antes gravava no
+# service worker o md5 de um arquivo que nunca chega a ser servido, e o
+# navegador ficava com uma copia cuja identidade nao correspondia a nada.
+def corrige(m):
+    url = m.group(2)
+    alvo = os.path.join(DST, url)
+    if os.path.exists(alvo):
+        return '{"revision":"%s","url":"%s"}' % (md5(alvo), url)
+    return m.group(0)
+
+sw, n_rev = re.subn(r'\{"revision":"([^"]*)","url":"([^"]*)"\}', corrige, sw)
+conta("precache-revisoes", n_rev)
+
+
 # Na ativacao, o SW apaga qualquer cache que nao seja deste build.
+# Na ativacao: apaga todo cache que nao seja deste build e, se apagou
+# algum, forca a recarga das abas abertas. Sem essa recarga uma aba que
+# ficou com HTML corrompido continua exibindo o conteudo velho mesmo
+# depois do cache ter sido descartado - o documento ja renderizado
+# permanece no ar ate o usuario fechar todas as abas.
 _guarda = ("self.addEventListener('activate',function(e){e.waitUntil("
-           "caches.keys().then(function(ks){return Promise.all(ks.filter("
-           "function(k){return k.indexOf('%s')===-1}).map(function(k){"
-           "return caches.delete(k)}))}))});\n" % build_id)
+           "caches.keys().then(function(ks){"
+           "var velhos=ks.filter(function(k){return k.indexOf('%s')===-1});"
+           "return Promise.all(velhos.map(function(k){return caches.delete(k)}))"
+           ".then(function(){return self.clients.claim()})"
+           ".then(function(){"
+           "if(!velhos.length)return;"
+           "return self.clients.matchAll({type:'window'}).then(function(cs){"
+           "cs.forEach(function(c){try{Promise.resolve(c.navigate(c.url))"
+           ".catch(function(){})}catch(_){}})})})"
+           "}).catch(function(){}))});\n" % build_id)
 if "dp-guarda-cache" not in sw:
     sw = "// dp-guarda-cache\n" + _guarda + sw
     conta("guarda-cache", 1)

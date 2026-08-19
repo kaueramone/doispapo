@@ -66,165 +66,187 @@
   window.Audio.prototype = Original.prototype;
 
   /* ------------------------------------------------------- painel */
-  var css = document.createElement("style");
-  css.textContent =
-    '#dp-som-bt{position:fixed;right:22px;bottom:74px;z-index:2147483000;' +
-      'padding:11px 18px;border:0;border-radius:12px;cursor:pointer;' +
-      'color:#fff;font:650 13.5px system-ui,sans-serif;' +
-      'background:linear-gradient(100deg,#3fb950,#2E8BEB);' +
-      'box-shadow:0 14px 34px -14px rgba(46,139,235,.9)}' +
-    '#dp-som{position:fixed;inset:0;z-index:2147483001;display:flex;' +
-      'align-items:center;justify-content:center;padding:22px;' +
-      'background:rgba(4,8,14,.82);font:14px/1.6 system-ui,sans-serif;' +
-      'color:#e8edf6}' +
-    '#dp-som .cx{background:#141d2b;border:1px solid #22304a;' +
-      'border-radius:16px;padding:26px;max-width:min(520px,94vw);width:100%}' +
-    '#dp-som h3{font-size:17px;margin:0 0 4px}' +
-    '#dp-som .sub{color:#93a1bb;font-size:13px;margin-bottom:16px}' +
-    '#dp-som .atual{background:#0f1724;border:1px solid #22304a;' +
-      'border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:13px}' +
-    '#dp-som input[type=file]{width:100%;font-size:13px;color:#93a1bb}' +
-    '#dp-som .acoes{display:flex;gap:10px;margin-top:16px}' +
-    '#dp-som button{flex:1;cursor:pointer;border:0;border-radius:10px;' +
-      'padding:11px;font:650 13px system-ui;color:#fff;' +
-      'background:linear-gradient(100deg,#2E8BEB,#8C41D9)}' +
-    '#dp-som button.sec{background:#22304a;color:#c7d1e4}' +
-    '#dp-som button.perigo{background:#3a2030;color:#ffb3b3}' +
-    '#dp-som button[disabled]{opacity:.5;cursor:not-allowed}' +
-    '#dp-som .aviso{margin-top:13px;padding:11px 13px;border-radius:9px;' +
-      'font-size:13px;display:none}' +
-    '#dp-som .aviso.on{display:block;background:rgba(235,68,68,.12);' +
-      'border:1px solid rgba(235,68,68,.34);color:#ffb3b3}' +
-    '#dp-som .aviso.ok{background:rgba(74,222,128,.12);' +
-      'border-color:rgba(74,222,128,.34);color:#8df0b0}';
-  document.head.appendChild(css);
 
-  function aviso(t, ok) {
-    var e = document.getElementById("dp-som-msg");
-    if (e) { e.textContent = t; e.className = "aviso on" + (ok ? " ok" : ""); }
+  /* ------------------------------------------------------- pagina
+     Vive como pagina nativa das configuracoes do servidor, no grupo
+     Personalizacao, ao lado de Emojis. O rebrand.py acrescenta a
+     entrada na lista e o caso no switch de render; aqui so montamos
+     o conteudo. Nada de botao flutuante nem sobreposicao.
+
+     Cada montagem cria os proprios elementos e guarda as referencias
+     em variaveis locais: o Solid monta e desmonta a pagina a vontade,
+     e buscar por id encontraria restos de uma montagem anterior. */
+  var CSS_ID = "dp-som-css";
+  function estilo() {
+    if (document.getElementById(CSS_ID)) return;
+    var e = document.createElement("style");
+    e.id = CSS_ID;
+    e.textContent =
+      '.dp-som-pg{display:flex;flex-direction:column;gap:14px}' +
+      '.dp-som-pg h3{margin:0;font-size:17px;font-weight:700}' +
+      '.dp-som-pg .sub{opacity:.68;font-size:13px;line-height:1.5;margin:0}' +
+      '.dp-som-pg .cartao{padding:14px 16px;border-radius:12px;' +
+        'background:var(--md-sys-color-surface-variant,rgba(127,127,127,.10));' +
+        'display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px}' +
+      '.dp-som-pg .cartao b{font-weight:650}' +
+      '.dp-som-pg input[type=file]{font:13px system-ui,sans-serif;' +
+        'padding:11px;border-radius:10px;border:1px dashed ' +
+        'var(--md-sys-color-outline,rgba(127,127,127,.45));' +
+        'background:transparent;color:inherit;width:100%}' +
+      '.dp-som-pg .acoes{display:flex;gap:10px;flex-wrap:wrap}' +
+      '.dp-som-pg button{cursor:pointer;border:0;border-radius:9px;' +
+        'padding:9px 17px;font:650 13px system-ui,sans-serif;color:#fff;' +
+        'background:linear-gradient(100deg,#2E8BEB,#8C41D9)}' +
+      '.dp-som-pg button[disabled]{opacity:.45;cursor:not-allowed}' +
+      '.dp-som-pg button.sec{background:transparent;color:inherit;' +
+        'border:1px solid var(--md-sys-color-outline,rgba(127,127,127,.45))}' +
+      '.dp-som-pg button.perigo{background:transparent;' +
+        'color:var(--md-sys-color-error,#ff6b6b);' +
+        'border:1px solid var(--md-sys-color-error,#ff6b6b)}' +
+      '.dp-som-pg button.mini{padding:5px 12px;font-size:12px}' +
+      '.dp-som-pg .aviso{padding:10px 13px;border-radius:9px;font-size:13px;' +
+        'display:none}' +
+      '.dp-som-pg .aviso.on{display:block;background:rgba(235,68,68,.12);' +
+        'border:1px solid rgba(235,68,68,.34);color:#ffb3b3}' +
+      '.dp-som-pg .aviso.ok{background:rgba(74,222,128,.12);' +
+        'border-color:rgba(74,222,128,.34);color:#8df0b0}';
+    document.head.appendChild(e);
   }
 
-  function abrir() {
-    if (document.getElementById("dp-som")) return;
-    var sid = servidorAtual();
-    if (!sid) return;
-    var ov = document.createElement("div");
-    ov.id = "dp-som";
-    ov.innerHTML =
-      '<div class="cx">' +
-        '<h3>Som de notificação do servidor</h3>' +
-        '<div class="sub">Vale para todos os membros. Sem som próprio, ' +
-          'toca o padrão da plataforma.</div>' +
-        '<div class="atual" id="dp-som-atual">Consultando…</div>' +
-        '<input type="file" id="dp-som-arq" accept="audio/mpeg,audio/ogg,audio/wav,audio/mp4,.mp3,.ogg,.wav,.m4a">' +
-        '<div class="sub" style="margin:8px 0 0">Até 512 KB. Prefira algo ' +
-          'curto — um aviso longo cansa rápido.</div>' +
-        '<div class="acoes">' +
-          '<button class="sec" id="dp-som-fechar">Fechar</button>' +
-          '<button id="dp-som-enviar">Enviar</button>' +
-        '</div>' +
-        '<div class="aviso" id="dp-som-msg"></div>' +
-      '</div>';
-    document.body.appendChild(ov);
-    ov.addEventListener("click", function (e) { if (e.target === ov) ov.remove(); });
-    document.getElementById("dp-som-fechar")
-      .addEventListener("click", function () { ov.remove(); });
-    document.getElementById("dp-som-enviar").addEventListener("click", enviar);
-    atualizarAtual(sid);
+  function el(tag, attrs, texto) {
+    var e = document.createElement(tag);
+    if (attrs) for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (texto != null) e.textContent = texto;
+    return e;
   }
 
-  function atualizarAtual(sid) {
-    _fetch(API + "/sons/" + sid, {cache: "no-store"})
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        var el = document.getElementById("dp-som-atual");
-        if (!el) return;
-        cache[sid] = d && d.tem ? d.url : null;
-        if (!d || !d.tem) { el.textContent = "Nenhum som próprio configurado."; return; }
-        el.innerHTML = "Atual: <b>" + (d.nome || "som") + "</b> " +
-          '<button class="sec" id="dp-som-ouvir" style="flex:0;padding:5px 11px;' +
-          'font-size:12px;margin-left:8px">Ouvir</button> ' +
-          '<button class="perigo" id="dp-som-remover" style="flex:0;' +
-          'padding:5px 11px;font-size:12px">Remover</button>';
-        document.getElementById("dp-som-ouvir").addEventListener("click",
-          function () { new Audio(d.url).play().catch(function () {}); });
-        document.getElementById("dp-som-remover").addEventListener("click",
-          function () { remover(sid); });
-      })
-      .catch(function () {});
-  }
+  /* Icone da entrada na lista lateral (nota musical). */
+  window.dpSomIcone = function () {
+    var s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    s.setAttribute("width", "20"); s.setAttribute("height", "20");
+    s.setAttribute("viewBox", "0 0 24 24");
+    s.setAttribute("fill", "currentColor");
+    var p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    p.setAttribute("d", "M12 3v10.55A4 4 0 1 0 14 17V7h4V3z");
+    s.appendChild(p);
+    return s;
+  };
 
-  function enviar() {
-    var sid = servidorAtual();
-    var inp = document.getElementById("dp-som-arq");
-    var f = inp && inp.files && inp.files[0];
-    if (!f) return aviso("Escolha um arquivo.");
-    if (f.size > 512 * 1024) return aviso("Arquivo maior que 512 KB.");
-    var bt = document.getElementById("dp-som-enviar");
-    bt.disabled = true; bt.textContent = "Enviando…";
+  /* Chamada pelo switch de render das configuracoes do servidor.
+     Recebe o servidor e devolve o elemento da pagina. */
+  window.dpSomPagina = function (servidor) {
+    estilo();
+    var sid = (servidor && (servidor.id || servidor._id)) || servidorAtual();
+    var raiz = el("div", {"class": "dp-som-pg"});
 
-    var fr = new FileReader();
-    fr.onload = function () {
-      var b64 = String(fr.result).split(",")[1];
+    raiz.appendChild(el("h3", null, "Som de notificação"));
+    raiz.appendChild(el("p", {"class": "sub"},
+      "Vale para todos os membros deste servidor. Sem som próprio, " +
+      "toca o padrão da plataforma."));
+
+    var cartao = el("div", {"class": "cartao"}, "Consultando…");
+    raiz.appendChild(cartao);
+
+    var arq = el("input", {type: "file",
+      accept: "audio/mpeg,audio/ogg,audio/wav,audio/mp4,.mp3,.ogg,.wav,.m4a"});
+    raiz.appendChild(arq);
+    raiz.appendChild(el("p", {"class": "sub"},
+      "Até 512 KB. Prefira algo curto — um aviso longo cansa rápido."));
+
+    var acoes = el("div", {"class": "acoes"});
+    var enviar = el("button", null, "Enviar");
+    acoes.appendChild(enviar);
+    raiz.appendChild(acoes);
+
+    var msg = el("div", {"class": "aviso"});
+    raiz.appendChild(msg);
+
+    function aviso(t, ok) {
+      msg.textContent = t;
+      msg.className = "aviso on" + (ok ? " ok" : "");
+    }
+
+    function mostrarAtual() {
+      _fetch(API + "/sons/" + sid, {cache: "no-store"})
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+          cache[sid] = d && d.tem ? d.url : null;
+          cartao.textContent = "";
+          if (!d || !d.tem) {
+            cartao.textContent = "Nenhum som próprio configurado.";
+            return;
+          }
+          var t = el("span");
+          t.appendChild(document.createTextNode("Atual: "));
+          t.appendChild(el("b", null, d.nome || "som"));
+          cartao.appendChild(t);
+          var ouvir = el("button", {"class": "sec mini"}, "Ouvir");
+          ouvir.addEventListener("click", function () {
+            new Original(d.url).play().catch(function () {});
+          });
+          var rem = el("button", {"class": "perigo mini"}, "Remover");
+          rem.addEventListener("click", function () { remover(); });
+          cartao.appendChild(ouvir);
+          cartao.appendChild(rem);
+        })
+        .catch(function () { cartao.textContent = "Não consegui consultar."; });
+    }
+
+    function remover() {
+      if (!confirm("Voltar ao som padrão da plataforma?")) return;
       _fetch(API + "/sons/" + sid, {
         method: "POST",
         headers: {"Content-Type": "application/json",
                   "X-Session-Token": token || ""},
-        body: JSON.stringify({dados: b64, tipo: f.type || "audio/mpeg",
-                              nome: f.name})
-      }).then(function (r) { return r.json().then(function (j) {
-          return {status: r.status, d: j}; }); })
-        .then(function (r) {
-          if (r.status !== 200) { aviso(r.d.mensagem || "Não foi possível enviar."); return; }
-          delete cache[sid];
-          aviso("Som atualizado. Vale para todos os membros.", true);
-          atualizarAtual(sid);
-        })
-        .catch(function () { aviso("Falha ao enviar."); })
-        .finally(function () { bt.disabled = false; bt.textContent = "Enviar"; });
-    };
-    fr.onerror = function () {
-      aviso("Não consegui ler o arquivo.");
-      bt.disabled = false; bt.textContent = "Enviar";
-    };
-    fr.readAsDataURL(f);
-  }
-
-  function remover(sid) {
-    if (!confirm("Voltar ao som padrão da plataforma?")) return;
-    _fetch(API + "/sons/" + sid, {
-      method: "POST",
-      headers: {"Content-Type": "application/json",
-                "X-Session-Token": token || ""},
-      body: JSON.stringify({remover: true})
-    }).then(function () {
-      delete cache[sid];
-      aviso("Voltou ao som padrão.", true);
-      atualizarAtual(sid);
-    }).catch(function () { aviso("Falha ao remover."); });
-  }
-
-  /* ------------------------------------------------------ gatilho */
-  var ROTULOS = /^(cargos|convites|banimentos|membros|vis[ãa]o geral)$/i;
-  function nasConfigs() {
-    if (!servidorAtual()) return false;
-    var n = 0, els = document.querySelectorAll("div,span,a,button");
-    for (var i = 0; i < els.length && n < 2; i++) {
-      var t = (els[i].textContent || "").trim();
-      if (t.length <= 24 && ROTULOS.test(t)) n++;
+        body: JSON.stringify({remover: true})
+      }).then(function () {
+        delete cache[sid];
+        aviso("Voltou ao som padrão.", true);
+        mostrarAtual();
+      }).catch(function () { aviso("Falha ao remover."); });
     }
-    return n >= 2;
-  }
-  setInterval(function () {
-    var bt = document.getElementById("dp-som-bt");
-    if (nasConfigs()) {
-      if (!bt) {
-        bt = document.createElement("button");
-        bt.id = "dp-som-bt";
-        bt.textContent = "Som do servidor";
-        bt.addEventListener("click", abrir);
-        document.body.appendChild(bt);
-      }
-    } else if (bt && !document.getElementById("dp-som")) bt.remove();
-  }, 1200);
+
+    enviar.addEventListener("click", function () {
+      var f = arq.files && arq.files[0];
+      if (!f) return aviso("Escolha um arquivo.");
+      if (f.size > 512 * 1024) return aviso("Arquivo maior que 512 KB.");
+      enviar.disabled = true; enviar.textContent = "Enviando…";
+      var fr = new FileReader();
+      fr.onload = function () {
+        var b64 = String(fr.result).split(",")[1];
+        _fetch(API + "/sons/" + sid, {
+          method: "POST",
+          headers: {"Content-Type": "application/json",
+                    "X-Session-Token": token || ""},
+          body: JSON.stringify({dados: b64, tipo: f.type || "audio/mpeg",
+                                nome: f.name})
+        }).then(function (r) {
+            return r.json().then(function (j) {
+              return {status: r.status, d: j}; });
+          })
+          .then(function (r) {
+            if (r.status !== 200) {
+              aviso((r.d && r.d.mensagem) || "Não foi possível enviar.");
+              return;
+            }
+            delete cache[sid];
+            arq.value = "";
+            aviso("Som atualizado. Vale para todos os membros.", true);
+            mostrarAtual();
+          })
+          .catch(function () { aviso("Falha ao enviar."); })
+          .then(function () {
+            enviar.disabled = false; enviar.textContent = "Enviar";
+          });
+      };
+      fr.onerror = function () {
+        aviso("Não consegui ler o arquivo.");
+        enviar.disabled = false; enviar.textContent = "Enviar";
+      };
+      fr.readAsDataURL(f);
+    });
+
+    mostrarAtual();
+    return raiz;
+  };
 })();
