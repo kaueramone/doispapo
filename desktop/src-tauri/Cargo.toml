@@ -1,6 +1,6 @@
 [package]
 name = "doispapo"
-version = "0.1.0"
+version = "0.1.4"
 description = "Dois Papo — plataforma de comunicação"
 authors = ["kaueramone"]
 edition = "2021"
@@ -10,8 +10,11 @@ rust-version = "1.77"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon"] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+serde_json = "1"
 
 [profile.release]
 opt-level = "s"     # otimiza tamanho: é um invólucro, não há computação pesada
