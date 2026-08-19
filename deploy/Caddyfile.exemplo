@@ -1,4 +1,13 @@
 {$HOSTNAME} {
+	# Access log estruturado: base do painel analítico.
+	log {
+		output file /data/acessos.log {
+			roll_size 20mb
+			roll_keep 6
+		}
+		format json
+	}
+
 	route /.well-known/stoat {
 		uri strip_prefix /.well-known/stoat
 		header {
@@ -77,6 +86,15 @@
 # Conteúdo estático em /site (bind-mount via compose.override.yml)
 # ---------------------------------------------------------------------
 doispapo.com, www.doispapo.com {
+	# Access log estruturado: base do painel analítico.
+	log {
+		output file /data/acessos.log {
+			roll_size 20mb
+			roll_keep 6
+		}
+		format json
+	}
+
 	# A landing precisa falar com o serviço de convites na mesma origem,
 	# senão o formulário da fila esbarra em CORS.
 	route /api-convites* {

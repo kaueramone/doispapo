@@ -1,0 +1,1773 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dois Papo para Desenvolvedores</title>
+<meta name="description" content="Documentação e referência da API do Dois Papo. Crie bots para a plataforma.">
+<link rel="icon" href="/logo-color.png">
+<meta name="theme-color" content="#101823">
+<style>
+  :root{--bg:#0b1119;--bg2:#0f1724;--card:#141d2b;--line:#22304a;
+    --tx:#e8edf6;--tx2:#93a1bb;--azul:#2E8BEB;--roxo:#8C41D9;
+    --grad:linear-gradient(100deg,var(--azul),var(--roxo));
+    --get:#3fb950;--post:#3b82f6;--patch:#d29922;--del:#f85149}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--tx);
+    font:15.5px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:var(--azul);text-decoration:none}
+  a:hover{text-decoration:underline}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+
+  header{border-bottom:1px solid var(--line);padding:60px 24px 46px;
+    text-align:center;position:relative;overflow:hidden}
+  header::before{content:"";position:absolute;inset:-60% 25% auto;height:420px;
+    background:radial-gradient(closest-side,rgba(140,65,217,.26),transparent);
+    filter:blur(30px)}
+  header img{position:relative;width:190px;margin:0 auto 20px;display:block}
+  header h1{position:relative;font-size:clamp(26px,4.4vw,40px);
+    letter-spacing:-.02em;margin-bottom:12px}
+  header h1 span{background:var(--grad);-webkit-background-clip:text;
+    background-clip:text;color:transparent}
+  header p{position:relative;color:var(--tx2);max-width:600px;margin:0 auto}
+  .selos{position:relative;margin-top:20px;display:flex;gap:8px;
+    justify-content:center;flex-wrap:wrap}
+  .selo{font-size:12.5px;color:var(--tx2);border:1px solid var(--line);
+    border-radius:999px;padding:5px 13px}
+
+  .layout{display:grid;grid-template-columns:230px 1fr;gap:34px;
+    max-width:1180px;margin:0 auto;padding:34px 24px 80px}
+  @media(max-width:880px){.layout{grid-template-columns:1fr}
+    nav.lat{position:static!important;max-height:none!important}}
+  nav.lat{position:sticky;top:22px;align-self:start;max-height:88vh;
+    overflow:auto;font-size:14px}
+  nav.lat h5{font-size:11px;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--tx2);margin:18px 0 7px}
+  nav.lat ul{list-style:none}
+  nav.lat a{display:flex;justify-content:space-between;gap:8px;
+    color:var(--tx2);padding:5px 9px;border-radius:7px}
+  nav.lat a:hover{background:var(--card);color:var(--tx);text-decoration:none}
+  .qt{font-size:11px;opacity:.55}
+
+  h2{font-size:25px;letter-spacing:-.015em;margin:44px 0 10px;
+    padding-top:10px}
+  h2:first-child{margin-top:0}
+  h3{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--tx2);font-size:14px;margin-bottom:18px}
+  p{margin-bottom:12px}
+  .guia{background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:22px;margin-bottom:16px}
+  .guia h4{font-size:16px;margin-bottom:8px}
+  ol,ul.p{margin:10px 0 10px 20px}
+  ol li,ul.p li{margin-bottom:7px}
+  pre{background:var(--bg2);border:1px solid var(--line);border-radius:10px;
+    padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.55;
+    margin:12px 0}
+  pre code{color:#c7d1e4}
+  p code,li code,td code{background:var(--bg2);border:1px solid var(--line);
+    border-radius:5px;padding:1px 6px;font-size:13px}
+
+  .area{margin-bottom:46px;scroll-margin-top:20px}
+  .op{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:18px;margin-bottom:12px;scroll-margin-top:20px}
+  .op-cab{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .m{font:700 11px/1 ui-monospace,monospace;padding:5px 8px;border-radius:5px;
+    color:#08121e}
+  .m.get{background:var(--get)} .m.post{background:var(--post);color:#fff}
+  .m.patch{background:var(--patch)} .m.del{background:var(--del);color:#fff}
+  .rota{font-size:13.5px;color:var(--tx)}
+  .op h4{font-size:15px;margin:11px 0 4px}
+  .desc{color:var(--tx2);font-size:14px;margin-bottom:6px}
+  .auth{font-size:12.5px;color:var(--patch);margin:6px 0}
+  .rot{font-size:11px;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--tx2);margin:14px 0 6px}
+  .tb{width:100%;border-collapse:collapse;font-size:13.5px;margin:8px 0}
+  .tb th{text-align:left;color:var(--tx2);font-weight:600;font-size:12px;
+    text-transform:uppercase;letter-spacing:.05em;padding:6px 8px;
+    border-bottom:1px solid var(--line)}
+  .tb td{padding:6px 8px;border-bottom:1px solid rgba(34,48,74,.5)}
+  .tb .t{color:var(--roxo);font-family:ui-monospace,monospace;font-size:12.5px}
+  .cods{display:flex;gap:6px;flex-wrap:wrap}
+  .cod{font:600 12px ui-monospace,monospace;background:var(--bg2);
+    border:1px solid var(--line);border-radius:5px;padding:3px 8px;
+    color:var(--tx2)}
+
+  footer{border-top:1px solid var(--line);padding:30px 24px;text-align:center;
+    color:var(--tx2);font-size:14px}
+  footer a{color:var(--roxo);font-weight:600}
+</style>
+</head>
+<body>
+
+<header>
+  <img src="/logo.png" alt="Dois Papo">
+  <h1>Dois Papo para <span>Desenvolvedores</span></h1>
+  <p>Tudo o que você precisa para criar bots que conversam, moderam e
+     automatizam dentro das comunidades do Dois Papo.</p>
+  <div class="selos">
+    <span class="selo">API v0.15.1</span>
+    <span class="selo">81 rotas</span>
+    <span class="selo">115 operações</span>
+    <span class="selo">REST + WebSocket</span>
+  </div>
+</header>
+
+<div class="layout">
+  <nav class="lat">
+    <h5>Começando</h5>
+    <ul>
+      <li><a href="#inicio">Primeiros passos</a></li>
+      <li><a href="#auth">Autenticação</a></li>
+      <li><a href="#eventos">Eventos em tempo real</a></li>
+      <li><a href="#limites">Limites e boas práticas</a></li>
+    </ul>
+    <h5>Referência da API</h5>
+    <ul><li><a href="#a-bots">Bots<span class="qt">7</span></a></li>
+<li><a href="#a-channels">Canais<span class="qt">27</span></a></li>
+<li><a href="#a-servers">Servidores<span class="qt">24</span></a></li>
+<li><a href="#a-users">Usuários<span class="qt">15</span></a></li>
+<li><a href="#a-invites">Convites<span class="qt">3</span></a></li>
+<li><a href="#a-auth">Autenticação<span class="qt">25</span></a></li>
+<li><a href="#a-sync">Sincronização<span class="qt">3</span></a></li>
+<li><a href="#a-push">Notificações<span class="qt">2</span></a></li>
+<li><a href="#a-onboard">Integração<span class="qt">2</span></a></li>
+<li><a href="#a-safety">Segurança<span class="qt">1</span></a></li>
+<li><a href="#a-custom">Emojis<span class="qt">4</span></a></li>
+<li><a href="#a-policy">Políticas<span class="qt">1</span></a></li></ul>
+  </nav>
+
+  <main>
+    <h2 id="inicio">Primeiros passos</h2>
+    <div class="guia">
+      <h4>1. Crie o bot</h4>
+      <p>No cliente web, abra <strong>Configurações → Bots → Criar bot</strong>.
+         Você recebe um <code>bot_id</code> e um <strong>token</strong>.</p>
+      <p>O token é a credencial do bot. Trate como senha: nunca comite em
+         repositório e nunca exponha no navegador.</p>
+    </div>
+    <div class="guia">
+      <h4>2. Fale com a API</h4>
+      <p>A base da API é <code>https://chat.doispapo.com/api</code>.
+         Autentique com o cabeçalho <code>X-Bot-Token</code>.</p>
+      <pre><code>curl https://chat.doispapo.com/api/users/@me \
+  -H "X-Bot-Token: SEU_TOKEN"</code></pre>
+    </div>
+    <div class="guia">
+      <h4>3. Convide para um servidor</h4>
+      <p>Bots entram por convite, como pessoas. Use
+         <code>POST /bots/{target}/invite</code> informando o servidor, ou
+         compartilhe o link de convite do bot.</p>
+    </div>
+    <div class="guia">
+      <h4>4. Envie a primeira mensagem</h4>
+      <pre><code>curl -X POST \
+  https://chat.doispapo.com/api/channels/ID_DO_CANAL/messages \
+  -H "X-Bot-Token: SEU_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Olá! Sou um bot do Dois Papo."}'</code></pre>
+    </div>
+
+    <h2 id="auth">Autenticação</h2>
+    <p>Há dois tipos de credencial. Bots usam o primeiro; o segundo existe
+       para ferramentas que agem em nome de uma pessoa.</p>
+    <table class="tb">
+      <thead><tr><th>Cabeçalho</th><th>Quem usa</th><th>Obtido em</th></tr></thead>
+      <tbody>
+        <tr><td><code>X-Bot-Token</code></td><td>Bots</td>
+            <td>Configurações → Bots</td></tr>
+        <tr><td><code>X-Session-Token</code></td><td>Sessão de usuário</td>
+            <td><code>POST /auth/session/login</code></td></tr>
+      </tbody>
+    </table>
+    <p>Requisições sem credencial válida recebem <code>401</code>. Rotas de
+       <code>/auth</code> são para contas de pessoas — um bot não precisa
+       delas.</p>
+
+    <h2 id="eventos">Eventos em tempo real</h2>
+    <p>Além do REST, a plataforma emite eventos por WebSocket. É assim que o
+       bot reage a mensagens sem ficar consultando a API repetidamente.</p>
+    <pre><code>wss://chat.doispapo.com/ws</code></pre>
+    <p>Após conectar, autentique enviando:</p>
+    <pre><code>{"type":"Authenticate","token":"SEU_TOKEN"}</code></pre>
+    <p>O servidor responde com <code>Authenticated</code> e, em seguida,
+       <code>Ready</code> com o estado inicial. A partir daí chegam eventos
+       como <code>Message</code>, <code>MessageUpdate</code>,
+       <code>ChannelCreate</code> e <code>ServerMemberJoin</code>.</p>
+    <pre><code>// mantenha a conexão viva
+setInterval(() => ws.send(JSON.stringify({type:"Ping",data:Date.now()})), 30000);</code></pre>
+
+    <h2 id="limites">Limites e boas práticas</h2>
+    <ul class="p">
+      <li>Respeite o <code>429</code>. Ao recebê-lo, aguarde antes de repetir
+          — não tente de novo em laço.</li>
+      <li>Prefira eventos do WebSocket a consultas periódicas. Menos carga
+          para todos e resposta mais rápida.</li>
+      <li>Guarde o token fora do código. Variável de ambiente resolve.</li>
+      <li>Um bot só enxerga servidores em que foi convidado.</li>
+      <li>Anexos passam pelo serviço de arquivos: envie primeiro e use o id
+          retornado no campo <code>attachments</code> da mensagem.</li>
+    </ul>
+
+    <h2>Referência da API</h2>
+    <p class="sub">Gerada a partir da especificação da própria instância,
+       então descreve exatamente a versão que está no ar.</p>
+    <section class="area" id="a-bots"><h3>Bots</h3><p class="sub">Criar, configurar e convidar bots.</p><article class="op" id="get-bots-me">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/bots/@me</code></div>
+<h4>Fetch Owned Bots</h4>
+<p class="desc">Fetch all of the bots that you have control over.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-bots-create">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/bots/create</code></div>
+<h4>Create Bot</h4>
+<p class="desc">Create a new Revolt bot.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-bots-bot-id">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/bots/{bot_id}</code></div>
+<h4>Delete Bot</h4>
+<p class="desc">Delete a bot by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>bot_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-bots-bot-id">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/bots/{bot_id}</code></div>
+<h4>Fetch Bot</h4>
+<p class="desc">Fetch details of a bot you own by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>bot_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-bots-bot-id">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/bots/{bot_id}</code></div>
+<h4>Edit Bot</h4>
+<p class="desc">Edit bot details by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>bot_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>public</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>analytics</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>interactions_url</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>remove</code></td><td class="t">FieldsBot[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;public&quot;: true,
+  &quot;analytics&quot;: true,
+  &quot;interactions_url&quot;: &quot;texto&quot;,
+  &quot;remove&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-bots-target-invite">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/bots/{target}/invite</code></div>
+<h4>Fetch Public Bot</h4>
+<p class="desc">Fetch details of a public (or owned) bot by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-bots-target-invite">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/bots/{target}/invite</code></div>
+<h4>Invite Bot</h4>
+<p class="desc">Invite a bot to a server or group by its id.`</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article></section>
+<section class="area" id="a-channels"><h3>Canais</h3><p class="sub">Mensagens, permissões e convites de canal.</p><article class="op" id="post-channels-create">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/channels/create</code></div>
+<h4>Create Group</h4>
+<p class="desc">Create a new group channel.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>description</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>icon</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>users</code></td><td class="t">string[]</td><td>não</td></tr>
+<tr><td><code>nsfw</code></td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;description&quot;: &quot;texto&quot;,
+  &quot;icon&quot;: &quot;texto&quot;,
+  &quot;users&quot;: [],
+  &quot;nsfw&quot;: true
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-channels-channel-id-webhooks">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/channels/{channel_id}/webhooks</code></div>
+<h4>Gets all webhooks</h4>
+<p class="desc">Gets all webhooks inside the channel</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>channel_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-channels-channel-id-webhooks">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/channels/{channel_id}/webhooks</code></div>
+<h4>Creates a webhook</h4>
+<p class="desc">Creates a webhook which 3rd party platforms can use to send messages</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>channel_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>avatar</code></td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;avatar&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-channels-group-id-recipients-member-id">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/channels/{group_id}/recipients/{member_id}</code></div>
+<h4>Remove Member from Group</h4>
+<p class="desc">Removes a user from the group.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>group_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>member_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="put-channels-group-id-recipients-member-id">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/channels/{group_id}/recipients/{member_id}</code></div>
+<h4>Add Member to Group</h4>
+<p class="desc">Adds another user to the group.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>group_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>member_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="delete-channels-target">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/channels/{target}</code></div>
+<h4>Close Channel</h4>
+<p class="desc">Deletes a server channel, leaves a group or closes a group.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>leave_silently</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-channels-target">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/channels/{target}</code></div>
+<h4>Fetch Channel</h4>
+<p class="desc">Fetch channel by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-channels-target">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/channels/{target}</code></div>
+<h4>Edit Channel</h4>
+<p class="desc">Edit a channel object by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>description</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>owner</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>icon</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>nsfw</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>archived</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>voice</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>slowmode</code></td><td class="t">integer</td><td>não</td></tr>
+<tr><td><code>remove</code></td><td class="t">FieldsChannel[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;description&quot;: &quot;texto&quot;,
+  &quot;owner&quot;: &quot;texto&quot;,
+  &quot;icon&quot;: &quot;texto&quot;,
+  &quot;nsfw&quot;: true,
+  &quot;archived&quot;: true,
+  &quot;voice&quot;: &quot;…&quot;,
+  &quot;slowmode&quot;: 0
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-channels-target-ack-message">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/channels/{target}/ack/{message}</code></div>
+<h4>Acknowledge Message</h4>
+<p class="desc">Lets the server and all other clients know that we&#x27;ve seen this message id in this channel.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>message</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="put-channels-target-end-ring-target-user">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/channels/{target}/end_ring/{target_user}</code></div>
+<h4>Stop Ring</h4>
+<p class="desc">Stops ringing a specific user in a dm call. You must be in the call to use this endpoint, returns NotConnected otherwise. Only valid in DM/Group channels, will return NoEffect in servers. Returns NotFound if the user is not in the dm/group channel</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>target_user</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-channels-target-invites">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/channels/{target}/invites</code></div>
+<h4>Create Invite</h4>
+<p class="desc">Creates an invite to this channel.
+
+Channel must be a `TextChannel`.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-channels-target-join-call">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/channels/{target}/join_call</code></div>
+<h4>Join Call</h4>
+<p class="desc">Asks the voice server for a token to join the call.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>node</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>force_disconnect</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>recipients</code></td><td class="t">string[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;node&quot;: &quot;texto&quot;,
+  &quot;force_disconnect&quot;: true,
+  &quot;recipients&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-channels-target-members">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/channels/{target}/members</code></div>
+<h4>Fetch Group Members</h4>
+<p class="desc">Retrieves all users who are part of this group.
+
+This may not return full user information if users are not friends but have mutual connections.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-channels-target-messages">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/channels/{target}/messages</code></div>
+<h4>Fetch Messages</h4>
+<p class="desc">Fetch multiple messages.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>limit</code></td><td>query</td><td class="t">integer</td><td>não</td></tr>
+<tr><td><code>before</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>after</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>sort</code></td><td>query</td><td class="t">MessageSort</td><td>não</td></tr>
+<tr><td><code>nearby</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>include_users</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-channels-target-messages">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/channels/{target}/messages</code></div>
+<h4>Send Message</h4>
+<p class="desc">Sends a message to the given channel.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>Idempotency-Key</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>nonce</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>content</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>attachments</code></td><td class="t">string[]</td><td>não</td></tr>
+<tr><td><code>replies</code></td><td class="t">ReplyIntent[]</td><td>não</td></tr>
+<tr><td><code>embeds</code></td><td class="t">SendableEmbed[]</td><td>não</td></tr>
+<tr><td><code>masquerade</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>interactions</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>flags</code></td><td class="t">integer</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;nonce&quot;: &quot;texto&quot;,
+  &quot;content&quot;: &quot;texto&quot;,
+  &quot;attachments&quot;: [],
+  &quot;replies&quot;: [],
+  &quot;embeds&quot;: [],
+  &quot;masquerade&quot;: &quot;…&quot;,
+  &quot;interactions&quot;: &quot;…&quot;,
+  &quot;flags&quot;: 0
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-channels-target-messages-bulk">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/channels/{target}/messages/bulk</code></div>
+<h4>Bulk Delete Messages</h4>
+<p class="desc">Delete multiple messages you&#x27;ve sent or one you have permission to delete.
+
+This will always require `ManageMessages` permission regardless of whether you own the message or not.
+
+Messages must have been sent within the past 1 week.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>ids</code></td><td class="t">string[]</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;ids&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="delete-channels-target-messages-msg">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/channels/{target}/messages/{msg}</code></div>
+<h4>Delete Message</h4>
+<p class="desc">Delete a message you&#x27;ve sent or one you have permission to delete.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-channels-target-messages-msg">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/channels/{target}/messages/{msg}</code></div>
+<h4>Fetch Message</h4>
+<p class="desc">Retrieves a message by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-channels-target-messages-msg">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/channels/{target}/messages/{msg}</code></div>
+<h4>Edit Message</h4>
+<p class="desc">Edits a message that you&#x27;ve previously sent.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>content</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>embeds</code></td><td class="t">SendableEmbed[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;content&quot;: &quot;texto&quot;,
+  &quot;embeds&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-channels-target-messages-msg-pin">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/channels/{target}/messages/{msg}/pin</code></div>
+<h4>Unpins a message</h4>
+<p class="desc">Unpins a message by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-channels-target-messages-msg-pin">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/channels/{target}/messages/{msg}/pin</code></div>
+<h4>Pins a message</h4>
+<p class="desc">Pins a message by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="delete-channels-target-messages-msg-reactions">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/channels/{target}/messages/{msg}/reactions</code></div>
+<h4>Remove All Reactions from Message</h4>
+<p class="desc">Remove your own, someone else&#x27;s or all of a given reaction.
+
+Requires `ManageMessages` permission.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="delete-channels-target-messages-msg-reactions-emoji">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/channels/{target}/messages/{msg}/reactions/{emoji}</code></div>
+<h4>Remove Reaction(s) to Message</h4>
+<p class="desc">Remove your own, someone else&#x27;s or all of a given reaction.
+
+Requires `ManageMessages` if changing others&#x27; reactions.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>emoji</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>user_id</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>remove_all</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="put-channels-target-messages-msg-reactions-emoji">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/channels/{target}/messages/{msg}/reactions/{emoji}</code></div>
+<h4>Add Reaction to Message</h4>
+<p class="desc">React to a given message.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>msg</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>emoji</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="put-channels-target-permissions-default">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/channels/{target}/permissions/default</code></div>
+<h4>Set Default Permission</h4>
+<p class="desc">Sets permissions for the default role in this channel.
+
+Channel must be a `Group` or `TextChannel`.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-channels-target-permissions-role-id">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/channels/{target}/permissions/{role_id}</code></div>
+<h4>Set Role Permission</h4>
+<p class="desc">Sets permissions for the specified role in this channel.
+
+Channel must be a `TextChannel`.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>role_id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>permissions</code></td><td class="t">any</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;permissions&quot;: &quot;…&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-channels-target-search">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/channels/{target}/search</code></div>
+<h4>Search for Messages</h4>
+<p class="desc">This route searches for messages within the given parameters.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>query</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>pinned</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>limit</code></td><td class="t">integer</td><td>não</td></tr>
+<tr><td><code>before</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>after</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>sort</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>include_users</code></td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;query&quot;: &quot;texto&quot;,
+  &quot;pinned&quot;: true,
+  &quot;limit&quot;: 0,
+  &quot;before&quot;: &quot;texto&quot;,
+  &quot;after&quot;: &quot;texto&quot;,
+  &quot;sort&quot;: &quot;…&quot;,
+  &quot;include_users&quot;: true
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-servers"><h3>Servidores</h3><p class="sub">Comunidades, membros, cargos e emojis.</p><article class="op" id="post-servers-create">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/servers/create</code></div>
+<h4>Create Server</h4>
+<p class="desc">Create a new server.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>description</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>nsfw</code></td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;description&quot;: &quot;texto&quot;,
+  &quot;nsfw&quot;: true
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-servers-server-id-members-member-id">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/servers/{server_id}/members/{member_id}</code></div>
+<h4>Kick Member</h4>
+<p class="desc">Removes a member from the server.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>server_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>member_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-servers-server-id-members-member-id">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{server_id}/members/{member_id}</code></div>
+<h4>Fetch Member</h4>
+<p class="desc">Retrieve a member.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>server_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>member_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>roles</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-servers-server-id-members-member-id">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/servers/{server_id}/members/{member_id}</code></div>
+<h4>Edit Member</h4>
+<p class="desc">Edit a member by their id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>server_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>member_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>nickname</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>pronouns</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>avatar</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>roles</code></td><td class="t">string[]</td><td>não</td></tr>
+<tr><td><code>timeout</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>can_publish</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>can_receive</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>voice_channel</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>remove</code></td><td class="t">FieldsMember[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;nickname&quot;: &quot;texto&quot;,
+  &quot;pronouns&quot;: &quot;texto&quot;,
+  &quot;avatar&quot;: &quot;texto&quot;,
+  &quot;roles&quot;: [],
+  &quot;timeout&quot;: &quot;…&quot;,
+  &quot;can_publish&quot;: true,
+  &quot;can_receive&quot;: true,
+  &quot;voice_channel&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-servers-server-bans-target">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/servers/{server}/bans/{target}</code></div>
+<h4>Unban user</h4>
+<p class="desc">Remove a user&#x27;s ban.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>server</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="put-servers-server-bans-target">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/servers/{server}/bans/{target}</code></div>
+<h4>Ban User</h4>
+<p class="desc">Ban a user by their id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>server</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>reason</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>delete_message_seconds</code></td><td class="t">integer</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;reason&quot;: &quot;texto&quot;,
+  &quot;delete_message_seconds&quot;: 0
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-servers-server-channels">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/servers/{server}/channels</code></div>
+<h4>Create Channel</h4>
+<p class="desc">Create a new Text or Voice channel.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>server</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>type</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>name</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>description</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>nsfw</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>voice</code></td><td class="t">any</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;type&quot;: &quot;…&quot;,
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;description&quot;: &quot;texto&quot;,
+  &quot;nsfw&quot;: true,
+  &quot;voice&quot;: &quot;…&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-servers-target">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/servers/{target}</code></div>
+<h4>Delete / Leave Server</h4>
+<p class="desc">Deletes a server if owner otherwise leaves.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>leave_silently</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-servers-target">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}</code></div>
+<h4>Fetch Server</h4>
+<p class="desc">Fetch a server by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>include_channels</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-servers-target">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/servers/{target}</code></div>
+<h4>Edit Server</h4>
+<p class="desc">Edit a server by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>description</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>icon</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>banner</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>categories</code></td><td class="t">Category[]</td><td>não</td></tr>
+<tr><td><code>system_messages</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>flags</code></td><td class="t">integer</td><td>não</td></tr>
+<tr><td><code>discoverable</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>analytics</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>owner</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>remove</code></td><td class="t">FieldsServer[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;description&quot;: &quot;texto&quot;,
+  &quot;icon&quot;: &quot;texto&quot;,
+  &quot;banner&quot;: &quot;texto&quot;,
+  &quot;categories&quot;: [],
+  &quot;system_messages&quot;: &quot;…&quot;,
+  &quot;flags&quot;: 0,
+  &quot;discoverable&quot;: true
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-servers-target-ack">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/servers/{target}/ack</code></div>
+<h4>Mark Server As Read</h4>
+<p class="desc">Mark all channels in a server as read.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-servers-target-audit-logs">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}/audit_logs</code></div>
+<h4>Audit Log Query</h4>
+<p class="desc">Queries a server&#x27;s audit logs.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>user</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>target</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>type</code></td><td>query</td><td class="t">string[]</td><td>não</td></tr>
+<tr><td><code>before</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>after</code></td><td>query</td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>limit</code></td><td>query</td><td class="t">integer</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-servers-target-bans">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}/bans</code></div>
+<h4>Fetch Bans</h4>
+<p class="desc">Fetch all bans on a server.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-servers-target-emojis">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}/emojis</code></div>
+<h4>Fetch Server Emoji</h4>
+<p class="desc">Fetch all emoji on a server.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-servers-target-invites">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}/invites</code></div>
+<h4>Fetch Invites</h4>
+<p class="desc">Fetch all server invites.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-servers-target-members">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}/members</code></div>
+<h4>Fetch Members</h4>
+<p class="desc">Fetch all server members.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>exclude_offline</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-servers-target-members-experimental-query">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}/members_experimental_query</code></div>
+<h4>Query members by name</h4>
+<p class="desc">Query members by a given name, this API is not stable and will be removed in the future.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>query</code></td><td>query</td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>experimental_api</code></td><td>query</td><td class="t">boolean</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-servers-target-permissions-default">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/servers/{target}/permissions/default</code></div>
+<h4>Set Default Permission</h4>
+<p class="desc">Sets permissions for the default role in this server.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>permissions</code></td><td class="t">integer</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;permissions&quot;: 0
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-servers-target-permissions-role-id">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/servers/{target}/permissions/{role_id}</code></div>
+<h4>Set Role Permission</h4>
+<p class="desc">Sets permissions for the specified role in the server.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>role_id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>permissions</code></td><td class="t">any</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;permissions&quot;: &quot;…&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-servers-target-roles">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/servers/{target}/roles</code></div>
+<h4>Create Role</h4>
+<p class="desc">Creates a new server role.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>rank</code></td><td class="t">integer</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;rank&quot;: 0
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-servers-target-roles-ranks">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/servers/{target}/roles/ranks</code></div>
+<h4>Edits server roles ranks</h4>
+<p class="desc">Edit&#x27;s server role&#x27;s ranks.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>ranks</code></td><td class="t">string[]</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;ranks&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-servers-target-roles-role-id">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/servers/{target}/roles/{role_id}</code></div>
+<h4>Delete Role</h4>
+<p class="desc">Delete a server role by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>role_id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-servers-target-roles-role-id">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/servers/{target}/roles/{role_id}</code></div>
+<h4>Fetch Role</h4>
+<p class="desc">Fetch a role by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>role_id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-servers-target-roles-role-id">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/servers/{target}/roles/{role_id}</code></div>
+<h4>Edit Role</h4>
+<p class="desc">Edit a role by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>role_id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>colour</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>hoist</code></td><td class="t">boolean</td><td>não</td></tr>
+<tr><td><code>rank</code></td><td class="t">integer</td><td>não</td></tr>
+<tr><td><code>icon</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>remove</code></td><td class="t">FieldsRole[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;colour&quot;: &quot;texto&quot;,
+  &quot;hoist&quot;: true,
+  &quot;rank&quot;: 0,
+  &quot;icon&quot;: &quot;texto&quot;,
+  &quot;remove&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-users"><h3>Usuários</h3><p class="sub">Perfis, amizades e mensagens diretas.</p><article class="op" id="get-users-me">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/@me</code></div>
+<h4>Fetch Self</h4>
+<p class="desc">Retrieve your user information.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-users-me-username">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/users/@me/username</code></div>
+<h4>Change Username</h4>
+<p class="desc">Change your username.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>username</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>password</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;username&quot;: &quot;texto&quot;,
+  &quot;password&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-users-dms">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/dms</code></div>
+<h4>Fetch Direct Message Channels</h4>
+<p class="desc">This fetches your direct messages, including any DM and group DM conversations.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-users-friend">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/users/friend</code></div>
+<h4>Send Friend Request</h4>
+<p class="desc">Send a friend request to another user.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>username</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;username&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-users-target">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/{target}</code></div>
+<h4>Fetch User</h4>
+<p class="desc">Retrieve a user&#x27;s information.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-users-target">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/users/{target}</code></div>
+<h4>Edit User</h4>
+<p class="desc">Edit currently authenticated user.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>display_name</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>pronouns</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>avatar</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>status</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>profile</code></td><td class="t">any</td><td>não</td></tr>
+<tr><td><code>badges</code></td><td class="t">integer</td><td>não</td></tr>
+<tr><td><code>flags</code></td><td class="t">integer</td><td>não</td></tr>
+<tr><td><code>remove</code></td><td class="t">FieldsUser[]</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;display_name&quot;: &quot;texto&quot;,
+  &quot;pronouns&quot;: &quot;texto&quot;,
+  &quot;avatar&quot;: &quot;texto&quot;,
+  &quot;status&quot;: &quot;…&quot;,
+  &quot;profile&quot;: &quot;…&quot;,
+  &quot;badges&quot;: 0,
+  &quot;flags&quot;: 0,
+  &quot;remove&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-users-target-block">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/users/{target}/block</code></div>
+<h4>Unblock User</h4>
+<p class="desc">Unblock another user by their id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-users-target-block">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/users/{target}/block</code></div>
+<h4>Block User</h4>
+<p class="desc">Block another user by their id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-users-target-default-avatar">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/{target}/default_avatar</code></div>
+<h4>Fetch Default Avatar</h4>
+<p class="desc">This returns a default avatar based on the given id.</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-users-target-dm">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/{target}/dm</code></div>
+<h4>Open Direct Message</h4>
+<p class="desc">Open a DM with another user.
+
+If the target is oneself, a saved messages channel is returned.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-users-target-flags">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/{target}/flags</code></div>
+<h4>Fetch User Flags</h4>
+<p class="desc">Retrieve a user&#x27;s flags.</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-users-target-friend">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/users/{target}/friend</code></div>
+<h4>Deny Friend Request / Remove Friend</h4>
+<p class="desc">Denies another user&#x27;s friend request or removes an existing friend.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-users-target-friend">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/users/{target}/friend</code></div>
+<h4>Accept Friend Request</h4>
+<p class="desc">Accept another user&#x27;s friend request.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-users-target-mutual">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/{target}/mutual</code></div>
+<h4>Fetch Mutual Friends, Servers, Groups and DMs</h4>
+<p class="desc">Retrieve a list of mutual friends, servers, groups and DMs with another user.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-users-target-profile">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/users/{target}/profile</code></div>
+<h4>Fetch User Profile</h4>
+<p class="desc">Retrieve a user&#x27;s profile data.
+
+Will fail if you do not have permission to access the other user&#x27;s profile.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-invites"><h3>Convites</h3><p class="sub">Consultar e resgatar convites.</p><article class="op" id="delete-invites-target">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/invites/{target}</code></div>
+<h4>Delete Invite</h4>
+<p class="desc">Delete an invite by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-invites-target">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/invites/{target}</code></div>
+<h4>Fetch Invite</h4>
+<p class="desc">Fetch an invite by its id.</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-invites-target">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/invites/{target}</code></div>
+<h4>Join Invite</h4>
+<p class="desc">Join an invite by its ID</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>target</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-auth"><h3>Autenticação</h3><p class="sub">Sessões e conta. Bots não usam estas rotas.</p><article class="op" id="get-auth-account">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/auth/account/</code></div>
+<h4>Fetch Account</h4>
+<p class="desc">Fetch account information from the current session.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-auth-account-change-email">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/auth/account/change/email</code></div>
+<h4>Change Email</h4>
+<p class="desc">Change the associated account email.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>email</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>current_password</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;email&quot;: &quot;texto&quot;,
+  &quot;current_password&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="patch-auth-account-change-password">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/auth/account/change/password</code></div>
+<h4>Change Password</h4>
+<p class="desc">Change the current account password.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>password</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>current_password</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;password&quot;: &quot;texto&quot;,
+  &quot;current_password&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-auth-account-create">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/account/create</code></div>
+<h4>Create Account</h4>
+<p class="desc">Create a new account.</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>email</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>password</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>invite</code></td><td class="t">string</td><td>não</td></tr>
+<tr><td><code>captcha</code></td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;email&quot;: &quot;texto&quot;,
+  &quot;password&quot;: &quot;texto&quot;,
+  &quot;invite&quot;: &quot;texto&quot;,
+  &quot;captcha&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-auth-account-delete">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/account/delete</code></div>
+<h4>Delete Account</h4>
+<p class="desc">Request to have an account deleted.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="put-auth-account-delete">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/auth/account/delete</code></div>
+<h4>Confirm Account Deletion</h4>
+<p class="desc">Schedule an account for deletion by confirming the received token.</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>token</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;token&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-auth-account-disable">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/account/disable</code></div>
+<h4>Disable Account</h4>
+<p class="desc">Disable an account.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="patch-auth-account-reset-password">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/auth/account/reset_password</code></div>
+<h4>Password Reset</h4>
+<p class="desc">Confirm password reset and change the password.</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>token</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>password</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>remove_sessions</code></td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;token&quot;: &quot;texto&quot;,
+  &quot;password&quot;: &quot;texto&quot;,
+  &quot;remove_sessions&quot;: true
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-auth-account-reset-password">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/account/reset_password</code></div>
+<h4>Send Password Reset</h4>
+<p class="desc">Send an email to reset account password.</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>email</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>captcha</code></td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;email&quot;: &quot;texto&quot;,
+  &quot;captcha&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-auth-account-reverify">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/account/reverify</code></div>
+<h4>Resend Verification</h4>
+<p class="desc">Resend account creation verification email.</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>email</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>captcha</code></td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;email&quot;: &quot;texto&quot;,
+  &quot;captcha&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-auth-account-verify-code">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/account/verify/{code}</code></div>
+<h4>Verify Email</h4>
+<p class="desc">Verify an email address.</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>code</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-auth-mfa">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/auth/mfa/</code></div>
+<h4>MFA Status</h4>
+<p class="desc">Fetch MFA status of an account.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-auth-mfa-methods">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/auth/mfa/methods</code></div>
+<h4>Get MFA Methods</h4>
+<p class="desc">Fetch available MFA methods.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-auth-mfa-recovery">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/auth/mfa/recovery</code></div>
+<h4>Generate Recovery Codes</h4>
+<p class="desc">Re-generate recovery codes for an account.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-auth-mfa-recovery">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/mfa/recovery</code></div>
+<h4>Fetch Recovery Codes</h4>
+<p class="desc">Fetch recovery codes for an account.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-auth-mfa-ticket">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/auth/mfa/ticket</code></div>
+<h4>Create MFA ticket</h4>
+<p class="desc">Create a new MFA ticket or validate an existing one.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="delete-auth-mfa-totp">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/auth/mfa/totp</code></div>
+<h4>Disable TOTP 2FA</h4>
+<p class="desc">Disable TOTP 2FA for an account.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-auth-mfa-totp">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/mfa/totp</code></div>
+<h4>Generate TOTP Secret</h4>
+<p class="desc">Generate a new secret for TOTP.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-auth-mfa-totp">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/auth/mfa/totp</code></div>
+<h4>Enable TOTP 2FA</h4>
+<p class="desc">Generate a new secret for TOTP.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="delete-auth-session-all">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/auth/session/all</code></div>
+<h4>Delete All Sessions</h4>
+<p class="desc">Delete all active sessions, optionally including current one.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>revoke_self</code></td><td>query</td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-auth-session-all">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/auth/session/all</code></div>
+<h4>Fetch Sessions</h4>
+<p class="desc">Fetch all sessions associated with this account.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-auth-session-login">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/session/login</code></div>
+<h4>Login</h4>
+<p class="desc">Login to an account.</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-auth-session-logout">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/auth/session/logout</code></div>
+<h4>Logout</h4>
+<p class="desc">Delete current session.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="delete-auth-session-id">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/auth/session/{id}</code></div>
+<h4>Revoke Session</h4>
+<p class="desc">Delete a specific active session.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="patch-auth-session-id">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/auth/session/{id}</code></div>
+<h4>Edit Session</h4>
+<p class="desc">Edit current session information.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>friendly_name</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;friendly_name&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-sync"><h3>Sincronização</h3><p class="sub">Configurações e estado de leitura.</p><article class="op" id="post-sync-settings-fetch">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/sync/settings/fetch</code></div>
+<h4>Fetch Settings</h4>
+<p class="desc">Fetch settings from server filtered by keys.
+
+This will return an object with the requested keys, each value is a tuple of `(timestamp, value)`, the value is the previously uploaded data.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>keys</code></td><td class="t">string[]</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;keys&quot;: []
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="post-sync-settings-set">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/sync/settings/set</code></div>
+<h4>Set Settings</h4>
+<p class="desc">Upload data to save to settings.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>timestamp</code></td><td>query</td><td class="t">integer</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-sync-unreads">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/sync/unreads</code></div>
+<h4>Fetch Unreads</h4>
+<p class="desc">Fetch information about unread state on channels.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-push"><h3>Notificações</h3><p class="sub">Registro para push.</p><article class="op" id="post-push-subscribe">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/push/subscribe</code></div>
+<h4>Push Subscribe</h4>
+<p class="desc">Create a new Web Push subscription.
+
+If an existing subscription exists on this session, it will be removed.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>endpoint</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>p256dh</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>auth</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;endpoint&quot;: &quot;texto&quot;,
+  &quot;p256dh&quot;: &quot;texto&quot;,
+  &quot;auth&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="post-push-unsubscribe">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/push/unsubscribe</code></div>
+<h4>Unsubscribe</h4>
+<p class="desc">Remove the Web Push subscription associated with the current session.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article></section>
+<section class="area" id="a-onboard"><h3>Integração</h3><p class="sub">Primeiro acesso da conta.</p><article class="op" id="post-onboard-complete">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/onboard/complete</code></div>
+<h4>Complete Onboarding</h4>
+<p class="desc">This sets a new username, completes onboarding and allows a user to start using Revolt.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>username</code></td><td class="t">string</td><td>sim</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;username&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="get-onboard-hello">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/onboard/hello</code></div>
+<h4>Check Onboarding Status</h4>
+<p class="desc">This will tell you whether the current account requires onboarding or whether you can continue to send requests as usual. You may skip calling this if you&#x27;re restoring an existing session.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-safety"><h3>Segurança</h3><p class="sub">Denúncias.</p><article class="op" id="post-safety-report">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/safety/report</code></div>
+<h4>Report Content</h4>
+<p class="desc">Report a piece of content to the moderation team.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>content</code></td><td class="t">any</td><td>sim</td></tr>
+<tr><td><code>additional_context</code></td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;content&quot;: &quot;…&quot;,
+  &quot;additional_context&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article></section>
+<section class="area" id="a-custom"><h3>Emojis</h3><p class="sub">Emojis personalizados.</p><article class="op" id="delete-custom-emoji-emoji-id">
+<div class="op-cab"><span class="m del">DELETE</span><code class="rota">/custom/emoji/{emoji_id}</code></div>
+<h4>Delete Emoji</h4>
+<p class="desc">Delete an emoji by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>emoji_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article>
+<article class="op" id="get-custom-emoji-emoji-id">
+<div class="op-cab"><span class="m get">GET</span><code class="rota">/custom/emoji/{emoji_id}</code></div>
+<h4>Fetch Emoji</h4>
+<p class="desc">Fetch an emoji by its id.</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>emoji_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+</tbody></table>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="patch-custom-emoji-emoji-id">
+<div class="op-cab"><span class="m patch">PATCH</span><code class="rota">/custom/emoji/{emoji_id}</code></div>
+<h4>Edit Emoji</h4>
+<p class="desc">Edit an emoji by its id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>emoji_id</code></td><td>path</td><td class="t">Id</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article>
+<article class="op" id="put-custom-emoji-emoji-id">
+<div class="op-cab"><span class="m patch">PUT</span><code class="rota">/custom/emoji/{emoji_id}</code></div>
+<h4>Create New Emoji</h4>
+<p class="desc">Create an emoji by its Autumn upload id.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<table class="tb"><thead><tr><th>Parâmetro</th><th>Onde</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>emoji_id</code></td><td>path</td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>X-Audit-Log-Reason</code></td><td>header</td><td class="t">string</td><td>não</td></tr>
+</tbody></table>
+<div class="rot">Corpo da requisição</div>
+<table class="tb"><thead><tr><th>Campo</th><th>Tipo</th><th>Obrigatório</th></tr></thead><tbody>
+<tr><td><code>name</code></td><td class="t">string</td><td>sim</td></tr>
+<tr><td><code>parent</code></td><td class="t">any</td><td>sim</td></tr>
+<tr><td><code>nsfw</code></td><td class="t">boolean</td><td>não</td></tr>
+</tbody></table>
+<pre><code>{
+  &quot;name&quot;: &quot;texto&quot;,
+  &quot;parent&quot;: &quot;…&quot;,
+  &quot;nsfw&quot;: true
+}</code></pre>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">200</span></p>
+</article></section>
+<section class="area" id="a-policy"><h3>Políticas</h3><p class="sub">Mudanças de termos.</p><article class="op" id="post-policy-acknowledge">
+<div class="op-cab"><span class="m post">POST</span><code class="rota">/policy/acknowledge</code></div>
+<h4>Acknowledge Policy Changes</h4>
+<p class="desc">Accept/acknowledge changes to platform policy.</p>
+<p class="auth">🔑 Requer autenticação</p>
+<div class="rot">Respostas</div><p class="cods"><span class="cod">204</span></p>
+</article></section>
+  </main>
+</div>
+
+<footer>
+  Dois Papo · <a href="https://doispapo.com">página inicial</a> ·
+  <a href="https://chat.doispapo.com">plataforma</a> ·
+  desenvolvido por <a href="https://kaueramone.dev" target="_blank"
+  rel="noopener">kaueramone.dev</a>
+</footer>
+
+</body>
+</html>
