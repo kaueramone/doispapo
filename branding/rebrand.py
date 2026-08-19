@@ -800,7 +800,8 @@ _base = os.path.dirname(os.path.abspath(__file__))
 _scripts = ""
 for _arq, _id in (("audio.js", "dp-audio"),
                   ("audio-ui.js", "dp-audio-ui"),
-                  ("voz.js", "dp-voz")):
+                  ("voz.js", "dp-voz"),
+                  ("discord.js", "dp-discord")):
     _cam = os.path.join(_base, _arq)
     if not os.path.exists(_cam) or _id in h:
         continue

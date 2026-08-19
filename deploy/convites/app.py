@@ -14,7 +14,7 @@ Quando alguém sem conta abre um convite de servidor, consultamos quem o
 criou e, havendo cota, emitimos um convite de conta em nome dessa pessoa.
 """
 import base64, hashlib, hmac, json, os, re, secrets, threading, time
-import urllib.request, urllib.parse
+import urllib.request, urllib.parse, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pymongo import MongoClient
 
@@ -155,6 +155,75 @@ def faixas_ao_vivo():
         return None
 
 
+
+# --------------------------------------------- template do Discord
+RE_TEMPLATE = re.compile(r"[A-Za-z0-9_-]{6,32}$")
+LIMITE_NOME = 32          # limite de nome de canal na nossa API
+TIPOS = {0: "Text", 2: "Voice", 5: "Text"}   # 5 = anúncios vira texto
+
+
+def corta(txt, n):
+    txt = (txt or "").strip()
+    return txt[:n] if len(txt) > n else txt
+
+
+def template_discord(codigo):
+    """Busca e normaliza um template público do Discord.
+
+    O navegador não consegue chamar a API do Discord (sem CORS), então o
+    proxy é obrigatório. O endpoint é público: não usa token nenhum, o que
+    evita o self-botting que ferramentas equivalentes exigem.
+    """
+    req = urllib.request.Request(
+        f"https://discord.com/api/v10/guilds/templates/{codigo}",
+        headers={"User-Agent": "DoisPapo/1.0"})
+    with urllib.request.urlopen(req, timeout=12) as r:
+        d = json.loads(r.read())
+
+    g = d.get("serialized_source_guild") or {}
+    canais = g.get("channels") or []
+
+    cats = {c["id"]: {"titulo": corta(c.get("name"), LIMITE_NOME),
+                      "posicao": c.get("position", 0), "canais": []}
+            for c in canais if c.get("type") == 4}
+    soltos = []
+
+    for c in sorted(canais, key=lambda x: (x.get("position", 0), x.get("id", 0))):
+        tipo = c.get("type")
+        if tipo == 4 or tipo not in TIPOS:
+            continue
+        item = {
+            "nome": corta(c.get("name"), LIMITE_NOME),
+            "nome_original": c.get("name"),
+            "tipo": TIPOS[tipo],
+            "descricao": corta(c.get("topic"), 1024) or None,
+            "nsfw": bool(c.get("nsfw")),
+        }
+        pai = c.get("parent_id")
+        (cats[pai]["canais"] if pai in cats else soltos).append(item)
+
+    ordenadas = sorted(cats.values(), key=lambda x: x["posicao"])
+    return {
+        "nome": d.get("name"),
+        "origem": g.get("name"),
+        "categorias": ordenadas,
+        "sem_categoria": soltos,
+        "cargos": [{"nome": corta(r.get("name"), LIMITE_NOME),
+                    "cor": r.get("color") or 0}
+                   for r in (g.get("roles") or [])
+                   if r.get("name") != "@everyone"],
+        "resumo": {
+            "categorias": len(ordenadas),
+            "texto": sum(1 for c in canais if c.get("type") in (0, 5)),
+            "voz": sum(1 for c in canais if c.get("type") == 2),
+            "cargos": max(0, len(g.get("roles") or []) - 1),
+            "truncados": sum(
+                1 for c in canais
+                if c.get("name") and len(c["name"]) > LIMITE_NOME),
+        },
+    }
+
+
 # ------------------------------------------------------- Turnstile
 TURNSTILE_SECRET = os.environ.get("TURNSTILE_SECRET", "")
 TURNSTILE_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
@@ -216,6 +285,29 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------------------------------------------------------------- GET
     def do_GET(self):
+        # Proxy do template do Discord. Público dos dois lados: o
+        # endpoint do Discord dispensa autenticação, e aqui não há
+        # segredo envolvido — só leitura de dado que já é público.
+        if self.path.startswith("/discord-template"):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            bruto = (q.get("codigo") or [""])[0].strip()
+            # aceita link completo ou só o código
+            bruto = bruto.rstrip("/").split("/")[-1].split("?")[0]
+            if not RE_TEMPLATE.match(bruto):
+                return self.responde(400, {"erro": "codigo_invalido",
+                    "mensagem": "Informe o link ou o código do template."})
+            try:
+                return self.responde(200, template_discord(bruto))
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    return self.responde(404, {"erro": "nao_encontrado",
+                        "mensagem": "Template não encontrado. Confira o link."})
+                return self.responde(502, {"erro": "discord",
+                    "mensagem": "O Discord recusou a consulta."})
+            except Exception:
+                return self.responde(502, {"erro": "indisponivel",
+                    "mensagem": "Não foi possível consultar o Discord agora."})
+
         if self.path == "/saude":
             return self.responde(200, {"ok": True})
 
