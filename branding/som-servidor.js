@@ -50,9 +50,40 @@
     return _fetch.apply(this, arguments);
   };
 
-  function servidorAtual() {
+  function servidorNaTela() {
     var m = location.pathname.match(/\/server\/([A-Z0-9]+)/i);
     return m ? m[1] : null;
+  }
+
+  /* O som pertence ao servidor DA CHAMADA, não ao que está na tela.
+     Alguém numa chamada do servidor X que abre o servidor Y enquanto
+     conversa continua ouvindo os sons do X — que é onde a conversa
+     está acontecendo, e o que todo mundo na chamada ouve junto.
+
+     O nome da sala do LiveKit é o id do canal; o canal diz a que
+     servidor pertence. */
+  var canalServidor = {};      // canal -> servidor (ou null)
+  var buscandoCanal = {};
+
+  function servidorDaChamada() {
+    var canal = null;
+    try { canal = window.dpSalaNome && window.dpSalaNome(); } catch (e) {}
+    if (!canal) return null;
+    if (canalServidor[canal] !== undefined) return canalServidor[canal];
+    if (!buscandoCanal[canal] && token) {
+      buscandoCanal[canal] = true;
+      _fetch("/api/channels/" + canal,
+             {headers: {"X-Session-Token": token}})
+        .then(function (r) { return r.json(); })
+        .then(function (c) { canalServidor[canal] = (c && c.server) || null; })
+        .catch(function () { canalServidor[canal] = null; })
+        .then(function () { delete buscandoCanal[canal]; });
+    }
+    return null;
+  }
+
+  function servidorAtual() {
+    return servidorDaChamada() || servidorNaTela();
   }
 
   function buscar(sid) {
@@ -104,6 +135,8 @@
   window.dpSom = function () {
     var sid = servidorAtual();
     return {servidor: sid,
+            deOndeVeio: servidorDaChamada() ? "chamada" : "tela",
+            canalDaChamada: (window.dpSalaNome && window.dpSalaNome()) || null,
             cacheCarregado: sid ? cache[sid] !== undefined : false,
             personalizados: sid && cache[sid] ? Object.keys(cache[sid]) : [],
             ultimos: historico.slice().reverse()};

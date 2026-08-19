@@ -281,6 +281,19 @@
     } catch (e) {}
   };
 
+  /* Nome da sala conectada — é o id do canal da chamada. Quem usa é o
+     som por servidor: sem isso ele só sabe qual servidor está na tela,
+     e tocaria o som errado para quem navega durante a chamada. */
+  window.dpSalaNome = function () {
+    for (var i = 0; i < salas.length; i++) {
+      try {
+        var s = salas[i];
+        if (s && s.name && (s.state === "connected" || !s.state)) return s.name;
+      } catch (e) {}
+    }
+    return null;
+  };
+
   window.dpTela = function () {
     return {salas: salas.length, publicacoes: Object.keys(publicacoes),
             assistindo: Object.keys(assistindo),
