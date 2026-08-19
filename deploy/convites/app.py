@@ -239,6 +239,12 @@ SONS_VALIDOS = ("message", "deafen", "undeafen", "mute",
                 "streamViewerJoin", "streamViewerLeave")
 
 
+# 512 KB em base64 ocupam ~700 KB, mais os outros campos do JSON. O
+# teto padrao de corpo (8 KB) engoliria todo upload real devolvendo um
+# objeto vazio, e o erro apareceria como "som desconhecido".
+LIMITE_CORPO_SOM = 1024 * 1024
+
+
 def chave_som(servidor, som):
     return "%s:%s" % (servidor, som)
 TIPOS_SOM = {"audio/mpeg": "mp3", "audio/ogg": "ogg", "audio/wav": "wav",
@@ -303,10 +309,18 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(dados)
 
-    def corpo_json(self):
+    def corpo_json(self, limite=8192):
+        """Le e decodifica o corpo, ate `limite` bytes.
+
+        O teto padrao e pequeno de proposito: quase todo endpoint aqui
+        recebe um punhado de campos, e aceitar corpos grandes sem motivo
+        e superficie de abuso. Quem precisa de mais - o envio de som -
+        passa o proprio limite e confere o Content-Length antes, para o
+        excesso virar 413 em vez de um corpo vazio silencioso.
+        """
         try:
             n = int(self.headers.get("Content-Length", "0"))
-            if n <= 0 or n > 8192:
+            if n <= 0 or n > limite:
                 return {}
             return json.loads(self.rfile.read(n) or b"{}")
         except Exception:
@@ -471,6 +485,15 @@ class Handler(BaseHTTPRequestHandler):
         # Enviar ou remover o som do servidor. Exige ser o dono.
         if self.path.startswith("/sons/"):
             sid = self.path.strip("/").split("/")[1]
+            # Cada ramo do do_POST le o proprio corpo: o `c` do ramo do
+            # webhook nao existe aqui. Ler ANTES de responder 401/403
+            # tambem evita fechar a conexao com o corpo pela metade, o
+            # que o navegador mostra como erro de rede em vez do status.
+            tam = int(self.headers.get("Content-Length", "0") or 0)
+            if tam > LIMITE_CORPO_SOM:
+                return self.responde(413, {"erro": "muito_grande",
+                    "mensagem": "O arquivo precisa ter menos de 512 KB."})
+            c = self.corpo_json(LIMITE_CORPO_SOM)
             uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
             if not uid:
                 return self.responde(401, {"erro": "sessao_invalida"})
