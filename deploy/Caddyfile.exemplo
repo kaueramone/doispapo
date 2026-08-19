@@ -112,8 +112,8 @@ doispapo.com, www.doispapo.com {
 		Referrer-Policy strict-origin-when-cross-origin
 	}
 	# assets imutáveis podem cachear forte; o HTML não
-	@estatico path *.png *.ico *.svg *.woff2
-	header @estatico Cache-Control "public, max-age=604800"
+	@estatico path *.png *.ico *.svg *.woff2 *.jpg *.mp4 *.webm
+	header @estatico Cache-Control "public, max-age=2592000, immutable"
 	header /index.html Cache-Control "no-cache"
 }
 

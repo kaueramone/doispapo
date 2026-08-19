@@ -38,3 +38,4 @@ node_modules/
 # ==== SO ====
 .DS_Store
 Thumbs.db
+assets/video/

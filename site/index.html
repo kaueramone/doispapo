@@ -34,13 +34,12 @@
     filter:blur(30px);pointer-events:none}
   /* vídeo de fundo do hero */
   .video-fundo{position:absolute;inset:0;overflow:hidden;pointer-events:none;
-    z-index:0}
+    z-index:0;background:#0b1119}
   /* Escala de 1.35 além do necessário: joga a faixa de controles do
      player para fora da área visível, caso ela pisque. */
-  .video-fundo iframe{position:absolute;top:50%;left:50%;
-    width:max(100vw,177.78vh);height:max(100vh,56.25vw);
-    transform:translate(-50%,-50%) scale(1.35);border:0;
-    pointer-events:none}
+  .video-fundo video{position:absolute;top:50%;left:50%;
+    min-width:100%;min-height:100%;width:auto;height:auto;
+    transform:translate(-50%,-50%);object-fit:cover;pointer-events:none}
   /* véu na cor do fundo: deixa o vídeo em ~30% de visibilidade */
   .video-fundo::after{content:"";position:absolute;inset:0;
     background:linear-gradient(180deg,
@@ -177,7 +176,12 @@
 
 <header>
   <div class="video-fundo" aria-hidden="true">
-    <div id="video-hero"></div>
+    <video id="video-hero" autoplay muted loop playsinline preload="auto"
+           poster="/hero-poster.jpg" disablepictureinpicture
+           disableremoteplayback tabindex="-1">
+      <source src="/hero.webm" type="video/webm">
+      <source src="/hero.mp4" type="video/mp4">
+    </video>
   </div>
   <div class="wrap">
     <img src="/logo-color.png" alt="Dois Papo">
@@ -352,49 +356,27 @@
 })();
 </script>
 <script>
-/* Fundo em vídeo do hero.
-   Não usamos loop=1: esse parâmetro RECARREGA o player a cada volta, e
-   na reinicialização a interface do YouTube (pausa, legendas) reaparece
-   por um instante. Com a API do player damos seekTo(0) antes do fim,
-   então o vídeo nunca termina e nada é recarregado. */
+/* Fundo em vídeo do hero. Arquivo próprio, servido pela VPS: o laço do
+   elemento <video> emenda fim e começo sem recarregar nada. Não existe
+   moldura, botão central nem piscada — aqueles problemas só existiam
+   por o vídeo vir de um player de terceiros.
+   Quem pede menos movimento no sistema recebe apenas o pôster. */
 (function(){
-  var ID = "cuL5gwokePA", player, alvo = document.getElementById("video-hero");
-  if(!alvo) return;
-
-  window.onYouTubeIframeAPIReady = function(){
-    player = new YT.Player("video-hero", {
-      videoId: ID,
-      host: "https://www.youtube-nocookie.com",
-      playerVars: {
-        autoplay: 1, mute: 1, controls: 0, disablekb: 1, fs: 0,
-        modestbranding: 1, rel: 0, playsinline: 1, iv_load_policy: 3
-      },
-      events: {
-        onReady: function(e){
-          e.target.mute();
-          e.target.playVideo();
-          // reinicia um pouco antes do fim, sem deixar o player concluir
-          setInterval(function(){
-            try{
-              var d = player.getDuration(), t = player.getCurrentTime();
-              if(d > 0 && d - t < 0.4) player.seekTo(0, true);
-            }catch(err){}
-          }, 250);
-        },
-        onStateChange: function(e){
-          // rede de segurança, caso o vídeo termine mesmo assim
-          if(e.data === YT.PlayerState.ENDED){
-            player.seekTo(0, true);
-            player.playVideo();
-          }
-        }
-      }
+  var v = document.getElementById("video-hero");
+  if(!v) return;
+  if(window.matchMedia &&
+     window.matchMedia("(prefers-reduced-motion: reduce)").matches){
+    v.removeAttribute("autoplay");
+    v.pause();
+    return;
+  }
+  var tenta = v.play();
+  if(tenta && tenta.catch) tenta.catch(function(){
+    // alguns navegadores só liberam a reprodução após interação
+    document.addEventListener("click", function uma(){
+      v.play(); document.removeEventListener("click", uma);
     });
-  };
-
-  var tag = document.createElement("script");
-  tag.src = "https://www.youtube.com/iframe_api";
-  document.head.appendChild(tag);
+  });
 })();
 </script>
 </body>
