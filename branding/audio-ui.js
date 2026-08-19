@@ -122,13 +122,11 @@
   var ANCORAS = [
     /supress[ãa]o de ru[íi]do/i,
     /processamento de voz/i,
-    /sele[çc]ionar entrada de [áa]udio/i,
-    /voz e v[íi]deo/i
+    /sele[çc]ionar entrada de [áa]udio/i
   ];
-  var tentativas = 0;
+  var tentativas = 0, ultimoMotivo = "ainda não tentou";
 
-  function procurar() {
-    if (document.getElementById("dp-mic")) return;
+  function porTexto() {
     var alvos = document.querySelectorAll("div,section,label,span,h1,h2,h3,h4");
     for (var a = 0; a < ANCORAS.length; a++) {
       for (var i = 0; i < alvos.length; i++) {
@@ -139,16 +137,64 @@
           if (bloco.parentElement.children.length > 1) break;
           bloco = bloco.parentElement;
         }
-        if (bloco && bloco.parentNode) { montar(bloco); return; }
+        if (bloco && bloco.parentNode) return bloco;
       }
     }
-    // Não achar a âncora deixaria o painel invisível sem explicação.
-    if (/^\/settings/.test(location.pathname) && ++tentativas === 40)
-      console.warn("[Dois Papo] painel do microfone: nenhuma âncora " +
-        "encontrada nas configurações. Rode window.dpAudio para conferir " +
-        "se o processamento está ativo.");
+    return null;
   }
 
+  // Âncora de reserva: o controle de volume é um input range e está
+  // comprovadamente na mesma tela. Mais confiável que procurar texto,
+  // que muda conforme tradução e versão.
+  function porControle() {
+    var faixas = document.querySelectorAll('input[type="range"]');
+    for (var i = 0; i < faixas.length; i++) {
+      var f = faixas[i];
+      if (f.closest("#dp-mic")) continue;
+      var bloco = f;
+      for (var k = 0; k < 4 && bloco.parentElement; k++) {
+        bloco = bloco.parentElement;
+        if (bloco.parentElement &&
+            bloco.parentElement.children.length > 1) break;
+      }
+      if (bloco && bloco.parentNode) return bloco;
+    }
+    return null;
+  }
+
+  function procurar() {
+    if (document.getElementById("dp-mic")) return;
+    if (!/^\/settings/.test(location.pathname)) {
+      ultimoMotivo = "fora das configurações";
+      return;
+    }
+    var alvo = porTexto();
+    if (alvo) { ultimoMotivo = "ancorado por texto"; montar(alvo); return; }
+    alvo = porControle();
+    if (alvo) { ultimoMotivo = "ancorado no controle de volume";
+                montar(alvo); return; }
+    ultimoMotivo = "nenhuma âncora encontrada nesta tela";
+    if (++tentativas === 40)
+      console.warn("[Dois Papo] painel do microfone: " + ultimoMotivo +
+        ". Rode dpDiag() para detalhes.");
+  }
+
+  // Diagnóstico: evita ficar adivinhando por que o painel não apareceu.
+  window.dpDiag = function () {
+    var d = {
+      processamentoAtivo: !!window.dpAudio,
+      painelMontado: !!document.getElementById("dp-mic"),
+      rota: location.pathname,
+      motivo: ultimoMotivo,
+      controlesRange: document.querySelectorAll('input[type="range"]').length,
+      contextoAudio: window.dpAudio && window.dpAudio.estado.ctx
+                     ? "ativo" : "inativo",
+      nivel: window.dpAudio ? window.dpAudio.estado.nivel : null,
+      config: window.dpAudio ? window.dpAudio.cfg : null
+    };
+    console.table(d);
+    return d;
+  };
 
   new MutationObserver(procurar).observe(document.documentElement,
     { childList: true, subtree: true });
