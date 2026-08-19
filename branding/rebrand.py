@@ -743,16 +743,21 @@ INJECAO = (INJECAO.replace("__SITE__", SITE).replace("__AUTOR__", AUTOR)
 # Script inline no fim do body roda durante a análise do HTML; módulos
 # são adiados, então a ordem fica garantida.
 _base = os.path.dirname(os.path.abspath(__file__))
-for _arq, _id in (("audio.js", "dp-audio"), ("audio-ui.js", "dp-audio-ui"),
+# ORDEM IMPORTA: audio.js define window.dpAudio, do qual audio-ui.js
+# depende. Montar a lista e prefixar UMA vez preserva a ordem; prefixar
+# dentro do laço a inverteria, e a interface sairia na primeira linha por
+# não encontrar o módulo ainda.
+_scripts = ""
+for _arq, _id in (("audio.js", "dp-audio"),
+                  ("audio-ui.js", "dp-audio-ui"),
                   ("voz.js", "dp-voz")):
     _cam = os.path.join(_base, _arq)
-    if not os.path.exists(_cam):
-        continue
-    if _id in h:
+    if not os.path.exists(_cam) or _id in h:
         continue
     _js = open(_cam, encoding="utf-8").read()
-    INJECAO = f'<script id="{_id}">\n{_js}\n</script>\n' + INJECAO
+    _scripts += f'<script id="{_id}">\n{_js}\n</script>\n'
     conta("audio", 1)
+INJECAO = _scripts + INJECAO
 
 if "dp-marca" not in h:
     h = h.replace("</body>", INJECAO + "\n</body>")

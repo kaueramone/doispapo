@@ -164,12 +164,14 @@
 
   function procurar() {
     if (document.getElementById("dp-mic")) return;
-    if (!/^\/settings/.test(location.pathname)) {
-      ultimoMotivo = "fora das configurações";
-      return;
-    }
+    // Sem guarda de rota: as configurações abrem como modal e a URL
+    // continua a do canal. A busca por texto é específica o bastante.
     var alvo = porTexto();
     if (alvo) { ultimoMotivo = "ancorado por texto"; montar(alvo); return; }
+    if (!/^\/settings/.test(location.pathname)) {
+      ultimoMotivo = "rótulo não encontrado e fora de /settings";
+      return;
+    }
     alvo = porControle();
     if (alvo) { ultimoMotivo = "ancorado no controle de volume";
                 montar(alvo); return; }
