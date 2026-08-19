@@ -43,8 +43,17 @@ echo "  bundle passou no node --check"
 # um build feito antes da tag sai com o numero anterior. Barrar aqui evita
 # publicar uma versao mentindo sobre si mesma.
 if [ -n "${VERSAO_ESPERADA:-}" ]; then
-  BAKED=$(grep -o 'const dW="[0-9.]*"' dist-nova/assets/index-*.js | head -1 |
-          grep -o '[0-9.]*' || true)
+  # Dois `grep -o` encadeados picam a linha minificada em pedacos e
+  # devolvem lixo; extrair o grupo de uma vez e o unico jeito confiavel.
+  BAKED=$(python3 - <<'EOF'
+import re, glob
+for f in sorted(glob.glob('dist-nova/assets/index-*.js')):
+    m = re.search(r'const dW="([0-9][0-9.]*)"',
+                  open(f, encoding='utf-8', errors='replace').read())
+    if m:
+        print(m.group(1)); break
+EOF
+)
   if [ "$BAKED" != "$VERSAO_ESPERADA" ]; then
     echo "!! build carimbado com '${BAKED:-nada}', esperado '$VERSAO_ESPERADA'"
     echo "   nada foi publicado; a producao segue intacta"
