@@ -1015,8 +1015,13 @@ conta("precache-revisoes", n_rev)
 # nao mudam entre rebuilds, entao hashear a listagem manteria o mesmo nome
 # de cache para sempre e o navegador nunca buscaria a versao nova.
 _h = hashlib.md5()
+# Inclui também os sons e os ícones: trocar o conteúdo de um asset sem
+# alterar o identificador deixaria os navegadores com a versão antiga em
+# cache, sem qualquer sinal de que há coisa nova.
 for _f in sorted(glob.glob(os.path.join(DST, "assets", "index-*.js")) +
                  glob.glob(os.path.join(DST, "assets", "messages-*.js")) +
+                 glob.glob(os.path.join(DST, "assets", "sounds", "*.ogg")) +
+                 glob.glob(os.path.join(DST, "assets", "web", "*")) +
                  [os.path.join(DST, "index.html")]):
     _h.update(md5(_f).encode())
 build_id = _h.hexdigest()[:10]
