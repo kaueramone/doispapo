@@ -165,6 +165,32 @@ for f in glob.glob(os.path.join(DST, "assets", "*.js")):
         open(f, "w", encoding="utf-8").write(s_)
 
 
+# ------------------------------------ 1i. atribuicao do provedor de GIF
+# Os termos do Giphy exigem atribuicao visivel onde os GIFs aparecem.
+# Nao e cortesia: e condicao de uso da API.
+#
+# O seletor ja tem um rodape - herdado do provedor do upstream, que
+# convidava a enviar GIFs para o gifbox.me. Reaproveitamos esse espaco
+# em vez de inventar um elemento novo: menos remendo, e o texto cai
+# exatamente onde o usuario ja olha.
+GIF_TEXTOS = [
+    ('c(b,{id:"H6eQWV"})', '"Powered by GIPHY"'),
+    ('c(b,{id:"9gXZi5"})', '"Abrir o GIPHY"'),
+    ('c(b,{id:"jSklQb"})', '"Nenhum GIF encontrado"'),
+    ('c(b,{id:"CVvh2T"})', '"Tente outra busca."'),
+    ('Y5="https://gifbox.me/upload"', 'Y5="https://giphy.com"'),
+]
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+    for de, para in GIF_TEXTOS:
+        if de in s_:
+            conta("gif-atribuicao", s_.count(de))
+            s_ = s_.replace(de, para)
+    if s_ != o_:
+        open(f, "w", encoding="utf-8").write(s_)
+
+
 # ------------------------- 1h. marcador de quem esta falando no grid
 # O grid da chamada tinha o pior tipo de deteccao: varrer a pagina atras
 # de elementos cujo texto e igual ao nome do participante. Isso acendia

@@ -177,6 +177,12 @@ if bundle:
 if bundle and "static.stoat.chat" in bundle:
     erros.append("o bundle ainda busca recurso em static.stoat.chat")
 
+# --------------------------- 2f. atribuicao do provedor de GIF presente
+# Condicao de uso da API do Giphy, nao enfeite: se o remendo nao pegar,
+# ficamos usando o servico deles fora dos termos.
+if bundle and "Powered by GIPHY" not in bundle:
+    erros.append("a atribuicao 'Powered by GIPHY' nao entrou no bundle")
+
 # ----------------------------------------- 3. sobras da marca do upstream
 resto = 0
 for raiz, _, arqs in os.walk(os.path.join(DST, "assets")):
