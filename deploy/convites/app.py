@@ -13,7 +13,7 @@ Ponte entre os dois tipos de convite do produto:
 Quando alguém sem conta abre um convite de servidor, consultamos quem o
 criou e, havendo cota, emitimos um convite de conta em nome dessa pessoa.
 """
-import json, os, re, secrets, threading, time
+import base64, hashlib, hmac, json, os, re, secrets, threading, time
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pymongo import MongoClient
@@ -79,6 +79,80 @@ def emitir(uid, origem=None):
             doc["origem"] = origem
         db.account_invites.insert_one(doc)
         return codigo, saldo(uid)
+
+
+
+# ------------------------------------------------- LiveKit: estado real
+LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "http://livekit:7880")
+LIVEKIT_KEY = os.environ.get("LIVEKIT_KEY", "")
+LIVEKIT_SECRET = os.environ.get("LIVEKIT_SECRET", "")
+_cache_faixas = {"em": 0, "dados": {}}
+
+
+def _b64(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def _token(sala=None):
+    """JWT HS256 no formato aceito pelo LiveKit."""
+    agora = int(time.time())
+    video = {"roomList": True}
+    if sala:
+        video = {"roomAdmin": True, "room": sala}
+    cab = _b64(json.dumps({"alg": "HS256", "typ": "JWT"},
+                          separators=(",", ":")).encode())
+    corpo = _b64(json.dumps({"iss": LIVEKIT_KEY, "nbf": agora - 5,
+                             "exp": agora + 60, "video": video},
+                            separators=(",", ":")).encode())
+    assin = _b64(hmac.new(LIVEKIT_SECRET.encode(),
+                          f"{cab}.{corpo}".encode(), hashlib.sha256).digest())
+    return f"{cab}.{corpo}.{assin}"
+
+
+def _chamar(metodo, corpo, sala=None):
+    req = urllib.request.Request(
+        f"{LIVEKIT_URL}/twirp/livekit.RoomService/{metodo}",
+        data=json.dumps(corpo).encode(),
+        headers={"Content-Type": "application/json",
+                 "Authorization": "Bearer " + _token(sala)})
+    with urllib.request.urlopen(req, timeout=6) as r:
+        return json.loads(r.read() or b"{}")
+
+
+def faixas_ao_vivo():
+    """Mapa faixa -> participante consultando o LiveKit.
+
+    Montar esse mapa só por webhooks perde tudo que aconteceu antes de o
+    serviço começar a escutar — foi o que deixou os participantes já
+    conectados sem luz. Aqui o estado vem da fonte, a qualquer momento.
+    """
+    if not LIVEKIT_KEY or not LIVEKIT_SECRET:
+        return None
+    if time.time() - _cache_faixas["em"] < 5:
+        return _cache_faixas["dados"]
+    try:
+        salas = _chamar("ListRooms", {}).get("rooms") or []
+        mapa = {}
+        for s in salas:
+            nome = s.get("name")
+            if not nome:
+                continue
+            ps = _chamar("ListParticipants", {"room": nome},
+                         sala=nome).get("participants") or []
+            for p in ps:
+                for t in (p.get("tracks") or []):
+                    sid = t.get("sid")
+                    if not sid:
+                        continue
+                    mapa[sid] = {"participante": p.get("identity"),
+                                 "fonte": t.get("source") or t.get("type"),
+                                 "sala": nome,
+                                 "mudo": bool(t.get("muted"))}
+        _cache_faixas.update({"em": time.time(), "dados": mapa})
+        return mapa
+    except Exception as e:
+        print(f"livekit: falha ao consultar estado ({e})", flush=True)
+        return None
 
 
 # ------------------------------------------------------- Turnstile
@@ -148,10 +222,13 @@ class Handler(BaseHTTPRequestHandler):
         # Mapa faixa -> participante, para o cliente saber de quem é
         # cada fluxo de áudio que ele está reproduzindo.
         if self.path == "/faixas":
+            vivo = faixas_ao_vivo()
+            if vivo is not None:
+                return self.responde(200, {"faixas": vivo, "origem": "livekit"})
             itens = {d["_id"]: {"participante": d.get("participante"),
                                 "fonte": d.get("fonte")}
                      for d in db.faixas.find()}
-            return self.responde(200, {"faixas": itens})
+            return self.responde(200, {"faixas": itens, "origem": "eventos"})
 
         # Chamadas em andamento, para o contador de duração.
         if self.path == "/chamadas":

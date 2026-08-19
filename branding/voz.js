@@ -129,18 +129,34 @@
         bloco.classList.remove(CLASSES_FALA[i]);
   }
 
-  function blocoDe(nome) {
-    if (!nome) return null;
-    var spans = document.querySelectorAll("span");
+  /* O mesmo participante aparece em dois lugares: na lista lateral do
+     canal e no grid central. Ambos precisam acender.
+
+     O mapa é remontado a cada 500 ms, não a cada ciclo de 40 ms: varrer
+     todos os spans 25 vezes por segundo, uma vez por participante, é
+     justamente o tipo de custo que travou a interface antes. Blocos não
+     surgem e somem nesse ritmo. */
+  var mapaBlocos = {}, mapaEm = 0;
+
+  function atualizarMapaBlocos() {
+    var agora = Date.now();
+    if (agora - mapaEm < 500) return;
+    mapaEm = agora;
+    var novo = {}, spans = document.querySelectorAll("span");
     for (var i = 0; i < spans.length; i++) {
-      if ((spans[i].textContent || "").trim() !== nome) continue;
+      var t = (spans[i].textContent || "").trim();
+      if (!t || t.length > 40) continue;
       var bloco = spans[i].parentElement;
-      // o bloco do participante contém o avatar em <svg>
-      if (bloco && bloco.querySelector("svg")) return bloco;
+      if (!bloco) continue;
+      // o bloco do participante traz o avatar num <svg> irmão
+      if (!bloco.querySelector("svg")) continue;
+      (novo[t] = novo[t] || []).push(bloco);
     }
-    return null;
+    mapaBlocos = novo;
   }
-  function meuBloco() { return blocoDe(meuNome); }
+
+  function blocosDe(nome) { return (nome && mapaBlocos[nome]) || []; }
+  function meusBlocos() { return blocosDe(meuNome); }
 
   /* ---- de quem é cada fluxo: o cliente só vê o id da faixa; quem sabe
      o dono é o servidor, que recebe isso pelos webhooks do LiveKit ---- */
@@ -180,10 +196,12 @@
       if (!info || (info.fonte || "").toUpperCase() !== "MICROPHONE") continue;
       var nome = nomeDe(info.participante);
       if (!nome) continue;
-      var bloco = blocoDe(nome);
-      if (!bloco) continue;
-      limparNativa(bloco);
-      bloco.classList.toggle("dp-falando", r.nivel >= LIMIAR_REMOTO);
+      var blocos = blocosDe(nome);
+      var falando = r.nivel >= LIMIAR_REMOTO;
+      for (var b = 0; b < blocos.length; b++) {
+        limparNativa(blocos[b]);
+        blocos[b].classList.toggle("dp-falando", falando);
+      }
     }
   }
 
@@ -198,10 +216,11 @@
     }
     // independe do portão estar ligado: a luz indica nível de voz
     var falando = a.estado.nivel >= a.cfg.limiar;
-    var bloco = meuBloco();
-    if (!bloco) return;
-    limparNativa(bloco);
-    bloco.classList.toggle("dp-falando", falando);
+    var blocos = meusBlocos();
+    for (var i = 0; i < blocos.length; i++) {
+      limparNativa(blocos[i]);
+      blocos[i].classList.toggle("dp-falando", falando);
+    }
   }
 
   /* ------------------------------------------------------ entrar direto */
@@ -310,7 +329,11 @@
   function tick() { entrarDireto(); pintarContadores(); }
   setInterval(tick, 1000);
   // a luz precisa de cadência bem mais rápida que o resto
-  setInterval(function () { luzDeFala(); luzDosOutros(); }, 40);
+  setInterval(function () {
+    atualizarMapaBlocos();
+    luzDeFala();
+    luzDosOutros();
+  }, 40);
   // Amortecido: sem isso o observador dispara uma varredura de botões por
   // mutação, e abrir um servidor gera centenas delas de uma vez. Foi esse
   // padrão que travou a interface na tentativa anterior.

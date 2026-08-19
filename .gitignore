@@ -40,3 +40,4 @@ node_modules/
 Thumbs.db
 assets/video/
 turnstile.env
+livekit-api.env
