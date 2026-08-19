@@ -7,7 +7,7 @@ Saida   : dist-patched, pronto para bind-mount em /app/dist
 
 Idempotente: rodar de novo sobre a saida nao causa dano.
 """
-import glob, json, os, re, shutil, sys
+import collections, glob, json, os, re, shutil, sys
 
 SRC   = sys.argv[1] if len(sys.argv) > 1 else "dist-orig"
 DST   = sys.argv[2] if len(sys.argv) > 2 else "dist-patched"
@@ -203,6 +203,73 @@ m["description"] = "Plataforma de comunicacao — texto, voz e compartilhamento 
 m["lang"] = "pt-BR"
 json.dump(m, open(mf, "w", encoding="utf-8"), ensure_ascii=False, separators=(",", ":"))
 conta("manifest", 3)
+
+# --------------------- 2a. sons embutidos como data URI no bundle
+# Descoberta importante: o app NÃO toca os arquivos de assets/sounds/.
+# O empacotador embutiu os marcadores silenciosos — pequenos — como
+# data:audio/ogg;base64 dentro do próprio bundle, e deixou só o som de
+# mensagem, maior, como arquivo separado. Por isso apenas ele funcionava,
+# e por isso trocar a pasta sounds/ não surtia efeito algum.
+#
+# Os 13 data URIs são idênticos entre si, então a troca precisa ser por
+# nome de variável, obtido do switch do playSound.
+import base64 as _b64
+
+_MAPA_SONS = {
+    "deafen": "deafen.ogg",
+    "undeafen": "undeafen.ogg",
+    "mute": "mute.ogg",
+    "unmute": "unmute.ogg",
+    "ringtoneIncoming": "ringtone_incoming.ogg",
+    "ringtoneOutgoing": "ringtone_outgoing.ogg",
+    "streamStart": "stream_start.ogg",
+    "streamEnd": "stream_end.ogg",
+    "streamViewerJoin": "stream_viewer_join.ogg",
+    "streamViewerLeave": "stream_viewer_leave.ogg",
+    "userJoinVoice": "user_join_voice.ogg",
+    "userLeaveVoice": "user_leave_voice.ogg",
+    "userMoved": "user_moved.ogg",
+}
+
+def _uri(nome):
+    cam = os.path.join(ASSETS, "sons", nome)
+    if not os.path.exists(cam):
+        return None
+    return "data:audio/ogg;base64," + _b64.b64encode(open(cam, "rb").read()).decode()
+
+for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+    s_ = open(f, encoding="utf-8", errors="replace").read()
+    o_ = s_
+
+    pares = re.findall(r'case"([a-zA-Z]+)":\{this\.node=new Audio\((\w+)\)', s_)
+    for nome, var in pares:
+        arq = _MAPA_SONS.get(nome)
+        if not arq:
+            continue                      # "message" já é arquivo real
+        novo_uri = _uri(arq)
+        if not novo_uri:
+            continue
+        pad = re.compile(r'\b' + re.escape(var) +
+                         r'="data:audio/ogg;base64,[A-Za-z0-9+/=]+"')
+        s2, n = pad.subn(lambda m: f'{var}="{novo_uri}"', s_, count=1)
+        if n:
+            s_ = s2
+            conta("sons-embutidos", 1)
+
+    # Sobram cópias do mesmo silêncio em variáveis que o switch não nomeia.
+    # Sem como saber a qual evento pertencem, recebem um aviso neutro —
+    # melhor um som discreto do que silêncio inexplicável.
+    generico = _uri("user_moved.ogg")
+    if generico:
+        restantes = re.findall(r'"data:audio/ogg;base64,[A-Za-z0-9+/=]{2000,}"', s_)
+        if restantes:
+            alvo = collections.Counter(restantes).most_common(1)[0][0]
+            n = s_.count(alvo)
+            s_ = s_.replace(alvo, '"%s"' % generico)
+            conta("sons-genericos", n)
+
+    if s_ != o_:
+        open(f, "w", encoding="utf-8").write(s_)
 
 # ------------------------------- 2b. sons de notificação
 # O upstream distribui marcadores silenciosos: 13 dos 14 arquivos têm o
