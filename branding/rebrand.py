@@ -826,6 +826,25 @@ INJECAO = """
       .addEventListener("click",function(){ limparERecarregar(nova); });
   }
 
+  /* Autocura: se um HTML truncado for guardado em cache, a página passa
+     a mostrar o próprio código como texto e nenhuma correção no servidor
+     alcança o navegador — o cache não é descartado porque o identificador
+     de build não mudou. Detectamos a falta do marcador final e limpamos
+     uma vez. */
+  function paginaIntegra(){
+    return !!document.getElementById("dp-marca-js");
+  }
+  function verificarIntegridade(){
+    if(paginaIntegra())return;
+    var chave="dp_recuperado";
+    try{
+      if(sessionStorage.getItem(chave))return;   // evita laço
+      sessionStorage.setItem(chave,"1");
+    }catch(e){}
+    console.warn("[Dois Papo] página incompleta em cache; limpando.");
+    limparERecarregar("integridade");
+  }
+
   function checarVersao(inicial){
     fetch("/versao.json",{cache:"no-store"})
       .then(function(r){ return r.json(); })
@@ -841,6 +860,8 @@ INJECAO = """
   }
 
   checarVersao(true);
+  // roda depois da análise do HTML, quando o marcador final já existiria
+  setTimeout(verificarIntegridade, 1500);
   setInterval(function(){ checarVersao(false); }, 300000);
 
   function tick(){ assinatura(); loginLogo(); preencheConvite();
