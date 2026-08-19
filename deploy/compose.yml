@@ -1,0 +1,193 @@
+# Dois Papo — stack de comunicação self-hosted
+# Sobe com: docker compose up -d
+#
+# Camadas:
+#   dados      -> mongo, valkey, rabbitmq, minio   (SEM porta pública)
+#   aplicação  -> api, events, autumn, january, gifbox, crond, pushd
+#   mídia      -> livekit, voice-ingress            (RTC, tráfego direto)
+#   borda      -> caddy, web                        (única porta pública HTTP)
+
+name: doispapo
+
+# ---------------------------------------------------------------- ancoras
+x-config: &config
+  env_file: secrets.env
+  restart: always
+  volumes:
+    - type: bind
+      source: ./Revolt.toml     # nome fixo: é o caminho que os binários leem
+      target: /Revolt.toml
+
+services:
+
+  # ============================================================ CAMADA DADOS
+  # Nenhum destes declara `ports:`. Ficam só na rede interna do compose.
+  # NUNCA adicione porta aqui — um Mongo aberto é comprometido em minutos.
+
+  database:
+    image: docker.io/mongo
+    restart: always
+    volumes:
+      - ./data/db:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: valkey/valkey:9-alpine
+    restart: always
+
+  rabbit:
+    image: docker.io/rabbitmq:4
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbituser
+      RABBITMQ_DEFAULT_PASS: rabbitpass
+    volumes:
+      - ./data/rabbit:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  minio:
+    image: docker.io/minio/minio
+    command: server /data
+    restart: always
+    environment:
+      MINIO_ROOT_USER: minioautumn
+      MINIO_ROOT_PASSWORD: minioautumn
+      MINIO_DOMAIN: minio
+    volumes:
+      - ./data/minio:/data
+    networks:
+      default:
+        aliases:
+          - revolt-uploads.minio
+          - attachments.minio
+          - avatars.minio
+          - backgrounds.minio
+          - icons.minio
+          - banners.minio
+          - emojis.minio
+
+  # cria o bucket na primeira subida e sai; o loop é proposital,
+  # espera o minio ficar pronto
+  createbuckets:
+    image: docker.io/minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      while ! /usr/bin/mc ready minio; do
+        /usr/bin/mc alias set minio http://minio:9000 minioautumn minioautumn;
+        echo 'aguardando minio...' && sleep 1;
+      done;
+      /usr/bin/mc mb minio/revolt-uploads;
+      exit 0;
+      "
+
+  # ======================================================== CAMADA APLICAÇÃO
+
+  api:
+    <<: *config
+    image: ghcr.io/stoatchat/api:v0.15.1
+    depends_on:
+      database: { condition: service_healthy }
+      redis:    { condition: service_started }
+      rabbit:   { condition: service_healthy }
+
+  events:
+    <<: *config
+    image: ghcr.io/stoatchat/events:v0.15.1
+    depends_on:
+      database: { condition: service_healthy }
+      redis:    { condition: service_started }
+
+  autumn:
+    <<: *config
+    image: ghcr.io/stoatchat/file-server:v0.15.1
+    depends_on:
+      database:      { condition: service_healthy }
+      createbuckets: { condition: service_started }
+
+  january:
+    <<: *config
+    image: ghcr.io/stoatchat/proxy:v0.15.1
+
+  gifbox:
+    <<: *config
+    image: ghcr.io/stoatchat/gifbox:v0.15.1
+
+  crond:
+    <<: *config
+    image: ghcr.io/stoatchat/crond:v0.15.1
+    depends_on:
+      database: { condition: service_healthy }
+      minio:    { condition: service_started }
+
+  pushd:
+    <<: *config
+    image: ghcr.io/stoatchat/pushd:v0.15.1
+    depends_on:
+      database: { condition: service_healthy }
+      redis:    { condition: service_started }
+      rabbit:   { condition: service_healthy }
+
+  # ============================================================ CAMADA MÍDIA
+
+  voice-ingress:
+    <<: *config
+    image: ghcr.io/stoatchat/voice-ingress:v0.15.1
+    depends_on:
+      database: { condition: service_healthy }
+      rabbit:   { condition: service_healthy }
+
+  # SFU de voz/vídeo. Fala direto com o cliente, fora do proxy:
+  # WebRTC precisa de UDP e nenhum proxy HTTP encaminha isso.
+  livekit:
+    image: ghcr.io/stoatchat/livekit-server:v1.9.13
+    command: --config /etc/livekit.yml
+    restart: always
+    depends_on:
+      redis: { condition: service_started }
+    ports:
+      - "7881:7881"                      # fallback TCP quando UDP é bloqueado
+      - "50000-50100:50000-50100/udp"    # mídia RTC
+    volumes:
+      - type: bind
+        source: ./livekit.yml
+        target: /etc/livekit.yml
+
+  # ============================================================ CAMADA BORDA
+
+  web:
+    image: ghcr.io/stoatchat/for-web:0c31cf0
+    restart: always
+    env_file: .env.web
+    # Sobrepõe o build com a versão de marca Dois Papo.
+    # Gerada por ../branding/rebrand.sh — ver branding/README.md
+    volumes:
+      - ./web-dist:/app/dist:ro
+
+  caddy:
+    image: docker.io/caddy
+    restart: always
+    env_file: .env.web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ./data/caddy-data:/data
+      - ./data/caddy-config:/config
+      - ./doispapo.json:/doispapo.json
+    networks:
+      default:
+        aliases:
+          - "${DOISPAPO_DOMAIN:-caddy}"

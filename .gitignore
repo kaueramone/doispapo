@@ -1,0 +1,40 @@
+# ==== SEGREDOS — NUNCA COMMITAR ====
+secrets.env
+secrets.env.old
+*.key
+*.pem
+id_*
+*_deploy
+.env
+.env.*
+!.env.example
+
+# Config gerada (contém chaves do LiveKit)
+livekit.yml
+livekit.yml.old
+Revolt.toml
+Revolt.toml.old
+Revolt.toml.bak*
+stoat.json
+doispapo.json
+compose.override.yml
+compose.override.yml.old
+
+# ==== DADOS E BACKUPS ====
+data/
+data*/
+backup-*
+*.tar.gz
+*.gz
+*.dump
+
+# ==== BUILD / ARTEFATOS ====
+dist/
+dist-orig/
+dist-patched/
+node_modules/
+*.log
+
+# ==== SO ====
+.DS_Store
+Thumbs.db
