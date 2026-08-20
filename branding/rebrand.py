@@ -379,6 +379,40 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
 # (nao traduzidas). Aplicamos as traducoes proprias por msgId.
 trad_p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       "traducoes_pt_br.json")
+def _fim_da_lista(txt, inicio):
+    """Indice do ']' que fecha a lista aberta em `inicio`.
+
+    Procurar o primeiro ']' bastava enquanto so mexiamos em entradas de
+    string simples. Mensagem com variavel e uma lista de pedacos --
+    ["Voce tem ",["0"]," itens"] -- e o primeiro ']' fecha a variavel, no
+    meio da entrada.
+    """
+    prof = 0
+    i = inicio
+    n = len(txt)
+    while i < n:
+        c = txt[i]
+        if c == '"':
+            i += 1
+            while i < n and txt[i] != '"':
+                if txt[i] == "\\":
+                    i += 1
+                i += 1
+        elif c == "[":
+            prof += 1
+        elif c == "]":
+            prof -= 1
+            if prof == 0:
+                return i
+        i += 1
+    return -1
+
+
+def _variaveis(txt):
+    """Nomes das variaveis de uma entrada compilada, em ordem."""
+    return re.findall(r'\[\s*"([^"]+)"\s*\]', txt)
+
+
 def _catalogo_pt_br():
     """Descobre o chunk do catalogo pt-BR pelo mapa de import do bundle.
 
@@ -419,19 +453,39 @@ if os.path.exists(trad_p):
         s_ = open(f, encoding="utf-8", errors="replace").read()
         n_ = 0
         for chave, texto in trad.items():
-            alvo = '"%s":[' % chave
+            alvo = '"%s":' % chave
             i = s_.find(alvo)
             if i < 0:
                 continue
-            j = s_.index("]", i)
-            atual = s_[i + len(alvo):j]
-            # so substitui entradas de string simples
-            if not (atual.startswith('"') and atual.endswith('"')):
+            ab = i + len(alvo)
+            if ab >= len(s_) or s_[ab] != "[":
                 continue
-            novo_val = json.dumps(texto, ensure_ascii=False)
+            fim = _fim_da_lista(s_, ab)
+            if fim < 0:
+                continue
+            atual = s_[ab + 1:fim]
+
+            if isinstance(texto, list):
+                # Entrada com variavel. As variaveis TEM que ser as mesmas:
+                # traduzir ["Voce tem ",["0"]," itens"] para uma frase sem
+                # o ["0"] apagaria o numero da tela, e o contador diria que
+                # deu tudo certo.
+                if _variaveis(atual) != _variaveis(json.dumps(
+                        texto, ensure_ascii=False)):
+                    print("  aviso: %s ignorada — variaveis nao batem" % chave)
+                    continue
+                novo_val = json.dumps(texto, ensure_ascii=False,
+                                      separators=(",", ":"))[1:-1]
+            else:
+                # so substitui entradas de string simples
+                if not (atual.startswith('"') and atual.endswith('"')
+                        and not _variaveis(atual)):
+                    continue
+                novo_val = json.dumps(texto, ensure_ascii=False)
+
             # dentro de template literal: escapar crase e cifrao
             novo_val = novo_val.replace("\\", "\\\\").replace("`", "\\`")
-            s_ = s_[:i + len(alvo)] + novo_val + s_[j:]
+            s_ = s_[:ab + 1] + novo_val + s_[fim:]
             n_ += 1
         conta("traducoes-pt-br", n_)
         open(f, "w", encoding="utf-8").write(s_)

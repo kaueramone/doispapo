@@ -16,6 +16,7 @@ criou e, havendo cota, emitimos um convite de conta em nome dessa pessoa.
 import base64, hashlib, hmac, json, os, queue, re, secrets, threading, time
 import urllib.request, urllib.parse, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from bson import ObjectId
 from pymongo import MongoClient
 
 LIMITE = int(os.environ.get("LIMITE_CONVITES", "5"))
@@ -46,6 +47,56 @@ def usuario_da_sessao(token):
         return None
     s = db.sessions.find_one({"token": token}, {"user_id": 1})
     return s.get("user_id") if s else None
+
+
+# ------------------------------------------------- feedback e novidades
+# Ate a 0.35 a tela de Comentarios levava para discussoes no GitHub do
+# upstream: tres links para fora, num projeto que nao e o nosso. Quem
+# clicava saia da plataforma para falar de um produto diferente.
+#
+# Agora o envio acontece aqui, e o painel trata. As colecoes vivem no
+# mesmo banco do resto (prefixo dp_ para nao colidir com o upstream).
+
+TIPOS_FEEDBACK = ("sugestao", "comentario", "bug")
+ESTADOS_FEEDBACK = ("recebido", "analisando", "resolvido", "recusado")
+
+LIMITE_TITULO = 120
+LIMITE_TEXTO = 4000
+LIMITE_COMENTARIO = 1000
+LIMITE_POST = 560
+
+# Envios por usuario por hora. Nao e defesa contra abuso coordenado --
+# a instancia e fechada por convite --, e sim contra o dedo preso no
+# botao e contra script de teste que esquece de parar.
+TETO_FEEDBACK_HORA = 10
+TETO_COMENTARIO_HORA = 30
+
+
+def _texto(valor, limite):
+    """Normaliza texto vindo do cliente: corta, apara e recusa vazio."""
+    if not isinstance(valor, str):
+        return None
+    v = valor.replace("\r\n", "\n").strip()
+    if not v:
+        return None
+    return v[:limite]
+
+
+def _excedeu(colecao, uid, teto):
+    desde = time.time() - 3600
+    return colecao.count_documents({"uid": uid, "em": {"$gte": desde}}) >= teto
+
+
+def _perfis(uids):
+    """Nome e avatar por id, numa consulta so."""
+    fora = {}
+    for u in db.users.find({"_id": {"$in": list(set(uids))}},
+                           {"username": 1, "avatar": 1, "display_name": 1}):
+        fora[u["_id"]] = {
+            "nome": u.get("display_name") or u.get("username") or "?",
+            "avatar": (u.get("avatar") or {}).get("_id"),
+        }
+    return fora
 
 
 def limite_de(uid):
@@ -598,6 +649,75 @@ class Handler(BaseHTTPRequestHandler):
             ]
             return self.responde(200, {"total": len(itens), "itens": itens})
 
+        # ------------------------------------------------ meus envios
+        # A pessoa precisa poder ver o que mandou e no que deu. Sem isso
+        # o formulario e um buraco: escreve, envia, e nunca sabe se foi
+        # lido -- que e exatamente o que os links para fora faziam.
+        if rota == "/feedback/meus":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            itens = [
+                {"id": str(d["_id"]), "tipo": d.get("tipo"),
+                 "titulo": d.get("titulo"), "texto": d.get("texto"),
+                 "estado": d.get("estado", "recebido"),
+                 "resposta": d.get("resposta"),
+                 "respondido_em": d.get("respondido_em"),
+                 "em": d.get("em")}
+                for d in db.dp_feedback.find({"uid": uid}).sort("em", -1).limit(100)
+            ]
+            return self.responde(200, {"itens": itens})
+
+        # ------------------------------------------------- novidades
+        if rota == "/novidades":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            try:
+                antes = float((q.get("antes") or [0])[0])
+            except (TypeError, ValueError):
+                antes = 0
+            filtro = {"publicado": True}
+            if antes:
+                filtro["em"] = {"$lt": antes}
+            posts = list(db.dp_novidades.find(filtro).sort("em", -1).limit(20))
+            ids = [d["_id"] for d in posts]
+            # Uma consulta para saber o que ESTE usuario curtiu, em vez de
+            # uma por post.
+            curtidos = {c["post"] for c in db.dp_novidades_curtidas.find(
+                {"post": {"$in": ids}, "uid": uid}, {"post": 1})}
+            itens = [
+                {"id": str(d["_id"]), "texto": d.get("texto", ""),
+                 "em": d.get("em"), "titulo": d.get("titulo"),
+                 "curtidas": int(d.get("curtidas", 0)),
+                 "curti": d["_id"] in curtidos,
+                 "comentarios": int(d.get("comentarios", 0))}
+                for d in posts
+            ]
+            return self.responde(200, {"itens": itens})
+
+        m = re.fullmatch(r"/novidades/([0-9a-f]{24})/comentarios", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            try:
+                pid = ObjectId(m.group(1))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            docs = list(db.dp_novidades_comentarios
+                        .find({"post": pid, "removido": {"$ne": True}})
+                        .sort("em", 1).limit(200))
+            perfis = _perfis([d["uid"] for d in docs])
+            itens = [
+                {"id": str(d["_id"]), "texto": d.get("texto", ""),
+                 "em": d.get("em"), "uid": d["uid"], "meu": d["uid"] == uid,
+                 "autor": perfis.get(d["uid"], {"nome": "?", "avatar": None})}
+                for d in docs
+            ]
+            return self.responde(200, {"itens": itens})
+
         if rota == "/saldo":
             tok = self.headers.get("X-Session-Token")
             uid = usuario_da_sessao(tok)
@@ -667,6 +787,105 @@ class Handler(BaseHTTPRequestHandler):
                 n = (c.get("room") or {}).get("numParticipants", 0)
                 db.chamadas.update_one({"_id": sala},
                     {"$set": {"participantes": n}}, upsert=True)
+            return self.responde(200, {"ok": True})
+
+        # ------------------------------------------- enviar feedback
+        if rota == "/feedback":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            c = self.corpo_json(limite=16384)
+            tipo = c.get("tipo")
+            if tipo not in TIPOS_FEEDBACK:
+                return self.responde(400, {"erro": "tipo_invalido"})
+            titulo = _texto(c.get("titulo"), LIMITE_TITULO)
+            texto = _texto(c.get("texto"), LIMITE_TEXTO)
+            if not titulo or not texto:
+                return self.responde(400, {"erro": "campos_obrigatorios"})
+            if _excedeu(db.dp_feedback, uid, TETO_FEEDBACK_HORA):
+                return self.responde(429, {"erro": "muitos_envios"})
+            doc = {"uid": uid, "tipo": tipo, "titulo": titulo,
+                   "texto": texto, "em": time.time(),
+                   "estado": "recebido", "resposta": None,
+                   "respondido_em": None}
+            r = db.dp_feedback.insert_one(doc)
+            return self.responde(200, {"ok": True, "id": str(r.inserted_id)})
+
+        # -------------------------------------------- curtir novidade
+        m = re.fullmatch(r"/novidades/([0-9a-f]{24})/curtir", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            try:
+                pid = ObjectId(m.group(1))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            if not db.dp_novidades.find_one({"_id": pid, "publicado": True},
+                                            {"_id": 1}):
+                return self.responde(404, {"erro": "nao_encontrado"})
+            # A chave composta e o que torna a curtida idempotente: dois
+            # cliques rapidos, ou dois dispositivos, nao viram duas.
+            chave = {"_id": f"{pid}:{uid}"}
+            if db.dp_novidades_curtidas.find_one(chave, {"_id": 1}):
+                db.dp_novidades_curtidas.delete_one(chave)
+                delta, curti = -1, False
+            else:
+                db.dp_novidades_curtidas.insert_one(
+                    dict(chave, post=pid, uid=uid, em=time.time()))
+                delta, curti = 1, True
+            db.dp_novidades.update_one({"_id": pid}, {"$inc": {"curtidas": delta}})
+            d = db.dp_novidades.find_one({"_id": pid}, {"curtidas": 1})
+            # O contador e denormalizado; se algum dia divergir, a verdade
+            # esta na colecao de curtidas. Nunca deixamos passar negativo.
+            total = max(0, int((d or {}).get("curtidas", 0)))
+            return self.responde(200, {"ok": True, "curti": curti,
+                                       "curtidas": total})
+
+        # ---------------------------------------- comentar novidade
+        m = re.fullmatch(r"/novidades/([0-9a-f]{24})/comentarios", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            try:
+                pid = ObjectId(m.group(1))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            if not db.dp_novidades.find_one({"_id": pid, "publicado": True},
+                                            {"_id": 1}):
+                return self.responde(404, {"erro": "nao_encontrado"})
+            c = self.corpo_json(limite=8192)
+            texto = _texto(c.get("texto"), LIMITE_COMENTARIO)
+            if not texto:
+                return self.responde(400, {"erro": "texto_obrigatorio"})
+            if _excedeu(db.dp_novidades_comentarios, uid, TETO_COMENTARIO_HORA):
+                return self.responde(429, {"erro": "muitos_envios"})
+            r = db.dp_novidades_comentarios.insert_one(
+                {"post": pid, "uid": uid, "texto": texto,
+                 "em": time.time(), "removido": False})
+            db.dp_novidades.update_one({"_id": pid}, {"$inc": {"comentarios": 1}})
+            return self.responde(200, {"ok": True, "id": str(r.inserted_id)})
+
+        # ------------------------------- remover o proprio comentario
+        m = re.fullmatch(r"/novidades/([0-9a-f]{24})/comentarios/"
+                         r"([0-9a-f]{24})/remover", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            try:
+                pid, cid = ObjectId(m.group(1)), ObjectId(m.group(2))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            # A remocao e marcada, nao apagada: o painel precisa poder ver
+            # o que existiu ao tratar uma denuncia.
+            r = db.dp_novidades_comentarios.update_one(
+                {"_id": cid, "post": pid, "uid": uid, "removido": {"$ne": True}},
+                {"$set": {"removido": True, "removido_em": time.time()}})
+            if r.modified_count:
+                db.dp_novidades.update_one({"_id": pid},
+                                           {"$inc": {"comentarios": -1}})
             return self.responde(200, {"ok": True})
 
         # Enviar ou remover o som do servidor. Exige ser o dono.

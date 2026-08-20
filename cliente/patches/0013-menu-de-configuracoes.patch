@@ -1,0 +1,54 @@
+diff --git a/packages/client/components/app/interface/settings/UserSettings.tsx b/packages/client/components/app/interface/settings/UserSettings.tsx
+index 9011271..85a242e 100644
+--- a/packages/client/components/app/interface/settings/UserSettings.tsx
++++ b/packages/client/components/app/interface/settings/UserSettings.tsx
+@@ -8,7 +8,6 @@ import { useClient, useClientLifecycle } from "@revolt/client";
+ import { CONFIGURATION } from "@revolt/common";
+ import { useUser } from "@revolt/markdown/users";
+ import { useModals } from "@revolt/modal";
+-import { fetchLatestChangelog } from "@revolt/modal/modals/Changelog";
+ import { ColouredText, Column, Text, iconSize } from "@revolt/ui";
+ import { Symbol } from "@revolt/ui/components/utils/Symbol";
+ 
+@@ -36,6 +35,7 @@ import AdvancedSettings from "./user/Advanced";
+ import { AppearanceMenu } from "./user/appearance";
+ import { MyBots, ViewBot } from "./user/bots";
+ import { Feedback } from "./user/Feedback";
++import Novidades from "./user/Novidades";
+ import { LanguageSettings } from "./user/Language";
+ import Native from "./user/Native";
+ import Notifications from "./user/notifications/Notifications";
+@@ -92,6 +92,8 @@ const Config: SettingsConfiguration<{ server: Server }> = {
+         return <LanguageSettings />;
+       case "feedback":
+         return <Feedback />;
++      case "novidades":
++        return <Novidades />;
+       case "subscribe":
+         return <EditSubscription />;
+       case "native":
+@@ -112,7 +114,7 @@ const Config: SettingsConfiguration<{ server: Server }> = {
+    * @returns List
+    */
+   list(_, onClose) {
+-    const { pop, openModal } = useModals();
++    const { pop } = useModals();
+     const { logout } = useClientLifecycle();
+     const client = useClient();
+ 
+@@ -324,11 +326,10 @@ const Config: SettingsConfiguration<{ server: Server }> = {
+         {
+           entries: [
+             {
+-              onClick: async () => {
+-                const changelog = await fetchLatestChangelog();
+-                if (!changelog) return;
+-                openModal({ type: "changelog", changelog });
+-              },
++              // Era o changelog do upstream, num modal, descrevendo
++              // versoes de outro produto. Agora e a nossa linha do tempo,
++              // como pagina de configuracoes igual as demais.
++              id: "novidades",
+               icon: <MdCampaign {...iconSize(20)} />,
+               title: <Trans>What's New</Trans>,
+             },

@@ -1,0 +1,333 @@
+diff --git a/packages/client/components/app/interface/settings/user/Novidades.tsx b/packages/client/components/app/interface/settings/user/Novidades.tsx
+new file mode 100644
+index 0000000..aaa523b
+--- /dev/null
++++ b/packages/client/components/app/interface/settings/user/Novidades.tsx
+@@ -0,0 +1,327 @@
++import {
++  For,
++  Match,
++  Show,
++  Switch,
++  createResource,
++  createSignal,
++} from "solid-js";
++
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
++import { styled } from "styled-system/jsx";
++
++import MdComment from "@material-design-icons/svg/outlined/chat_bubble_outline.svg?component-solid";
++import MdFavorite from "@material-design-icons/svg/outlined/favorite.svg?component-solid";
++import MdFavoriteBorder from "@material-design-icons/svg/outlined/favorite_border.svg?component-solid";
++
++import { useClient } from "@revolt/client";
++import {
++  Avatar,
++  Button,
++  Column,
++  Text,
++  TextField,
++  iconSize,
++  typography,
++} from "@revolt/ui";
++
++/** Where our own service lives, behind the same origin */
++const API = "/api-convites";
++
++type Post = {
++  id: string;
++  titulo: string | null;
++  texto: string;
++  em: number;
++  curtidas: number;
++  curti: boolean;
++  comentarios: number;
++};
++
++type Comentario = {
++  id: string;
++  texto: string;
++  em: number;
++  meu: boolean;
++  autor: { nome: string; avatar: string | null };
++};
++
++/**
++ * Novidades
++ *
++ * Replaces the upstream changelog modal, which described releases of a
++ * different product. This is our own timeline: short posts written in the
++ * panel, in the order they happened, and people can react and reply to them
++ * without leaving the app.
++ */
++export default function Novidades() {
++  const client = useClient();
++
++  function cabecalhos() {
++    const [nome, valor] = client()!.authenticationHeader;
++    return { [nome]: valor, "Content-Type": "application/json" };
++  }
++
++  const [posts, { mutate }] = createResource(async () => {
++    const r = await fetch(`${API}/novidades`, { headers: cabecalhos() });
++    if (!r.ok) throw new Error(String(r.status));
++    return ((await r.json()).itens ?? []) as Post[];
++  });
++
++  async function curtir(post: Post) {
++    const r = await fetch(`${API}/novidades/${post.id}/curtir`, {
++      method: "POST",
++      headers: cabecalhos(),
++    });
++    if (!r.ok) return;
++    const d = await r.json();
++
++    // The server is the one that counts. Applying its numbers instead of
++    // guessing locally keeps two open tabs from drifting apart.
++    mutate((atual) =>
++      atual?.map((p) =>
++        p.id === post.id ? { ...p, curti: d.curti, curtidas: d.curtidas } : p,
++      ),
++    );
++  }
++
++  return (
++    <Column gap="lg">
++      <Switch>
++        <Match when={posts.loading}>
++          <Vazio>
++            <Trans>Loading…</Trans>
++          </Vazio>
++        </Match>
++        <Match when={posts.error}>
++          <Vazio>
++            <Trans>Could not load the news right now.</Trans>
++          </Vazio>
++        </Match>
++        <Match when={!posts()?.length}>
++          <Vazio>
++            <Trans>Nothing here yet.</Trans>
++          </Vazio>
++        </Match>
++        <Match when={posts()?.length}>
++          <For each={posts()}>
++            {(post) => (
++              <PostItem
++                post={post}
++                cabecalhos={cabecalhos}
++                onCurtir={() => curtir(post)}
++              />
++            )}
++          </For>
++        </Match>
++      </Switch>
++    </Column>
++  );
++}
++
++function PostItem(props: {
++  post: Post;
++  cabecalhos: () => Record<string, string>;
++  onCurtir: () => void;
++}) {
++  const [aberto, setAberto] = createSignal(false);
++
++  return (
++    <Cartao>
++      <Show when={props.post.titulo}>
++        <Text class="title" size="medium">
++          {props.post.titulo}
++        </Text>
++      </Show>
++      <Corpo>{props.post.texto}</Corpo>
++      <Quando>{new Date(props.post.em * 1000).toLocaleString()}</Quando>
++
++      <Acoes>
++        <Button variant="text" onPress={props.onCurtir}>
++          <Show
++            when={props.post.curti}
++            fallback={<MdFavoriteBorder {...iconSize(18)} />}
++          >
++            <MdFavorite {...iconSize(18)} />
++          </Show>
++          <Contador>{props.post.curtidas}</Contador>
++        </Button>
++        <Button variant="text" onPress={() => setAberto((a) => !a)}>
++          <MdComment {...iconSize(18)} />
++          <Contador>{props.post.comentarios}</Contador>
++        </Button>
++      </Acoes>
++
++      <Show when={aberto()}>
++        <Comentarios postId={props.post.id} cabecalhos={props.cabecalhos} />
++      </Show>
++    </Cartao>
++  );
++}
++
++function Comentarios(props: {
++  postId: string;
++  cabecalhos: () => Record<string, string>;
++}) {
++  const { t } = useLingui();
++  const [texto, setTexto] = createSignal("");
++  const [enviando, setEnviando] = createSignal(false);
++
++  const [lista, { refetch }] = createResource(async () => {
++    const r = await fetch(`${API}/novidades/${props.postId}/comentarios`, {
++      headers: props.cabecalhos(),
++    });
++    if (!r.ok) throw new Error(String(r.status));
++    return ((await r.json()).itens ?? []) as Comentario[];
++  });
++
++  async function enviar() {
++    const valor = texto().trim();
++    if (!valor || enviando()) return;
++    setEnviando(true);
++    try {
++      const r = await fetch(`${API}/novidades/${props.postId}/comentarios`, {
++        method: "POST",
++        headers: props.cabecalhos(),
++        body: JSON.stringify({ texto: valor }),
++      });
++      if (r.ok) {
++        setTexto("");
++        refetch();
++      }
++    } finally {
++      setEnviando(false);
++    }
++  }
++
++  async function remover(id: string) {
++    const r = await fetch(
++      `${API}/novidades/${props.postId}/comentarios/${id}/remover`,
++      { method: "POST", headers: props.cabecalhos() },
++    );
++    if (r.ok) refetch();
++  }
++
++  return (
++    <Fio>
++      <For each={lista()}>
++        {(c) => (
++          <Comentario>
++            <Avatar size={24} src={c.autor.avatar ?? undefined} fallback={c.autor.nome} />
++            <div>
++              <Text class="label" size="small">
++                {c.autor.nome}
++              </Text>
++              <Corpo>{c.texto}</Corpo>
++            </div>
++            <Show when={c.meu}>
++              <Button variant="text" onPress={() => remover(c.id)}>
++                <Trans>Remove</Trans>
++              </Button>
++            </Show>
++          </Comentario>
++        )}
++      </For>
++
++      <Escrever>
++        <TextField
++          variant="outlined"
++          maxlength={1000}
++          placeholder={t`Write a comment`}
++          value={texto()}
++          onInput={(e) => setTexto((e.currentTarget as HTMLInputElement).value)}
++        />
++        <Button
++          variant="filled"
++          isDisabled={!texto().trim() || enviando()}
++          onPress={enviar}
++        >
++          <Trans>Send</Trans>
++        </Button>
++      </Escrever>
++    </Fio>
++  );
++}
++
++const Cartao = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-sm)",
++    padding: "var(--gap-lg)",
++
++    borderRadius: "var(--borderRadius-md)",
++    background: "var(--md-sys-color-surface-container-high)",
++    color: "var(--md-sys-color-on-surface)",
++  },
++});
++
++const Corpo = styled("span", {
++  base: {
++    ...typography.raw({ class: "body", size: "small" }),
++    whiteSpace: "pre-wrap",
++    color: "var(--md-sys-color-on-surface-variant)",
++  },
++});
++
++const Quando = styled("span", {
++  base: {
++    ...typography.raw({ class: "label", size: "small" }),
++    color: "var(--md-sys-color-outline)",
++  },
++});
++
++const Acoes = styled("div", {
++  base: {
++    display: "flex",
++    gap: "var(--gap-sm)",
++  },
++});
++
++const Contador = styled("span", {
++  base: {
++    ...typography.raw({ class: "label", size: "small" }),
++    paddingInlineStart: "var(--gap-sm)",
++    fontVariantNumeric: "tabular-nums",
++  },
++});
++
++const Fio = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-md)",
++    marginTop: "var(--gap-sm)",
++    paddingTop: "var(--gap-md)",
++    borderTop: "1px solid var(--md-sys-color-outline-variant)",
++  },
++});
++
++const Comentario = styled("div", {
++  base: {
++    display: "flex",
++    alignItems: "start",
++    gap: "var(--gap-sm)",
++  },
++});
++
++const Escrever = styled("div", {
++  base: {
++    display: "flex",
++    alignItems: "center",
++    gap: "var(--gap-sm)",
++
++    "& > *:first-child": {
++      flexGrow: 1,
++    },
++  },
++});
++
++const Vazio = styled("div", {
++  base: {
++    ...typography.raw({ class: "body", size: "small" }),
++    padding: "var(--gap-xl)",
++    textAlign: "center",
++    color: "var(--md-sys-color-on-surface-variant)",
++  },
++});

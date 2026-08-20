@@ -1,0 +1,30 @@
+diff --git a/packages/client/src/interface/navigation/servers/ServerList.tsx b/packages/client/src/interface/navigation/servers/ServerList.tsx
+index 3845e69..875b5cf 100644
+--- a/packages/client/src/interface/navigation/servers/ServerList.tsx
++++ b/packages/client/src/interface/navigation/servers/ServerList.tsx
+@@ -1,6 +1,6 @@
+ import { Accessor, For, JSX, Show, createMemo, createSignal } from "solid-js";
+ 
+-import { Trans } from "@lingui-solid/solid/macro";
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
+ import { Channel, Server, User } from "stoat.js";
+ import { cva } from "styled-system/css";
+ import { styled } from "styled-system/jsx";
+@@ -108,6 +108,8 @@ export const ServerList = (props: Props) => {
+   createKeybind(KeybindAction.NAVIGATION_SERVER_UP, () => navigateServer(-1));
+   createKeybind(KeybindAction.NAVIGATION_SERVER_DOWN, () => navigateServer(1));
+ 
++  const { t } = useLingui();
++
+   const homeNotifications = createMemo(() => {
+     return client().users.filter((user) => user.relationship === "Incoming")
+       .length;
+@@ -126,7 +128,7 @@ export const ServerList = (props: Props) => {
+           href="/app"
+           use:floating={{
+             tooltip: {
+-              content: `You have ${homeNotifications()} pending friend requests.`,
++              content: t`You have ${homeNotifications()} pending friend requests.`,
+               placement: "right",
+             },
+           }}

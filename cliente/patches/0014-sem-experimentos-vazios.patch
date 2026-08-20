@@ -1,0 +1,17 @@
+diff --git a/packages/client/components/state/stores/Experiments.ts b/packages/client/components/state/stores/Experiments.ts
+index 87ced0f..7dd05a7 100644
+--- a/packages/client/components/state/stores/Experiments.ts
++++ b/packages/client/components/state/stores/Experiments.ts
+@@ -10,7 +10,11 @@ export type Experiment = "gif_picker" | "plugins";
+ /**
+  * Currently active experiments.
+  */
+-export const AVAILABLE_EXPERIMENTS: Experiment[] = ["gif_picker", "plugins"];
++// Ambos os experimentos eram marcadores de lugar: titulo terminado em
++// "Placeholder" e descricao "Not available yet.". Ligar qualquer um dos
++// dois nao fazia nada -- so ocupava a tela de Avancado com promessas de
++// outro projeto.
++export const AVAILABLE_EXPERIMENTS: Experiment[] = [];
+ 
+ /**
+  * Experiments enabled by default.

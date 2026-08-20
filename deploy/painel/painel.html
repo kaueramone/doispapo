@@ -132,6 +132,8 @@
       <button data-p="fila">Fila de espera</button>
       <button data-p="usuarios">Usuários</button>
       <button data-p="convites">Convites</button>
+      <button data-p="feedback">Comentários</button>
+      <button data-p="novidades">Novidades</button>
       <button data-p="conta">Conta</button>
     </div>
     <div class="sp"></div>
@@ -194,6 +196,57 @@
         <div class="msg" id="m-conv"></div>
       </div>
       <div class="bloco"><div id="t-conv"></div></div>
+    </section>
+
+    <section class="pg" id="pg-feedback">
+      <h2>Comentários</h2>
+      <p class="sub">Sugestões, comentários e relatos de erro enviados pela
+        tela de Comentários do aplicativo. A resposta que você escrever
+        aqui aparece para quem enviou, em "Meus envios".</p>
+      <div class="flex" style="margin-bottom:16px;gap:12px">
+        <div style="max-width:200px">
+          <label for="f-tipo">Tipo</label>
+          <select id="f-tipo">
+            <option value="">Todos</option>
+            <option value="sugestao">Sugestões</option>
+            <option value="comentario">Comentários</option>
+            <option value="bug">Erros</option>
+          </select>
+        </div>
+        <div style="max-width:200px">
+          <label for="f-estado">Situação</label>
+          <select id="f-estado">
+            <option value="">Todas</option>
+            <option value="recebido">Recebido</option>
+            <option value="analisando">Em análise</option>
+            <option value="resolvido">Resolvido</option>
+            <option value="recusado">Recusado</option>
+          </select>
+        </div>
+      </div>
+      <div class="bloco"><div id="t-feedback"></div></div>
+    </section>
+
+    <section class="pg" id="pg-novidades">
+      <h2>Novidades</h2>
+      <p class="sub">Posts curtos que aparecem na linha do tempo de
+        Novidades do aplicativo. Quem usa pode curtir e comentar.</p>
+      <div class="bloco" style="margin-bottom:16px">
+        <label for="n-titulo">Título (opcional)</label>
+        <input id="n-titulo" maxlength="120" placeholder="Voz no modelo Discord">
+        <label for="n-texto" style="margin-top:10px">Texto</label>
+        <textarea id="n-texto" rows="4" maxlength="560"
+          placeholder="O que mudou, em poucas linhas."></textarea>
+        <div class="flex" style="margin-top:10px;align-items:center;gap:12px">
+          <button class="bt" id="b-publicar"
+            style="width:auto;margin:0;padding:10px 18px">Publicar</button>
+          <label style="margin:0;display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="n-rascunho"> salvar como rascunho
+          </label>
+          <span class="msg" id="m-novidade"></span>
+        </div>
+      </div>
+      <div class="bloco"><div id="t-novidades"></div></div>
     </section>
 
     <section class="pg" id="pg-conta">

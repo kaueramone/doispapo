@@ -1,0 +1,446 @@
+diff --git a/packages/client/components/app/interface/settings/user/Feedback.tsx b/packages/client/components/app/interface/settings/user/Feedback.tsx
+index 813ccb5..1c05c40 100644
+--- a/packages/client/components/app/interface/settings/user/Feedback.tsx
++++ b/packages/client/components/app/interface/settings/user/Feedback.tsx
+@@ -1,137 +1,341 @@
+-import { useNavigate } from "@solidjs/router";
+-import { Match, Switch } from "solid-js";
++import { For, Match, Show, Switch, createResource, createSignal } from "solid-js";
+ 
+-import { Trans } from "@lingui-solid/solid/macro";
+-import { PublicChannelInvite } from "stoat.js";
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
+ import { styled } from "styled-system/jsx";
+ 
+-import MdGroups3 from "@material-design-icons/svg/filled/groups_3.svg?component-solid";
+ import MdBugReport from "@material-design-icons/svg/outlined/bug_report.svg?component-solid";
+-import MdFormatListNumbered from "@material-design-icons/svg/outlined/format_list_numbered.svg?component-solid";
++import MdForum from "@material-design-icons/svg/outlined/forum.svg?component-solid";
+ import MdStar from "@material-design-icons/svg/outlined/star_outline.svg?component-solid";
+ 
+ import { useClient } from "@revolt/client";
+-import { CONFIGURATION } from "@revolt/common";
+-import { useModals } from "@revolt/modal";
+-import { CategoryButton, Column, iconSize } from "@revolt/ui";
++import {
++  Button,
++  CategoryButton,
++  Column,
++  Text,
++  TextField,
++  iconSize,
++  typography,
++} from "@revolt/ui";
++
++/** Where our own service lives, behind the same origin */
++const API = "/api-convites";
++
++type Tipo = "sugestao" | "comentario" | "bug";
++
++type Envio = {
++  id: string;
++  tipo: Tipo;
++  titulo: string;
++  texto: string;
++  estado: "recebido" | "analisando" | "resolvido" | "recusado";
++  resposta: string | null;
++  em: number;
++};
+ 
+ /**
+  * Feedback
++ *
++ * This screen used to be three links out to the upstream project's GitHub
++ * discussions. Clicking any of them took you off the platform to talk about
++ * a different product, and nothing you wrote ever came back here.
++ *
++ * Now the writing happens in place and lands in our own panel, where it can
++ * be answered — and the answer comes back below, under "my submissions", so
++ * sending something is not the same as dropping it down a well.
+  */
+ export function Feedback() {
+-  const { openModal, pop } = useModals();
+-  const navigate = useNavigate();
+   const client = useClient();
++  const [tipo, setTipo] = createSignal<Tipo>();
++
++  function cabecalhos() {
++    const [nome, valor] = client()!.authenticationHeader;
++    return { [nome]: valor, "Content-Type": "application/json" };
++  }
+ 
+-  const showLoungeButton = CONFIGURATION.IS_STOAT;
+-  const isInLounge =
+-    client()!.servers.get("01F7ZSBSFHQ8TA81725KQCSDDP") !== undefined;
++  const [envios, { refetch }] = createResource(async () => {
++    const r = await fetch(`${API}/feedback/meus`, { headers: cabecalhos() });
++    if (!r.ok) throw new Error(String(r.status));
++    return ((await r.json()).itens ?? []) as Envio[];
++  });
+ 
+   return (
+     <Column gap="lg">
+-      <CategoryButton.Group>
+-        {/* <Link
+-          href="https://example.com"
+-          target="_blank"
+-        >
+-          <CategoryButton
+-            action="external"
+-            icon={<MdViewKanban {...iconSize(22)} />}
+-            onClick={() => void 0}
+-            description={<Trans>See what we're currently working on.</Trans>}
+-          >
+-            <Trans>Roadmap</Trans>
+-          </CategoryButton>
+-        </Link> */}
+-        <Link
+-          href="https://github.com/orgs/stoatchat/discussions/categories/feature-suggestions"
+-          target="_blank"
+-        >
+-          <CategoryButton
+-            action="external"
+-            icon={<MdStar {...iconSize(22)} />}
+-            ignoreClick
+-            description={
+-              <Trans>Suggest new Stoat features on GitHub discussions.</Trans>
+-            }
+-          >
+-            <Trans>Submit feature suggestion</Trans>
+-          </CategoryButton>
+-        </Link>
+-        <Link
+-          href="https://github.com/orgs/stoatchat/discussions/categories/feedback"
+-          target="_blank"
+-        >
+-          <CategoryButton
+-            action="external"
+-            icon={<MdFormatListNumbered {...iconSize(22)} />}
+-            ignoreClick
+-            description={<Trans>Submit feedback</Trans>}
+-          >
+-            <Trans>Feedback</Trans>
+-          </CategoryButton>
+-        </Link>
+-        <Link
+-          href="https://github.com/stoatchat/for-web/issues?q=is%3Aissue%20state%3Aopen%20type%3ABug"
+-          target="_blank"
+-        >
+-          <CategoryButton
+-            action="external"
+-            icon={<MdBugReport {...iconSize(22)} />}
+-            ignoreClick
+-            description={<Trans>View currently active bug reports here.</Trans>}
+-          >
+-            <Trans>Bug Tracker</Trans>
+-          </CategoryButton>
+-        </Link>
+-        <Switch fallback={null}>
+-          <Match when={showLoungeButton && isInLounge}>
++      <Switch>
++        <Match when={tipo()}>
++          <Formulario
++            tipo={tipo()!}
++            cabecalhos={cabecalhos}
++            onCancelar={() => setTipo()}
++            onEnviado={() => {
++              setTipo();
++              refetch();
++            }}
++          />
++        </Match>
++        <Match when={!tipo()}>
++          <CategoryButton.Group>
+             <CategoryButton
+-              onClick={() => {
+-                navigate("/server/01F7ZSBSFHQ8TA81725KQCSDDP");
+-                pop();
+-              }}
++              icon={<MdStar {...iconSize(22)} />}
++              onClick={() => setTipo("sugestao")}
+               description={
+-                <Trans>
+-                  You can report issues and discuss improvements with us
+-                  directly here.
+-                </Trans>
++                <Trans>Something you would like to see on Dois Papo.</Trans>
+               }
+-              icon={<MdGroups3 />}
+             >
+-              <Trans>Go to the Stoat Lounge</Trans>
++              <Trans>Send a suggestion</Trans>
++            </CategoryButton>
++            <CategoryButton
++              icon={<MdForum {...iconSize(22)} />}
++              onClick={() => setTipo("comentario")}
++              description={
++                <Trans>Tell us what is working and what is not.</Trans>
++              }
++            >
++              <Trans>Leave a comment</Trans>
+             </CategoryButton>
+-          </Match>
+-          <Match when={showLoungeButton && !isInLounge}>
+             <CategoryButton
+-              onClick={() => {
+-                client()
+-                  .api.get("/invites/Testers")
+-                  .then((invite) => PublicChannelInvite.from(client(), invite))
+-                  .then((invite) => openModal({ type: "invite", invite }));
+-              }}
++              icon={<MdBugReport {...iconSize(22)} />}
++              onClick={() => setTipo("bug")}
+               description={
+-                <Trans>
+-                  You can report issues and discuss improvements with us
+-                  directly here.
+-                </Trans>
++                <Trans>Something is broken or behaving strangely.</Trans>
+               }
+-              icon={<MdGroups3 />}
+             >
+-              <Trans>Join the Stoat Lounge</Trans>
++              <Trans>Report a problem</Trans>
+             </CategoryButton>
++          </CategoryButton.Group>
++        </Match>
++      </Switch>
++
++      <MeusEnvios envios={envios()} />
++    </Column>
++  );
++}
++
++/**
++ * The writing form for one kind of submission
++ */
++function Formulario(props: {
++  tipo: Tipo;
++  cabecalhos: () => Record<string, string>;
++  onCancelar: () => void;
++  onEnviado: () => void;
++}) {
++  const { t } = useLingui();
++  const [titulo, setTitulo] = createSignal("");
++  const [texto, setTexto] = createSignal("");
++  const [enviando, setEnviando] = createSignal(false);
++  const [erro, setErro] = createSignal<string>();
++
++  const podeEnviar = () =>
++    titulo().trim().length > 0 && texto().trim().length > 0 && !enviando();
++
++  async function enviar() {
++    setErro();
++    setEnviando(true);
++    try {
++      const r = await fetch(`${API}/feedback`, {
++        method: "POST",
++        headers: props.cabecalhos(),
++        body: JSON.stringify({
++          tipo: props.tipo,
++          titulo: titulo(),
++          texto: texto(),
++        }),
++      });
++
++      if (r.status === 429) {
++        // Worth naming explicitly: "try again" with no reason reads as a
++        // fault in the app, when it is a deliberate ceiling.
++        setErro(t`You have sent a lot in the last hour. Try again later.`);
++      } else if (!r.ok) {
++        setErro(t`Could not send. Try again.`);
++      } else {
++        props.onEnviado();
++      }
++    } catch {
++      setErro(t`Could not send. Try again.`);
++    } finally {
++      setEnviando(false);
++    }
++  }
++
++  return (
++    <Bloco>
++      <Text class="title" size="medium">
++        <Switch>
++          <Match when={props.tipo === "sugestao"}>
++            <Trans>Send a suggestion</Trans>
++          </Match>
++          <Match when={props.tipo === "comentario"}>
++            <Trans>Leave a comment</Trans>
++          </Match>
++          <Match when={props.tipo === "bug"}>
++            <Trans>Report a problem</Trans>
+           </Match>
+         </Switch>
+-      </CategoryButton.Group>
+-    </Column>
++      </Text>
++
++      <TextField
++        variant="outlined"
++        placeholder={t`Summary`}
++        maxlength={120}
++        value={titulo()}
++        onInput={(e) => setTitulo((e.currentTarget as HTMLInputElement).value)}
++      />
++      <TextField
++        variant="outlined"
++        rows={5}
++        maxlength={4000}
++        placeholder={
++          props.tipo === "bug"
++            ? t`What did you do, what did you expect, and what happened?`
++            : t`Write freely.`
++        }
++        value={texto()}
++        onInput={(e) => setTexto((e.currentTarget as HTMLInputElement).value)}
++      />
++
++      <Show when={erro()}>
++        <Aviso>{erro()}</Aviso>
++      </Show>
++
++      <Linha>
++        <Button variant="text" onPress={props.onCancelar}>
++          <Trans>Cancel</Trans>
++        </Button>
++        <Button variant="filled" isDisabled={!podeEnviar()} onPress={enviar}>
++          <Show when={!enviando()} fallback={<Trans>Sending…</Trans>}>
++            <Trans>Send</Trans>
++          </Show>
++        </Button>
++      </Linha>
++    </Bloco>
+   );
+ }
+ 
+ /**
+- * Link without decorations
++ * Everything this person has sent, and what came of it
+  */
+-const Link = styled("a", {
++function MeusEnvios(props: { envios?: Envio[] }) {
++  return (
++    <Show when={props.envios?.length}>
++      <Column gap="sm">
++        <Text class="title" size="small">
++          <Trans>My submissions</Trans>
++        </Text>
++        <For each={props.envios}>
++          {(envio) => (
++            <Bloco>
++              <Linha>
++                <Text class="title" size="small">
++                  {envio.titulo}
++                </Text>
++                <Estado estado={envio.estado}>
++                  <Switch>
++                    <Match when={envio.estado === "recebido"}>
++                      <Trans>Received</Trans>
++                    </Match>
++                    <Match when={envio.estado === "analisando"}>
++                      <Trans>Being looked at</Trans>
++                    </Match>
++                    <Match when={envio.estado === "resolvido"}>
++                      <Trans>Resolved</Trans>
++                    </Match>
++                    <Match when={envio.estado === "recusado"}>
++                      <Trans>Declined</Trans>
++                    </Match>
++                  </Switch>
++                </Estado>
++              </Linha>
++              <Corpo>{envio.texto}</Corpo>
++              <Show when={envio.resposta}>
++                <Resposta>
++                  <Text class="label" size="small">
++                    <Trans>Answer</Trans>
++                  </Text>
++                  <Corpo>{envio.resposta}</Corpo>
++                </Resposta>
++              </Show>
++            </Bloco>
++          )}
++        </For>
++      </Column>
++    </Show>
++  );
++}
++
++const Bloco = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-md)",
++    padding: "var(--gap-lg)",
++
++    borderRadius: "var(--borderRadius-md)",
++    background: "var(--md-sys-color-surface-container-high)",
++    color: "var(--md-sys-color-on-surface)",
++  },
++});
++
++const Linha = styled("div", {
++  base: {
++    display: "flex",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: "var(--gap-md)",
++  },
++});
++
++const Corpo = styled("span", {
+   base: {
+-    textDecoration: "none",
++    ...typography.raw({ class: "body", size: "small" }),
++    whiteSpace: "pre-wrap",
++    color: "var(--md-sys-color-on-surface-variant)",
++  },
++});
++
++const Resposta = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-xs)",
++    paddingInlineStart: "var(--gap-md)",
++    borderInlineStart: "2px solid var(--md-sys-color-primary)",
++  },
++});
++
++const Aviso = styled("span", {
++  base: {
++    ...typography.raw({ class: "body", size: "small" }),
++    color: "var(--md-sys-color-error)",
++  },
++});
++
++const Estado = styled("span", {
++  base: {
++    ...typography.raw({ class: "label", size: "small" }),
++    flexShrink: 0,
++    padding: "2px 8px",
++    borderRadius: "var(--borderRadius-full)",
++  },
++  variants: {
++    estado: {
++      recebido: {
++        background: "var(--md-sys-color-surface-container-highest)",
++        color: "var(--md-sys-color-on-surface-variant)",
++      },
++      analisando: {
++        background: "var(--md-sys-color-tertiary-container)",
++        color: "var(--md-sys-color-on-tertiary-container)",
++      },
++      resolvido: {
++        background: "var(--md-sys-color-primary-container)",
++        color: "var(--md-sys-color-on-primary-container)",
++      },
++      recusado: {
++        background: "var(--md-sys-color-error-container)",
++        color: "var(--md-sys-color-on-error-container)",
++      },
++    },
+   },
+ });

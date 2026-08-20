@@ -8,6 +8,7 @@ senha guardados como hash scrypt, sessão em cookie HttpOnly.
 import hashlib, hmac, json, os, re, secrets, threading, time, urllib.parse
 import urllib.request, urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from bson import ObjectId
 from pymongo import MongoClient
 
 MONGO   = os.environ.get("MONGO_URL", "mongodb://database:27017")
@@ -124,6 +125,16 @@ def metricas(dias=7):
     }
 
 # ---------------------------------------------------------------- dados
+def perfis_de(uids):
+    """Nome de exibicao por id de usuario, numa consulta so."""
+    fora = {}
+    for u in db.users.find({"_id": {"$in": list(set(u for u in uids if u))}},
+                           {"username": 1, "display_name": 1}):
+        fora[u["_id"]] = {"nome": u.get("display_name")
+                          or u.get("username") or "?"}
+    return fora
+
+
 def cota_de(uid):
     c = db.painel_cotas.find_one({"_id": uid})
     return int(c["limite"]) if c and "limite" in c else LIMITE
@@ -273,6 +284,59 @@ class Handler(BaseHTTPRequestHandler):
         if not self.exige():
             return
 
+        # ------------------------------------------------- feedback
+        # O que chega da tela de Comentarios do cliente. O admin le,
+        # muda o estado e responde; a resposta volta para "Meus envios"
+        # da propria pessoa.
+        if r == "/api/feedback":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            filtro = {}
+            tipo = (q.get("tipo") or [""])[0]
+            estado = (q.get("estado") or [""])[0]
+            if tipo in ("sugestao", "comentario", "bug"):
+                filtro["tipo"] = tipo
+            if estado in ("recebido", "analisando", "resolvido", "recusado"):
+                filtro["estado"] = estado
+            docs = list(db.dp_feedback.find(filtro).sort("em", -1).limit(300))
+            perfis = perfis_de([d["uid"] for d in docs])
+            return self.responde(200, {"itens": [
+                {"id": str(d["_id"]), "tipo": d.get("tipo"),
+                 "titulo": d.get("titulo"), "texto": d.get("texto"),
+                 "estado": d.get("estado", "recebido"),
+                 "resposta": d.get("resposta"), "em": d.get("em"),
+                 "respondido_em": d.get("respondido_em"),
+                 "uid": d.get("uid"),
+                 "autor": perfis.get(d.get("uid"), {"nome": "?"})}
+                for d in docs], "total": len(docs)})
+
+        # ------------------------------------------------ novidades
+        if r == "/api/novidades":
+            docs = list(db.dp_novidades.find().sort("em", -1).limit(200))
+            return self.responde(200, {"itens": [
+                {"id": str(d["_id"]), "titulo": d.get("titulo"),
+                 "texto": d.get("texto", ""), "em": d.get("em"),
+                 "publicado": bool(d.get("publicado")),
+                 "curtidas": int(d.get("curtidas", 0)),
+                 "comentarios": int(d.get("comentarios", 0))}
+                for d in docs]})
+
+        m = re.fullmatch(r"/api/novidades/([0-9a-f]{24})/comentarios", r)
+        if m:
+            try:
+                pid = ObjectId(m.group(1))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            # Inclui os removidos: tratar denuncia exige ver o que existiu.
+            docs = list(db.dp_novidades_comentarios.find({"post": pid})
+                        .sort("em", 1).limit(500))
+            perfis = perfis_de([d["uid"] for d in docs])
+            return self.responde(200, {"itens": [
+                {"id": str(d["_id"]), "texto": d.get("texto", ""),
+                 "em": d.get("em"), "uid": d.get("uid"),
+                 "removido": bool(d.get("removido")),
+                 "autor": perfis.get(d.get("uid"), {"nome": "?"})}
+                for d in docs]})
+
         if r == "/api/metricas":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             dias = max(1, min(90, int((q.get("dias") or ["7"])[0])))
@@ -361,6 +425,88 @@ class Handler(BaseHTTPRequestHandler):
 
         if not self.exige():
             return
+
+        # --------------------------------------- tratar um feedback
+        m = re.fullmatch(r"/api/feedback/([0-9a-f]{24})", r)
+        if m:
+            try:
+                fid = ObjectId(m.group(1))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            campos = {}
+            estado = c.get("estado")
+            if estado in ("recebido", "analisando", "resolvido", "recusado"):
+                campos["estado"] = estado
+            if "resposta" in c:
+                texto = (c.get("resposta") or "").strip()[:4000]
+                campos["resposta"] = texto or None
+                campos["respondido_em"] = time.time() if texto else None
+            if not campos:
+                return self.responde(400, {"erro": "nada_a_mudar"})
+            db.dp_feedback.update_one({"_id": fid}, {"$set": campos})
+            return self.responde(200, {"ok": True})
+
+        # -------------------------------------- criar/editar novidade
+        if r == "/api/novidades":
+            texto = (c.get("texto") or "").strip()[:560]
+            if not texto:
+                return self.responde(400, {"erro": "texto_obrigatorio"})
+            doc = {"titulo": (c.get("titulo") or "").strip()[:120] or None,
+                   "texto": texto, "em": time.time(),
+                   "publicado": bool(c.get("publicado", True)),
+                   "curtidas": 0, "comentarios": 0}
+            res = db.dp_novidades.insert_one(doc)
+            return self.responde(200, {"ok": True, "id": str(res.inserted_id)})
+
+        m = re.fullmatch(r"/api/novidades/([0-9a-f]{24})", r)
+        if m:
+            try:
+                pid = ObjectId(m.group(1))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            campos = {}
+            if "texto" in c:
+                texto = (c.get("texto") or "").strip()[:560]
+                if not texto:
+                    return self.responde(400, {"erro": "texto_obrigatorio"})
+                campos["texto"] = texto
+            if "titulo" in c:
+                campos["titulo"] = (c.get("titulo") or "").strip()[:120] or None
+            if "publicado" in c:
+                campos["publicado"] = bool(c.get("publicado"))
+            if not campos:
+                return self.responde(400, {"erro": "nada_a_mudar"})
+            db.dp_novidades.update_one({"_id": pid}, {"$set": campos})
+            return self.responde(200, {"ok": True})
+
+        m = re.fullmatch(r"/api/novidades/([0-9a-f]{24})/remover", r)
+        if m:
+            try:
+                pid = ObjectId(m.group(1))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            # O post sai junto com o que pendurava nele. Deixar curtidas e
+            # comentarios orfaos so acumularia lixo que ninguem le.
+            db.dp_novidades.delete_one({"_id": pid})
+            db.dp_novidades_curtidas.delete_many({"post": pid})
+            db.dp_novidades_comentarios.delete_many({"post": pid})
+            return self.responde(200, {"ok": True})
+
+        m = re.fullmatch(r"/api/novidades/([0-9a-f]{24})/comentarios/"
+                         r"([0-9a-f]{24})/remover", r)
+        if m:
+            try:
+                pid, cid = ObjectId(m.group(1)), ObjectId(m.group(2))
+            except Exception:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            res = db.dp_novidades_comentarios.update_one(
+                {"_id": cid, "post": pid, "removido": {"$ne": True}},
+                {"$set": {"removido": True, "removido_em": time.time(),
+                          "removido_por": "admin"}})
+            if res.modified_count:
+                db.dp_novidades.update_one({"_id": pid},
+                                           {"$inc": {"comentarios": -1}})
+            return self.responde(200, {"ok": True})
 
         if r == "/api/senha":
             atual = c.get("atual") or ""

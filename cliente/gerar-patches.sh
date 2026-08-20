@@ -34,6 +34,14 @@ declare -A SERIE=(
   [0008-cabecalho-do-canal]=packages/client/src/interface/channels/ChannelHeader.tsx
   [0009-chat-sem-avisos-do-sistema]=packages/client/components/app/interface/channels/text/Messages.tsx
   [0010-busca-de-gif]=packages/client/components/ui/components/features/messaging/composition/picker/GifPicker.tsx
+  [0011-comentarios]=packages/client/components/app/interface/settings/user/Feedback.tsx
+  [0012-novidades]=packages/client/components/app/interface/settings/user/Novidades.tsx
+  [0013-menu-de-configuracoes]=packages/client/components/app/interface/settings/UserSettings.tsx
+  [0014-sem-experimentos-vazios]=packages/client/components/state/stores/Experiments.ts
+  [0015-membros-online]=packages/client/src/interface/channels/text/MemberSidebar.tsx
+  [0016-conversas-diretas]=packages/client/src/interface/navigation/channels/HomeSidebar.tsx
+  [0017-pedidos-de-amizade]=packages/client/src/interface/navigation/servers/ServerList.tsx
+  [0018-acoes-do-perfil]=packages/client/components/ui/components/features/profiles/ProfileActions.tsx
 )
 
 for nome in $(printf '%s\n' "${!SERIE[@]}" | sort); do
