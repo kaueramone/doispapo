@@ -52,135 +52,7 @@ function entrar(e){
 function abrirApp(trocar){
   $("#login").style.display = "none";
   $("#app").style.display = "block";
-  /* --------------------------------------------------------- comentários */
-var ESTADOS = {recebido:"Recebido", analisando:"Em análise",
-               resolvido:"Resolvido", recusado:"Recusado"};
-var TIPOS = {sugestao:"sugestão", comentario:"comentário", bug:"erro"};
-
-function carregarFeedback(){
-  var q = "?tipo="+encodeURIComponent($("#f-tipo").value)+
-          "&estado="+encodeURIComponent($("#f-estado").value);
-  api("/api/feedback"+q).then(function(r){
-    var it = (r.d.itens)||[];
-    if(!it.length){ $("#t-feedback").innerHTML =
-      '<p class="vazio">Nada enviado ainda.</p>'; return; }
-    $("#t-feedback").innerHTML = it.map(function(f){
-      return '<div class="bloco" style="margin-bottom:12px">'+
-        '<div class="flex" style="gap:8px;align-items:center">'+
-          '<span class="tag">'+esc(TIPOS[f.tipo]||f.tipo)+'</span>'+
-          '<span class="tag '+(f.estado==="resolvido"?"ok":
-             f.estado==="recusado"?"perigo":"al")+'">'+
-             esc(ESTADOS[f.estado]||f.estado)+'</span>'+
-          '<b>'+esc(f.titulo)+'</b>'+
-          '<span class="sp"></span>'+
-          '<small>'+esc((f.autor||{}).nome)+' · '+dataBr(f.em)+'</small>'+
-        '</div>'+
-        '<p style="white-space:pre-wrap;margin:10px 0">'+esc(f.texto)+'</p>'+
-        '<label for="r-'+f.id+'">Resposta</label>'+
-        '<textarea id="r-'+f.id+'" rows="2">'+esc(f.resposta||"")+'</textarea>'+
-        '<div class="flex" style="margin-top:8px;gap:8px;align-items:center">'+
-          '<select data-estado="'+f.id+'">'+
-            Object.keys(ESTADOS).map(function(k){
-              return '<option value="'+k+'"'+(k===f.estado?" selected":"")+
-                     '>'+ESTADOS[k]+'</option>'; }).join("")+
-          '</select>'+
-          '<button class="ac" data-responder="'+f.id+'">Salvar</button>'+
-        '</div></div>';
-    }).join("");
-  });
-}
-
-/* ----------------------------------------------------------- novidades */
-function carregarNovidades(){
-  api("/api/novidades").then(function(r){
-    var it = (r.d.itens)||[];
-    if(!it.length){ $("#t-novidades").innerHTML =
-      '<p class="vazio">Nenhum post ainda.</p>'; return; }
-    $("#t-novidades").innerHTML = it.map(function(n){
-      return '<div class="bloco" style="margin-bottom:12px">'+
-        '<div class="flex" style="gap:8px;align-items:center">'+
-          (n.publicado ? '<span class="tag ok">publicado</span>'
-                       : '<span class="tag al">rascunho</span>')+
-          (n.titulo ? '<b>'+esc(n.titulo)+'</b>' : '')+
-          '<span class="sp"></span>'+
-          '<small>'+dataBr(n.em)+' · '+n.curtidas+' curtidas · '+
-            n.comentarios+' comentários</small>'+
-        '</div>'+
-        '<p style="white-space:pre-wrap;margin:10px 0">'+esc(n.texto)+'</p>'+
-        '<div class="flex" style="gap:8px">'+
-          '<button class="ac" data-pub="'+n.id+'" data-valor="'+
-            (n.publicado?"0":"1")+'">'+
-            (n.publicado?"despublicar":"publicar")+'</button>'+
-          '<button class="ac" data-coment="'+n.id+'">ver comentários</button>'+
-          '<button class="ac perigo" data-rempost="'+n.id+'">remover</button>'+
-        '</div>'+
-        '<div id="c-'+n.id+'"></div></div>';
-    }).join("");
-  });
-}
-
-function carregarComentarios(pid){
-  api("/api/novidades/"+pid+"/comentarios").then(function(r){
-    var it = (r.d.itens)||[];
-    var alvo = $("#c-"+pid);
-    if(!alvo) return;
-    if(!it.length){ alvo.innerHTML =
-      '<p class="vazio">Sem comentários.</p>'; return; }
-    alvo.innerHTML = '<table><tbody>'+it.map(function(c){
-      return '<tr'+(c.removido?' style="opacity:.5"':'')+'>'+
-        '<td>'+esc((c.autor||{}).nome)+'</td>'+
-        '<td>'+esc(c.texto)+'</td>'+
-        '<td><small>'+dataBr(c.em)+'</small></td>'+
-        '<td>'+(c.removido ? '<span class="tag">removido</span>'
-          : '<button class="ac perigo" data-remcom="'+pid+':'+c.id+
-            '">remover</button>')+'</td></tr>';
-    }).join("")+'</tbody></table>';
-  });
-}
-
-$("#f-tipo").addEventListener("change", carregarFeedback);
-$("#f-estado").addEventListener("change", carregarFeedback);
-
-$("#b-publicar").addEventListener("click", function(){
-  var texto = $("#n-texto").value.trim();
-  if(!texto){ msg($("#m-novidade"), "Escreva o texto.", false); return; }
-  api("/api/novidades",{corpo:{titulo:$("#n-titulo").value,
-       texto:texto, publicado: !$("#n-rascunho").checked}})
-    .then(function(r){
-      if(r.status===200){
-        $("#n-titulo").value = ""; $("#n-texto").value = "";
-        msg($("#m-novidade"), "Publicado.", true);
-        carregarNovidades();
-      } else msg($("#m-novidade"), r.d.erro || "Erro.", false);
-    });
-});
-
-// Delegação: os botões nascem depois, junto com a lista.
-document.addEventListener("click", function(e){
-  var b = e.target.closest && e.target.closest("button");
-  if(!b) return;
-  var id;
-  if((id = b.dataset.responder)){
-    var sel = document.querySelector('[data-estado="'+id+'"]');
-    api("/api/feedback/"+id,{corpo:{
-      resposta: $("#r-"+id).value, estado: sel ? sel.value : undefined}})
-      .then(carregarFeedback);
-  } else if((id = b.dataset.pub)){
-    api("/api/novidades/"+id,{corpo:{publicado: b.dataset.valor === "1"}})
-      .then(carregarNovidades);
-  } else if((id = b.dataset.rempost)){
-    if(confirm("Remover o post, com curtidas e comentários?"))
-      api("/api/novidades/"+id+"/remover",{corpo:{}}).then(carregarNovidades);
-  } else if((id = b.dataset.coment)){
-    carregarComentarios(id);
-  } else if((id = b.dataset.remcom)){
-    var par = id.split(":");
-    api("/api/novidades/"+par[0]+"/comentarios/"+par[1]+"/remover",{corpo:{}})
-      .then(function(){ carregarComentarios(par[0]); });
-  }
-});
-
-api("/api/sessao").then(function(r){
+  api("/api/sessao").then(function(r){
     if(r.d && r.d.usuario) $("#su").value = r.d.usuario;
   });
   carregarVisao();
@@ -434,6 +306,134 @@ $("#f-senha").addEventListener("submit", function(e){
       msg($("#m-senha"), r.d.mensagem || "Erro.", r.status===200);
       if(r.status===200) setTimeout(function(){ location.reload(); }, 1800);
     });
+});
+
+  /* --------------------------------------------------------- comentários */
+var ESTADOS = {recebido:"Recebido", analisando:"Em análise",
+               resolvido:"Resolvido", recusado:"Recusado"};
+var TIPOS = {sugestao:"sugestão", comentario:"comentário", bug:"erro"};
+
+function carregarFeedback(){
+  var q = "?tipo="+encodeURIComponent($("#f-tipo").value)+
+          "&estado="+encodeURIComponent($("#f-estado").value);
+  api("/api/feedback"+q).then(function(r){
+    var it = (r.d.itens)||[];
+    if(!it.length){ $("#t-feedback").innerHTML =
+      '<p class="vazio">Nada enviado ainda.</p>'; return; }
+    $("#t-feedback").innerHTML = it.map(function(f){
+      return '<div class="bloco" style="margin-bottom:12px">'+
+        '<div class="flex" style="gap:8px;align-items:center">'+
+          '<span class="tag">'+esc(TIPOS[f.tipo]||f.tipo)+'</span>'+
+          '<span class="tag '+(f.estado==="resolvido"?"ok":
+             f.estado==="recusado"?"perigo":"al")+'">'+
+             esc(ESTADOS[f.estado]||f.estado)+'</span>'+
+          '<b>'+esc(f.titulo)+'</b>'+
+          '<span class="sp"></span>'+
+          '<small>'+esc((f.autor||{}).nome)+' · '+dataBr(f.em)+'</small>'+
+        '</div>'+
+        '<p style="white-space:pre-wrap;margin:10px 0">'+esc(f.texto)+'</p>'+
+        '<label for="r-'+f.id+'">Resposta</label>'+
+        '<textarea id="r-'+f.id+'" rows="2">'+esc(f.resposta||"")+'</textarea>'+
+        '<div class="flex" style="margin-top:8px;gap:8px;align-items:center">'+
+          '<select data-estado="'+f.id+'">'+
+            Object.keys(ESTADOS).map(function(k){
+              return '<option value="'+k+'"'+(k===f.estado?" selected":"")+
+                     '>'+ESTADOS[k]+'</option>'; }).join("")+
+          '</select>'+
+          '<button class="ac" data-responder="'+f.id+'">Salvar</button>'+
+        '</div></div>';
+    }).join("");
+  });
+}
+
+/* ----------------------------------------------------------- novidades */
+function carregarNovidades(){
+  api("/api/novidades").then(function(r){
+    var it = (r.d.itens)||[];
+    if(!it.length){ $("#t-novidades").innerHTML =
+      '<p class="vazio">Nenhum post ainda.</p>'; return; }
+    $("#t-novidades").innerHTML = it.map(function(n){
+      return '<div class="bloco" style="margin-bottom:12px">'+
+        '<div class="flex" style="gap:8px;align-items:center">'+
+          (n.publicado ? '<span class="tag ok">publicado</span>'
+                       : '<span class="tag al">rascunho</span>')+
+          (n.titulo ? '<b>'+esc(n.titulo)+'</b>' : '')+
+          '<span class="sp"></span>'+
+          '<small>'+dataBr(n.em)+' · '+n.curtidas+' curtidas · '+
+            n.comentarios+' comentários</small>'+
+        '</div>'+
+        '<p style="white-space:pre-wrap;margin:10px 0">'+esc(n.texto)+'</p>'+
+        '<div class="flex" style="gap:8px">'+
+          '<button class="ac" data-pub="'+n.id+'" data-valor="'+
+            (n.publicado?"0":"1")+'">'+
+            (n.publicado?"despublicar":"publicar")+'</button>'+
+          '<button class="ac" data-coment="'+n.id+'">ver comentários</button>'+
+          '<button class="ac perigo" data-rempost="'+n.id+'">remover</button>'+
+        '</div>'+
+        '<div id="c-'+n.id+'"></div></div>';
+    }).join("");
+  });
+}
+
+function carregarComentarios(pid){
+  api("/api/novidades/"+pid+"/comentarios").then(function(r){
+    var it = (r.d.itens)||[];
+    var alvo = $("#c-"+pid);
+    if(!alvo) return;
+    if(!it.length){ alvo.innerHTML =
+      '<p class="vazio">Sem comentários.</p>'; return; }
+    alvo.innerHTML = '<table><tbody>'+it.map(function(c){
+      return '<tr'+(c.removido?' style="opacity:.5"':'')+'>'+
+        '<td>'+esc((c.autor||{}).nome)+'</td>'+
+        '<td>'+esc(c.texto)+'</td>'+
+        '<td><small>'+dataBr(c.em)+'</small></td>'+
+        '<td>'+(c.removido ? '<span class="tag">removido</span>'
+          : '<button class="ac perigo" data-remcom="'+pid+':'+c.id+
+            '">remover</button>')+'</td></tr>';
+    }).join("")+'</tbody></table>';
+  });
+}
+
+$("#f-tipo").addEventListener("change", carregarFeedback);
+$("#f-estado").addEventListener("change", carregarFeedback);
+
+$("#b-publicar").addEventListener("click", function(){
+  var texto = $("#n-texto").value.trim();
+  if(!texto){ msg($("#m-novidade"), "Escreva o texto.", false); return; }
+  api("/api/novidades",{corpo:{titulo:$("#n-titulo").value,
+       texto:texto, publicado: !$("#n-rascunho").checked}})
+    .then(function(r){
+      if(r.status===200){
+        $("#n-titulo").value = ""; $("#n-texto").value = "";
+        msg($("#m-novidade"), "Publicado.", true);
+        carregarNovidades();
+      } else msg($("#m-novidade"), r.d.erro || "Erro.", false);
+    });
+});
+
+// Delegação: os botões nascem depois, junto com a lista.
+document.addEventListener("click", function(e){
+  var b = e.target.closest && e.target.closest("button");
+  if(!b) return;
+  var id;
+  if((id = b.dataset.responder)){
+    var sel = document.querySelector('[data-estado="'+id+'"]');
+    api("/api/feedback/"+id,{corpo:{
+      resposta: $("#r-"+id).value, estado: sel ? sel.value : undefined}})
+      .then(carregarFeedback);
+  } else if((id = b.dataset.pub)){
+    api("/api/novidades/"+id,{corpo:{publicado: b.dataset.valor === "1"}})
+      .then(carregarNovidades);
+  } else if((id = b.dataset.rempost)){
+    if(confirm("Remover o post, com curtidas e comentários?"))
+      api("/api/novidades/"+id+"/remover",{corpo:{}}).then(carregarNovidades);
+  } else if((id = b.dataset.coment)){
+    carregarComentarios(id);
+  } else if((id = b.dataset.remcom)){
+    var par = id.split(":");
+    api("/api/novidades/"+par[0]+"/comentarios/"+par[1]+"/remover",{corpo:{}})
+      .then(function(){ carregarComentarios(par[0]); });
+  }
 });
 
 api("/api/sessao").then(function(r){
