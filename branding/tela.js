@@ -32,6 +32,22 @@
   var LARGURA_PREVIA = 44;      // px: reduz a isto antes de ampliar
   var ESPERA_QUADRO = 4000;     // ms para desistir da captura
 
+  /* Quantas capturas de prévia já falharam, e quando pode tentar de novo.
+
+     Sem isto a captura vira laço: ela só grava `previas[s]` quando
+     consegue um quadro, então uma falha deixa a condição de tentar
+     verdadeira para sempre. Enquanto `cuidar` só rodava em evento isso
+     passava batido; com a varredura periódica virou assinatura ligando e
+     desligando a cada poucos segundos, e a tela não aparecia para
+     ninguém.
+
+     A capa NÃO depende da prévia: sem imagem ela ainda mostra o aviso e o
+     botão de assistir. Desistir é aceitável; insistir não é. */
+  var tentativas = {};   // sid -> capturas falhas
+  var proxima = {};      // sid -> instante em que pode tentar de novo
+  var MAX_TENTATIVAS = 3;
+  var RECUO_MS = 8000;
+
   var assistindo = {};   // sid -> true, escolha do usuário
   var previas = {};      // sid -> dataURL do quadro borrado
   var capturando = {};   // sid -> true enquanto captura
@@ -94,6 +110,13 @@
   }
 
   /* ------------------------------------------------------- prévia */
+  function podeCapturar(s) {
+    if (previas[s] || capturando[s]) return false;
+    if ((tentativas[s] || 0) >= MAX_TENTATIVAS) return false;
+    if (proxima[s] && Date.now() < proxima[s]) return false;
+    return true;
+  }
+
   function capturar(pub) {
     var s = sid(pub);
     if (!s || capturando[s] || previas[s] || pub.kind === "audio") return;
@@ -112,6 +135,13 @@
       if (pronto || Date.now() > fim) {
         delete liberados[s];
         delete capturando[s];
+        if (pronto) {
+          delete tentativas[s];
+          delete proxima[s];
+        } else {
+          tentativas[s] = (tentativas[s] || 0) + 1;
+          proxima[s] = Date.now() + RECUO_MS * tentativas[s];
+        }
         if (!assistindo[s]) { try { pub.setSubscribed(false); } catch (e) {} }
         pintar(pub);
         return;
@@ -286,7 +316,7 @@
       try { pub.setSubscribed(false); } catch (e) {}
       return;
     }
-    if (!previas[s] && !capturando[s]) capturar(pub);
+    if (podeCapturar(s)) capturar(pub);
     else pintar(pub);
   }
 
@@ -319,20 +349,28 @@
          era visto por ninguém: sem capa, sem prévia e sem assinatura --
          um quadro vazio, sem nem o aviso de "assistir" para clicar. */
       sala.on("connected", function () {
+        // Passadas pontuais, não varredura recorrente.
+        //
+        // A versão anterior varria a cada segundo, e isso transformou uma
+        // captura que falha num laço: `capturar` só grava a prévia quando
+        // consegue o quadro, então a condição de tentar continuava
+        // verdadeira e a assinatura ficava ligando e desligando -- a tela
+        // não aparecia para ninguém. O recuo em `podeCapturar` corrige a
+        // causa; aqui reduzimos a superfície de qualquer jeito.
         varrer(sala);
-        // A publicação pode chegar logo depois do "connected".
         setTimeout(function () { varrer(sala); }, 1500);
+        setTimeout(function () { varrer(sala); }, 5000);
       });
 
       // O quadro do app pode ser recriado a qualquer momento; repintar é
       // barato e devolve a camada quando ela some. A varredura vai junto:
       // é a rede que apanha qualquer publicação que nenhum evento trouxe.
       setInterval(function () {
-        try { varrer(sala); } catch (e) {}
         for (var s in publicacoes) {
           if (!capturando[s]) { try { pintar(publicacoes[s]); } catch (e) {} }
         }
       }, 1000);
+
       varrer(sala);
     } catch (e) {}
   };
