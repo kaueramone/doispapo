@@ -23,14 +23,19 @@ FONTE=/root/doispapo/branding
 IP_CHAT=$(getent hosts chat.doispapo.com | awk '{print $1; exit}')
 [ -n "$IP_CHAT" ] || { echo "!! nao resolvi chat.doispapo.com"; exit 1; }
 
-# Publicar derruba quem esta em chamada.
+# Publicar pode derrubar quem esta em chamada.
 #
-# O service worker novo assume e manda as abas abertas recarregarem --
-# isso e o que faz a correcao chegar sem ninguem precisar apertar nada.
-# Quem esta falando nesse instante cai no meio da frase.
+# O service worker novo assume e o app recarrega a aba sozinho quando ele
+# ativa (`activated` com isUpdate -> location.reload). E proposital: e o
+# que faz a correcao chegar sem ninguem precisar apertar nada. So que
+# quem esta falando na hora em que a aba dele decide recarregar cai no
+# meio da frase.
 #
-# Descoberto do jeito ruim: a 0.43.0 subiu com cinco pessoas numa
-# chamada. A serie de metricas ja sabia disso; era so perguntar.
+# Quando isso acontece nao esta na nossa mao: o navegador so procura
+# service worker novo em navegacao ou nas checagens periodicas dele. Na
+# 0.43.0, publicada com cinco pessoas numa chamada, ninguem caiu -- as
+# abas seguiram no bundle anterior. Foi sorte de cronometro, nao
+# garantia, e o proximo pode nao ter a mesma.
 #
 # Para publicar assim mesmo (correcao urgente vale mais que a chamada):
 #   FORCAR=1 branding/publicar.sh
