@@ -1,0 +1,165 @@
+diff --git a/packages/client/components/ui/components/features/voice/destacar.ts b/packages/client/components/ui/components/features/voice/destacar.ts
+new file mode 100644
+index 0000000..9bb7f9e
+--- /dev/null
++++ b/packages/client/components/ui/components/features/voice/destacar.ts
+@@ -0,0 +1,159 @@
++/**
++ * Tirar uma câmera ou tela da grade para uma janela própria.
++ *
++ * A janela é aberta com `window.open` na MESMA origem, o que faz dela um
++ * documento diferente mas com o mesmo contexto de JavaScript. É isso que
++ * permite entregar a faixa de mídia para ela: uma janela do Tauri, ou
++ * qualquer coisa de outra origem, teria contexto próprio e não haveria
++ * como passar um `MediaStream`.
++ *
++ * Por que `window.open` e não `documentPictureInPicture`: o segundo dá uma
++ * janela sempre no topo, mas **uma por aba**, e quem escolhe a posição é o
++ * navegador. Aqui o objetivo é a pessoa arrumar VÁRIAS transmissões no
++ * lugar exato da tela dela. Fica como possível acréscimo depois — o
++ * caminho do código é quase o mesmo, muda só como a janela é obtida.
++ */
++
++const ABERTAS = new Map<string, Window>();
++
++/** Quem observa a lista para acender/apagar o item do menu */
++type Ouvinte = (ids: string[]) => void;
++const ouvintes = new Set<Ouvinte>();
++
++function avisar() {
++  const ids = [...ABERTAS.keys()];
++  for (const o of ouvintes) o(ids);
++}
++
++export function aoMudarDestacados(o: Ouvinte) {
++  ouvintes.add(o);
++  return () => ouvintes.delete(o);
++}
++
++export function estaAberta(id: string) {
++  const j = ABERTAS.get(id);
++  return !!j && !j.closed;
++}
++
++/**
++ * Copia o estilo da página para a janela nova.
++ *
++ * O documento nasce vazio: sem isto o vídeo aparece, mas sem nenhuma das
++ * regras da aplicação — e a fonte dos ícones some, o que faz os símbolos
++ * virarem as palavras deles escritas por extenso.
++ */
++function copiarEstilos(destino: Window) {
++  for (const folha of Array.from(document.styleSheets)) {
++    try {
++      const regras = Array.from(folha.cssRules)
++        .map((r) => r.cssText)
++        .join("\n");
++      const el = destino.document.createElement("style");
++      el.textContent = regras;
++      destino.document.head.appendChild(el);
++    } catch {
++      // Folha de outra origem não deixa ler as regras; refazemos como link.
++      if (folha.href) {
++        const el = destino.document.createElement("link");
++        el.rel = "stylesheet";
++        el.href = folha.href;
++        destino.document.head.appendChild(el);
++      }
++    }
++  }
++}
++
++export type PedidoDestaque = {
++  /** Identificador estável da faixa, o mesmo que o estado de voz usa */
++  id: string;
++  /** Título da janela: nome de quem transmite */
++  titulo: string;
++  /** A faixa de mídia a exibir */
++  stream: MediaStream;
++  /** Chamado quando a janela fecha, por qualquer motivo */
++  aoFechar: () => void;
++};
++
++/**
++ * Abre a janela e devolve se conseguiu.
++ *
++ * Devolver `false` não é detalhe: bloqueador de pop-up recusa em silêncio,
++ * e sem esse retorno o quadro sairia da grade sem aparecer em lugar nenhum
++ * — a transmissão simplesmente sumiria da tela da pessoa.
++ */
++export function destacar(pedido: PedidoDestaque): boolean {
++  const existente = ABERTAS.get(pedido.id);
++  if (existente && !existente.closed) {
++    existente.focus();
++    return true;
++  }
++
++  const janela = window.open(
++    "",
++    `dp-destaque-${pedido.id}`,
++    "popup=yes,width=720,height=440",
++  );
++  if (!janela) return false;
++
++  janela.document.title = pedido.titulo;
++  copiarEstilos(janela);
++
++  const corpo = janela.document.body;
++  corpo.style.margin = "0";
++  corpo.style.background = "#000";
++  corpo.style.height = "100vh";
++  corpo.style.display = "grid";
++
++  const video = janela.document.createElement("video");
++  video.autoplay = true;
++  video.playsInline = true;
++  // Sem mudo o áudio sairia duas vezes: a janela principal já reproduz.
++  video.muted = true;
++  video.srcObject = pedido.stream;
++  video.style.width = "100%";
++  video.style.height = "100%";
++  video.style.objectFit = "contain";
++  corpo.appendChild(video);
++
++  ABERTAS.set(pedido.id, janela);
++  avisar();
++
++  const fechar = () => {
++    ABERTAS.delete(pedido.id);
++    avisar();
++    pedido.aoFechar();
++  };
++
++  janela.addEventListener("pagehide", fechar);
++  // `pagehide` não dispara em todo navegador quando a janela é fechada pelo
++  // botão do sistema; a sondagem é a rede de segurança.
++  const vigia = window.setInterval(() => {
++    if (janela.closed) {
++      window.clearInterval(vigia);
++      fechar();
++    }
++  }, 1000);
++
++  return true;
++}
++
++/** Fecha uma janela específica */
++export function recolher(id: string) {
++  const j = ABERTAS.get(id);
++  if (j && !j.closed) j.close();
++  ABERTAS.delete(id);
++  avisar();
++}
++
++/** Fecha todas — usado quando a chamada termina */
++export function recolherTudo() {
++  for (const [, j] of ABERTAS) {
++    try {
++      if (!j.closed) j.close();
++    } catch {
++      /* janela já foi embora */
++    }
++  }
++  ABERTAS.clear();
++  avisar();
++}

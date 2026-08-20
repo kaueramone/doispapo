@@ -195,49 +195,14 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
         open(f, "w", encoding="utf-8").write(s_)
 
 
-# ------------------------- 1h. marcador de quem esta falando no grid
-# O grid da chamada tinha o pior tipo de deteccao: varrer a pagina atras
-# de elementos cujo texto e igual ao nome do participante. Isso acendia
-# todo "fulano" do historico do chat junto - o nome aparece em dezenas
-# de lugares que nao tem nada a ver com a chamada.
+# ---- 1h. marcador de quem esta falando: agora vive no fonte ----
+# Era regex sobre o bundle, casando `{speaking:!p()&&v(),video:` e
+# `+(p()?" vc_tile group":" vc_tile")`. `p` e `v` eram nomes sorteados
+# pelo minificador: mudaram no build seguinte e os dois remendos sumiram
+# em silencio -- a luz de fala e o `data-dp-uid` junto.
 #
-# O proprio app ja calcula quem esta falando, e passa isso ao quadro:
-#
-#     LN({speaking:!p()&&v(), ...}) + " vc_tile"
-#
-# Basta ele carimbar uma classe estavel com esse mesmo valor. A partir
-# dai o contorno e so CSS, sem varredura, sem casar texto e sem depender
-# de nome de classe gerado pelo empacotador - que muda a cada build.
-#
-# O quadro tambem passa a carimbar de QUEM ele e. Sem isso o unico jeito
-# de ligar um participante ao seu quadro era casar texto - e o mesmo nome
-# aparece no historico do chat inteiro. Com o identificador na mao, a luz
-# pode vir da nossa analise de audio, que responde na hora, em vez do
-# estado do app, que chega suavizado e atrasado.
-# O indicador nativo do quadro e desligado. Ele so troca a cor do
-# contorno (outlineColor), entao apagá-lo nao tira funcao nenhuma - mas
-# tira o ATRASO: o estado de fala do app chega suavizado, e ficava
-# desenhando por cima da nossa luz com outro tempo. Duas luzes com
-# ritmos diferentes no mesmo quadro leem como defeito.
-# A nossa deteccao, a mesma da lista lateral, passa a ser a unica.
-SEM_NATIVO = re.compile(r'\{speaking:!p\(\)&&v\(\),video:')
-for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
-    s_ = open(f, encoding="utf-8", errors="replace").read()
-    novo_, n = SEM_NATIVO.subn('{speaking:!1,video:', s_)
-    if n:
-        conta("fala-nativa-off", n)
-        open(f, "w", encoding="utf-8").write(novo_)
-
-MARCA_FALA = re.compile(r'\+\(p\(\)\?" vc_tile group":" vc_tile"\)')
-for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
-    s_ = open(f, encoding="utf-8", errors="replace").read()
-    novo_, n = MARCA_FALA.subn(
-        '+(p()?" vc_tile group":" vc_tile")+(!p()&&v()?" dp-fala":"")'
-        '+(w.setAttribute("data-dp-uid",r.identity),"")', s_)
-    if n:
-        conta("marcador-fala", n)
-        open(f, "w", encoding="utf-8").write(novo_)
-
+# Agora ParticipantTile.tsx escreve `dp-fala` e `data-dp-uid` diretamente
+# (cliente/patches/0021). Nada a fazer aqui.
 
 # ---------------------- 1g. compartilhamento de tela sob demanda
 # Numa chamada com duas pessoas transmitindo, quem so quer conversar
@@ -313,8 +278,12 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
 
 def remove_rodape(s_):
     """Tira o grupo de links institucionais do rodape do login."""
+    # Sem nome minificado: `c` era o ajudante de componente daquele build
+    # e virou outra letra no seguinte, levando o remendo junto.
+    _i = r'[A-Za-z_$][\w$]*'
     padrao = re.compile(
-        r',c\([\w$]+,\{\}\),c\([\w$]+,\{get children\(\)\{return\['
+        r',' + _i + r'\(' + _i + r',\{\}\),' + _i + r'\(' + _i +
+        r',\{get children\(\)\{return\['
         r'(.{0,400}?)\]\}\}\)')
     ids = ('uyJsf6', 'xowcRf', 'LcET2C')   # Sobre, Termos, Privacidade
 
@@ -331,7 +300,7 @@ def remove_rodape(s_):
 # gabaritos do rodape - que ficam definidos mas sem referencia depois da
 # remocao do grupo - param de carregar a URL morta no arquivo.
 GABARITO = re.compile(
-    r'C\("<a href=https://doispapo\.com/'
+    r'([A-Za-z_$][\w$]*)\("<a href=https://doispapo\.com/'
     r'(?:sobre|termos|privacidade|uso-aceitavel)[^"]*"\)')
 
 for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
@@ -339,7 +308,9 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     o_ = s_
     s_, n_r = remove_rodape(s_)
     conta("rodape-institucional", n_r)
-    s_, n_g = GABARITO.subn('C("<span>")', s_)
+    # O nome do ajudante vem do proprio trecho: escreve-lo a mao geraria
+    # chamada para uma funcao que nao existe mais neste build.
+    s_, n_g = GABARITO.subn(r'\1("<span>")', s_)
     conta("link-institucional", n_g)
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
@@ -510,13 +481,16 @@ if os.path.exists(trad_p):
 # catalogo pt-BR (ja completado na etapa anterior) como fonte.
 pad_simples = re.compile(r'"([A-Za-z0-9+/_-]{6})":\["((?:[^"\\]|\\.)*)"\]')
 
+# Mesma resolucao deterministica da secao 1d: escolher pelo texto "[Ontem"
+# pegava tanto pt-BR quanto pt-PT, e qual vinha primeiro dependia da ordem
+# do sistema de arquivos. Traduzir o fallback para portugues de Portugal
+# passaria despercebido -- o contador diria o mesmo numero.
 fonte = {}
-for f in glob.glob(os.path.join(DST, "assets", "messages-*.js")):
-    s_ = open(f, encoding="utf-8", errors="replace").read()
-    if "[Ontem" not in s_:
-        continue
-    fonte = {m.group(1): m.group(2) for m in pad_simples.finditer(s_)}
-    break
+_cat_pt = _catalogo_pt_br()
+if _cat_pt:
+    fonte = {m.group(1): m.group(2) for m in
+             pad_simples.finditer(open(_cat_pt, encoding="utf-8",
+                                       errors="replace").read())}
 
 if fonte:
     for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
@@ -643,7 +617,12 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
         os.makedirs(os.path.dirname(destino), exist_ok=True)
         shutil.copyfile(origem, destino)
         url = "/" + rel
-        pad = re.compile(r'\b' + re.escape(var) +
+        # (?<![\w$]) e nao \b: o minificador batiza variaveis com $, e
+        # \b nao casa antes de $ -- nao e caractere de palavra. Com \b,
+        # todo som cuja variavel comecasse com $ escapava da troca e
+        # continuava como data URI, sem virar arquivo. Foi o que aconteceu
+        # com "unmute" quando ele virou $$e.
+        pad = re.compile(r'(?<![\w$])' + re.escape(var) +
                          r'="data:audio/ogg;base64,[A-Za-z0-9+/=]+"')
         s2, n = pad.subn(lambda m, v=var, u=url: '%s="%s"' % (v, u),
                          s_, count=1)

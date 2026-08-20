@@ -1,0 +1,150 @@
+diff --git a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
+index 6df8439..b1fe196 100644
+--- a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
++++ b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
+@@ -1,4 +1,4 @@
+-import { createSignal, Show } from "solid-js";
++import { createSignal, onCleanup, onMount, Show } from "solid-js";
+ import {
+   TrackReference,
+   useEnsureParticipant,
+@@ -12,7 +12,12 @@ import { Track } from "livekit-client";
+ import { cva } from "styled-system/css";
+ import { styled } from "styled-system/jsx";
+ 
++import { Trans } from "@lingui-solid/solid/macro";
++
++import MdOpenInNew from "@material-design-icons/svg/outlined/open_in_new.svg?component-solid";
++
+ import { UserContextMenu } from "@revolt/app";
++import { ContextMenuButton } from "@revolt/app/menus/ContextMenu";
+ import { useUser } from "@revolt/markdown/users";
+ import { useVoice } from "@revolt/rtc";
+ import { useState } from "@revolt/state";
+@@ -21,6 +26,12 @@ import { Row } from "@revolt/ui/components/layout";
+ import { OverflowingText } from "@revolt/ui/components/utils";
+ import { Symbol } from "@revolt/ui/components/utils/Symbol";
+ 
++import {
++  aoMudarDestacados,
++  destacar,
++  estaAberta,
++  recolher,
++} from "../destacar";
+ import { VoiceStatefulUserIcons } from "../VoiceStatefulUserIcons";
+ 
+ type TileProps = {
+@@ -39,6 +50,52 @@ export function ParticipantTile(props: TileProps) {
+ 
+   let videoRef: HTMLVideoElement | undefined;
+ 
++  const idFaixa = () => voice.trackId(track);
++  const [emJanela, setEmJanela] = createSignal(estaAberta(idFaixa()));
++  onMount(() => onCleanup(aoMudarDestacados((ids) =>
++    setEmJanela(ids.includes(idFaixa())))));
++
++  /**
++   * Tira este quadro da grade e o entrega a uma janela propria.
++   *
++   * A assinatura da faixa passa a ser nossa: fora da grade nao existe mais
++   * o <VideoTrack> que a mantinha viva pela visibilidade, e no caso de
++   * tela compartilhada o tela.js ainda a bloquearia por conta propria.
++   */
++  function destacarEste() {
++    const pub = (track as TrackReference).publication;
++    const midia = pub?.track?.mediaStream;
++    if (!midia) return;
++
++    try {
++      pub.setSubscribed(true);
++    } catch {
++      /* faixa local nao tem assinatura */
++    }
++    const dpTelaAssistir = (
++      window as unknown as {
++        dpTelaAssistir?: (sid: string, ligado: boolean) => void;
++      }
++    ).dpTelaAssistir;
++    dpTelaAssistir?.(pub.trackSid, true);
++
++    const id = idFaixa();
++    const ok = destacar({
++      id,
++      titulo: user().username ?? "",
++      stream: midia,
++      aoFechar: () => {
++        voice.marcarDestacado(id, false);
++        dpTelaAssistir?.(pub.trackSid, false);
++      },
++    });
++
++    // Bloqueador de pop-up recusa calado. Se a janela nao abriu, o quadro
++    // TEM que continuar na grade -- caso contrario a transmissao some da
++    // tela da pessoa sem nenhuma explicacao.
++    if (ok) voice.marcarDestacado(id, true);
++  }
++
+   const [videoDims, setVideoDims] = createSignal<{
+     height: number;
+     width: number;
+@@ -86,13 +143,34 @@ export function ParticipantTile(props: TileProps) {
+   return (
+     <Show when={!isScreenShare() || !isRemoteScreenShareMuted()}>
+       <div
++        /*
++          `speaking: false` de proposito, e a marca de fala vai na classe
++          `dp-fala`.
++
++          O indicador nativo so troca a cor do contorno, e usa o estado de
++          fala do app -- que chega suavizado e atrasado. O voz.js acende a
++          partir da analise local do audio, em 40ms. Duas luzes no mesmo
++          quadro, em ritmos diferentes, leem como defeito.
++
++          `data-dp-uid` e o que liga o quadro ao participante sem casar
++          texto. Sem ele, a unica forma de saber de quem e o quadro era
++          procurar elementos cujo texto fosse o nome da pessoa -- e esse
++          nome aparece no historico do chat inteiro.
++
++          Isto era feito por regex sobre o bundle (rebrand.py secao 1h) e
++          quebrou assim que o bundle mudou: o padrao exigia `p()` e `v()`,
++          nomes que o minificador sorteou num build e trocou no seguinte.
++        */
++        data-dp-uid={participant.identity}
+         class={
+           tile({
+-            speaking: !isScreenShare() && isSpeaking(),
++            speaking: false,
+             video: isVideo() || isScreenShare(),
+             fullscreen: voice.fullscreen(),
+             ...props,
+-          }) + (isScreenShare() ? " vc_tile group" : " vc_tile")
++          }) +
++          (isScreenShare() ? " vc_tile group" : " vc_tile") +
++          (!isScreenShare() && isSpeaking() ? " dp-fala" : "")
+         }
+         onClick={() => voice.toggleFocus(track)}
+         use:floating={{
+@@ -107,6 +185,23 @@ export function ParticipantTile(props: TileProps) {
+               member={user().member}
+               inVoice={!isScreenShare()}
+               isScreenshare={isScreenShare()}
++              extra={
++                <Show when={isVideo() || isScreenShare()}>
++                  <ContextMenuButton
++                    icon={MdOpenInNew}
++                    onClick={() =>
++                      emJanela() ? recolher(idFaixa()) : destacarEste()
++                    }
++                  >
++                    <Show
++                      when={emJanela()}
++                      fallback={<Trans>Detach into its own window</Trans>}
++                    >
++                      <Trans>Return to the grid</Trans>
++                    </Show>
++                  </ContextMenuButton>
++                </Show>
++              }
+             />
+           ),
+         }}

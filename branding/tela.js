@@ -294,6 +294,25 @@
     return null;
   };
 
+  /* Marca uma tela como assistida por fora do fluxo normal.
+
+     Existe para o quadro destacado em janela propria: ele sai da grade, e
+     sem isto o dpTelaBloqueia continuaria recusando a assinatura -- a
+     janela nova abriria preta. Recebe o sid da faixa, nao a publicacao,
+     porque quem chama e o cliente compilado, do outro lado da injecao. */
+  window.dpTelaAssistir = function (s, ligado) {
+    try {
+      if (!s) return;
+      if (ligado) {
+        assistindo[s] = true;
+        var pub = publicacoes[s];
+        if (pub) try { pub.setSubscribed(true); } catch (e) {}
+      } else {
+        delete assistindo[s];
+      }
+    } catch (e) {}
+  };
+
   window.dpTela = function () {
     return {salas: salas.length, publicacoes: Object.keys(publicacoes),
             assistindo: Object.keys(assistindo),

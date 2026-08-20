@@ -1,8 +1,8 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..fa12e32 100644
+index d03d90e..c807d18 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
-@@ -75,6 +75,28 @@ class Voice {
+@@ -75,6 +75,38 @@ class Voice {
    fullscreen: Accessor<boolean>;
    #setFullscreen: Setter<boolean>;
  
@@ -28,10 +28,20 @@ index d03d90e..fa12e32 100644
 +  entrando: Accessor<string | undefined>;
 +  #setEntrando: Setter<string | undefined>;
 +
++  /**
++   * Faixas tiradas da grade para uma janela propria.
++   *
++   * Guardamos por id de faixa, e nao a janela em si, porque quem monta e
++   * fecha a janela e o modulo de destaque -- aqui so interessa quem NAO
++   * deve mais aparecer na grade.
++   */
++  destacados: Accessor<string[]>;
++  #setDestacados: Setter<string[]>;
++
    focusId: Accessor<string | undefined>;
    #setFocus: Setter<string | undefined>;
  
-@@ -124,6 +146,14 @@ class Voice {
+@@ -124,6 +156,18 @@ class Voice {
      this.fullscreen = fullscreen;
      this.#setFullscreen = setFullscreen;
  
@@ -43,10 +53,14 @@ index d03d90e..fa12e32 100644
 +    this.entrando = entrando;
 +    this.#setEntrando = setEntrando;
 +
++    const [destacados, setDestacados] = createSignal<string[]>([]);
++    this.destacados = destacados;
++    this.#setDestacados = setDestacados;
++
      const [focus, setFocus] = createSignal<string>();
      this.focusId = focus;
      this.#setFocus = setFocus;
-@@ -141,6 +171,7 @@ class Voice {
+@@ -141,6 +185,7 @@ class Voice {
  
    async connect(channel: Channel, auth?: { url: string; token: string }) {
      this.disconnect();
@@ -54,7 +68,7 @@ index d03d90e..fa12e32 100644
  
      const room = new Room({
        audioCaptureDefaults: {
-@@ -174,6 +205,7 @@ class Voice {
+@@ -174,6 +219,7 @@ class Voice {
      });
  
      room.addListener("connected", () => {
@@ -62,7 +76,7 @@ index d03d90e..fa12e32 100644
        this.#setState("CONNECTED");
        if (this.speakingPermission)
          room.localParticipant
-@@ -199,6 +231,12 @@ class Voice {
+@@ -199,6 +245,12 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -75,7 +89,7 @@ index d03d90e..fa12e32 100644
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +269,7 @@ class Voice {
+@@ -231,16 +283,7 @@ class Voice {
        }
      });
  
@@ -93,7 +107,7 @@ index d03d90e..fa12e32 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +280,30 @@ class Voice {
+@@ -251,6 +294,30 @@ class Voice {
      });
    }
  
@@ -124,15 +138,22 @@ index d03d90e..fa12e32 100644
    disconnect() {
      try {
        const room = this.room();
-@@ -261,6 +314,7 @@ class Voice {
+@@ -259,8 +326,14 @@ class Voice {
+       room.removeAllListeners();
+       room.disconnect();
  
++      // Janela destacada sem chamada por tras mostraria um quadro parado
++      // para sempre. Quem fecha e o modulo de destaque, avisado aqui.
++      window.dispatchEvent(new CustomEvent("dp-voz-encerrada"));
++
        batch(() => {
          this.#setState("READY");
 +        this.#setEntrando();
++        this.#setDestacados([]);
          this.#setRoom();
          this.#setChannel();
          this.#setFullscreen(false);
-@@ -577,7 +631,7 @@ class Voice {
+@@ -577,7 +650,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -141,7 +162,7 @@ index d03d90e..fa12e32 100644
      );
    }
  
-@@ -588,7 +642,7 @@ class Voice {
+@@ -588,7 +661,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -150,7 +171,7 @@ index d03d90e..fa12e32 100644
        : undefined;
    }
  
-@@ -600,15 +654,53 @@ class Voice {
+@@ -600,15 +673,73 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
@@ -171,8 +192,28 @@ index d03d90e..fa12e32 100644
 +  visualTracks() {
 +    this.visualTick(); // recalcula quando alguem muta ou desmuta
 +
++    const fora = this.destacados();
++
 +    return this.vidTracks().filter(
-+      (t) => t.publication && !t.publication.isMuted,
++      (t) =>
++        t.publication &&
++        !t.publication.isMuted &&
++        !fora.includes(this.trackId(t)),
++    );
++  }
++
++  /** Se este quadro esta numa janela propria em vez de na grade */
++  estaDestacado(t: TrackReferenceOrPlaceholder) {
++    return this.destacados().includes(this.trackId(t));
++  }
++
++  marcarDestacado(id: string, destacado: boolean) {
++    this.#setDestacados((atual) =>
++      destacado
++        ? atual.includes(id)
++          ? atual
++          : [...atual, id]
++        : atual.filter((x) => x !== id),
      );
    }
  

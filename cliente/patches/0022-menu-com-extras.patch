@@ -1,0 +1,27 @@
+diff --git a/packages/client/components/app/menus/UserContextMenu.tsx b/packages/client/components/app/menus/UserContextMenu.tsx
+index d31599b..312acfe 100644
+--- a/packages/client/components/app/menus/UserContextMenu.tsx
++++ b/packages/client/components/app/menus/UserContextMenu.tsx
+@@ -46,6 +46,14 @@ export function UserContextMenu(props: {
+   contextMessage?: Message;
+   inVoice?: boolean;
+   isScreenshare?: boolean;
++  /**
++   * Itens proprios do lugar que abriu o menu, acima dos de sempre.
++   *
++   * Existe para o quadro da chamada poder oferecer "destacar em janela"
++   * sem montar um segundo menu ao lado deste -- dois containers juntos
++   * apareceriam como duas caixas soltas, cada uma com sua borda.
++   */
++  extra?: JSX.Element;
+ }) {
+   // TODO: if we take serverId instead, we could dynamically fetch server member here
+   // same for the floating menu I guess?
+@@ -300,6 +308,7 @@ export function UserContextMenu(props: {
+ 
+   return (
+     <ContextMenu class="UserContextMenu">
++      {props.extra}
+       {/* Voice controls */}
+       <Show when={props.inVoice && !props.user.self && !props.isScreenshare}>
+         <ContextMenuButton

@@ -43,6 +43,9 @@ declare -A SERIE=(
   [0017-pedidos-de-amizade]=packages/client/src/interface/navigation/servers/ServerList.tsx
   [0018-acoes-do-perfil]=packages/client/components/ui/components/features/profiles/ProfileActions.tsx
   [0019-entrada-imediata]=packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx
+  [0020-destacar-janela]=packages/client/components/ui/components/features/voice/destacar.ts
+  [0021-quadro-destacavel]=packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
+  [0022-menu-com-extras]=packages/client/components/app/menus/UserContextMenu.tsx
 )
 
 for nome in $(printf '%s\n' "${!SERIE[@]}" | sort); do
