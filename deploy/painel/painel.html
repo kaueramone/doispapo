@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Painel · Dois Papo</title>
 <meta name="robots" content="noindex,nofollow">
+<link rel="icon" type="image/png" href="/simbolo.png">
 <style>
   :root{
     /* Superficies em degraus, nao uma cor so: o olho precisa de camada
@@ -42,8 +43,10 @@
     border:1px solid var(--line);border-radius:18px;padding:32px;
     box-shadow:var(--sombra)}
   #login .marca{display:flex;align-items:center;gap:10px;margin-bottom:22px}
-  #login .marca .ponto{width:30px;height:30px;border-radius:9px;
-    background:var(--grad);flex:0 0 auto}
+  /* Era um quadrado de gradiente, marcador de lugar. Agora e o simbolo da
+     marca -- o mesmo arquivo que vira o icone da plataforma. */
+  .ponto{width:30px;height:30px;flex:0 0 auto;background:url("/simbolo.png")
+    center/contain no-repeat}
   #login .marca span{font-weight:700;font-size:16px;letter-spacing:-.01em}
   #login h1{font-size:20px;margin-bottom:5px;letter-spacing:-.01em}
   #login p.s{color:var(--tx2);font-size:13.5px;margin-bottom:18px}
@@ -81,8 +84,7 @@
     position:sticky;top:0;height:100vh}
   .lateral .marca{display:flex;align-items:center;gap:10px;
     padding:4px 8px 18px}
-  .lateral .marca .ponto{width:26px;height:26px;border-radius:8px;
-    background:var(--grad);flex:0 0 auto}
+  .lateral .marca .ponto{width:26px;height:26px}
   .lateral .marca b{font-size:15px;letter-spacing:-.01em}
 
   /* A navegacao continua sendo `.abas button[data-p]` -- o JavaScript

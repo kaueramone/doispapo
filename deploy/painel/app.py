@@ -257,6 +257,22 @@ class Handler(BaseHTTPRequestHandler):
         r = self.rota()
         if r in ("/", "/index.html"):
             return self.html("painel.html")
+        # O mesmo simbolo que o rebrand.py usa como icone da plataforma,
+        # gerado a partir de assets/logos/doispapo-simbolo.png. Serve a
+        # marca do cabecalho e o favicon do painel.
+        if r == "/simbolo.png":
+            try:
+                dados = open(os.path.join(RAIZ, "simbolo.png"), "rb").read()
+            except FileNotFoundError:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(dados)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(dados)
+            return
+
         if r == "/painel.js":
             try:
                 dados = open(os.path.join(RAIZ, "painel.js"), "rb").read()
