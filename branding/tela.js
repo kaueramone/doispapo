@@ -309,9 +309,26 @@
           });
         });
       sala.on("participantConnected", function () { varrer(sala); });
-      // o quadro do app pode ser recriado a qualquer momento; repintar
-      // é barato e devolve a camada quando ela some
+
+      /* Varrer ao CONECTAR, e não só aqui.
+
+         Este gancho roda no construtor da sala, antes de haver conexão:
+         `remoteParticipants` está vazio e a varredura não encontra nada.
+         E `participantConnected` só dispara para quem chega DEPOIS de
+         você. Quem já estava compartilhando a tela quando você entrou não
+         era visto por ninguém: sem capa, sem prévia e sem assinatura --
+         um quadro vazio, sem nem o aviso de "assistir" para clicar. */
+      sala.on("connected", function () {
+        varrer(sala);
+        // A publicação pode chegar logo depois do "connected".
+        setTimeout(function () { varrer(sala); }, 1500);
+      });
+
+      // O quadro do app pode ser recriado a qualquer momento; repintar é
+      // barato e devolve a camada quando ela some. A varredura vai junto:
+      // é a rede que apanha qualquer publicação que nenhum evento trouxe.
       setInterval(function () {
+        try { varrer(sala); } catch (e) {}
         for (var s in publicacoes) {
           if (!capturando[s]) { try { pintar(publicacoes[s]); } catch (e) {} }
         }
