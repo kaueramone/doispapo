@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..403096e 100644
+index d03d90e..e13d2ae 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
 @@ -42,6 +42,15 @@ type State =
@@ -98,19 +98,25 @@ index d03d90e..403096e 100644
      batch(() => {
        this.#setRoom(room);
        this.#setChannel(channel);
-@@ -174,7 +235,11 @@ class Voice {
+@@ -174,8 +235,16 @@ class Voice {
      });
  
      room.addListener("connected", () => {
 +      this.#setEntrando();
        this.#setState("CONNECTED");
-+      // Entrar no canal de ausentes nao liga o microfone: o proposito do
-+      // canal e justamente nao ocupar nada de ninguem.
-+      if (this.ehCanalAusente(channel)) this.#settings.micOn = false;
-       if (this.speakingPermission)
+-      if (this.speakingPermission)
++      // Entrar no canal de ausentes nao liga o microfone -- e, sobretudo,
++      // NAO mexe na preferencia salva.
++      //
++      // `micOn` e persistido. Escrever `false` nele aqui deixaria a pessoa
++      // muda tambem no PROXIMO canal em que entrasse, sem nada na tela
++      // explicando por que ninguem a ouve. Pular o trecho que liga o
++      // microfone basta: ele ainda nao esta ligado neste ponto.
++      if (this.speakingPermission && !this.ehCanalAusente(channel))
          room.localParticipant
            .setMicrophoneEnabled(this.#settings.micOn)
-@@ -199,6 +264,25 @@ class Voice {
+           .then((track) => {
+@@ -199,6 +268,25 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -136,7 +142,7 @@ index d03d90e..403096e 100644
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +315,7 @@ class Voice {
+@@ -231,16 +319,7 @@ class Voice {
        }
      });
  
@@ -154,7 +160,7 @@ index d03d90e..403096e 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +326,103 @@ class Voice {
+@@ -251,6 +330,103 @@ class Voice {
      });
    }
  
@@ -258,7 +264,7 @@ index d03d90e..403096e 100644
    disconnect() {
      try {
        const room = this.room();
-@@ -259,8 +431,16 @@ class Voice {
+@@ -259,8 +435,16 @@ class Voice {
        room.removeAllListeners();
        room.disconnect();
  
@@ -275,7 +281,7 @@ index d03d90e..403096e 100644
          this.#setRoom();
          this.#setChannel();
          this.#setFullscreen(false);
-@@ -577,7 +757,7 @@ class Voice {
+@@ -577,7 +761,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -284,7 +290,7 @@ index d03d90e..403096e 100644
      );
    }
  
-@@ -588,7 +768,7 @@ class Voice {
+@@ -588,7 +772,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -293,7 +299,7 @@ index d03d90e..403096e 100644
        : undefined;
    }
  
-@@ -600,15 +780,85 @@ class Voice {
+@@ -600,15 +784,85 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
