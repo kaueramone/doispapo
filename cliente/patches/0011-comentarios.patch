@@ -1,8 +1,8 @@
 diff --git a/packages/client/components/app/interface/settings/user/Feedback.tsx b/packages/client/components/app/interface/settings/user/Feedback.tsx
-index 813ccb5..13aab34 100644
+index 813ccb5..44638a0 100644
 --- a/packages/client/components/app/interface/settings/user/Feedback.tsx
 +++ b/packages/client/components/app/interface/settings/user/Feedback.tsx
-@@ -1,137 +1,347 @@
+@@ -1,137 +1,392 @@
 -import { useNavigate } from "@solidjs/router";
 -import { Match, Switch } from "solid-js";
 +import { For, Match, Show, Switch, createResource, createSignal } from "solid-js";
@@ -22,19 +22,17 @@ index 813ccb5..13aab34 100644
 -import { CONFIGURATION } from "@revolt/common";
 -import { useModals } from "@revolt/modal";
 -import { CategoryButton, Column, iconSize } from "@revolt/ui";
-+// Cada peca pelo seu caminho, e nao pelo barril @revolt/ui.
++// Cada peca pelo seu caminho, como o resto do projeto faz.
 +//
-+// O barril reexporta a arvore inteira de componentes, inclusive os de
-+// feature, que importam de volta @revolt/app. Trazer `typography` por ali
-+// -- e ele e lido durante a AVALIACAO do modulo, dentro dos styled() --
-+// fechava o ciclo antes da inicializacao e a tela inteira morria com
-+// "Cannot access 'Tt' before initialization". Foi o que derrubou a 0.36.0.
++// (Trocar o barril @revolt/ui por estes caminhos NAO foi o que consertou
++// a tela branca da 0.36.0 -- a causa era ler `typography` durante a
++// avaliacao do modulo; ver a nota nos styled() abaixo. Ficou assim por
++// coerencia com o restante do codigo, nao como correcao.)
 +import { CategoryButton, iconSize } from "@revolt/ui";
 +import {
 +  Button,
 +  Text,
 +  TextField,
-+  typography,
 +} from "@revolt/ui/components/design";
 +import { Column } from "@revolt/ui/components/layout";
 +
@@ -175,15 +173,6 @@ index 813ccb5..13aab34 100644
              >
 -              <Trans>Go to the Stoat Lounge</Trans>
 +              <Trans>Send a suggestion</Trans>
-+            </CategoryButton>
-+            <CategoryButton
-+              icon={<MdForum {...iconSize(22)} />}
-+              onClick={() => setTipo("comentario")}
-+              description={
-+                <Trans>Tell us what is working and what is not.</Trans>
-+              }
-+            >
-+              <Trans>Leave a comment</Trans>
              </CategoryButton>
 -          </Match>
 -          <Match when={showLoungeButton && !isInLounge}>
@@ -194,20 +183,29 @@ index 813ccb5..13aab34 100644
 -                  .then((invite) => PublicChannelInvite.from(client(), invite))
 -                  .then((invite) => openModal({ type: "invite", invite }));
 -              }}
-+              icon={<MdBugReport {...iconSize(22)} />}
-+              onClick={() => setTipo("bug")}
++              icon={<MdForum {...iconSize(22)} />}
++              onClick={() => setTipo("comentario")}
                description={
 -                <Trans>
 -                  You can report issues and discuss improvements with us
 -                  directly here.
 -                </Trans>
-+                <Trans>Something is broken or behaving strangely.</Trans>
++                <Trans>Tell us what is working and what is not.</Trans>
                }
 -              icon={<MdGroups3 />}
              >
 -              <Trans>Join the Stoat Lounge</Trans>
-+              <Trans>Report a problem</Trans>
++              <Trans>Leave a comment</Trans>
              </CategoryButton>
++            <CategoryButton
++              icon={<MdBugReport {...iconSize(22)} />}
++              onClick={() => setTipo("bug")}
++              description={
++                <Trans>Something is broken or behaving strangely.</Trans>
++              }
++            >
++              <Trans>Report a problem</Trans>
++            </CategoryButton>
 +          </CategoryButton.Group>
 +        </Match>
 +      </Switch>
@@ -397,9 +395,24 @@ index 813ccb5..13aab34 100644
 +});
 +
 +const Corpo = styled("span", {
-   base: {
--    textDecoration: "none",
-+    ...typography.raw({ class: "body", size: "small" }),
++  base: {
++        /* Os valores do token "body/small" escritos aqui, e nao lidos de
++       `typography.raw()`.
++
++       O token e um `const` num modulo que o empacotador ordena DEPOIS
++       destes arquivos dentro do mesmo pedaco do bundle. Le-lo durante a
++       avaliacao do modulo -- que e o que um styled() faz -- caia na zona
++       morta temporal e derrubava a aplicacao inteira na inicializacao,
++       com "Cannot access 'Tt' before initialization". Foi o que quebrou
++       a 0.36.0. Trocar o caminho do import nao resolve: resolve no mesmo
++       grafo e a ordem continua a mesma.
++
++       Origem: components/ui/components/design/Text.tsx */
++    overflowWrap: "anywhere",
++    lineHeight: "1rem",
++    fontSize: "0.75rem",
++    letterSpacing: "0.025rem",
++    fontWeight: 400,
 +    whiteSpace: "pre-wrap",
 +    color: "var(--md-sys-color-on-surface-variant)",
 +  },
@@ -416,15 +429,47 @@ index 813ccb5..13aab34 100644
 +});
 +
 +const Aviso = styled("span", {
-+  base: {
-+    ...typography.raw({ class: "body", size: "small" }),
+   base: {
+-    textDecoration: "none",
++        /* Os valores do token "body/small" escritos aqui, e nao lidos de
++       `typography.raw()`.
++
++       O token e um `const` num modulo que o empacotador ordena DEPOIS
++       destes arquivos dentro do mesmo pedaco do bundle. Le-lo durante a
++       avaliacao do modulo -- que e o que um styled() faz -- caia na zona
++       morta temporal e derrubava a aplicacao inteira na inicializacao,
++       com "Cannot access 'Tt' before initialization". Foi o que quebrou
++       a 0.36.0. Trocar o caminho do import nao resolve: resolve no mesmo
++       grafo e a ordem continua a mesma.
++
++       Origem: components/ui/components/design/Text.tsx */
++    overflowWrap: "anywhere",
++    lineHeight: "1rem",
++    fontSize: "0.75rem",
++    letterSpacing: "0.025rem",
++    fontWeight: 400,
 +    color: "var(--md-sys-color-error)",
 +  },
 +});
 +
 +const Estado = styled("span", {
 +  base: {
-+    ...typography.raw({ class: "label", size: "small" }),
++        /* Os valores do token "label/small" escritos aqui, e nao lidos de
++       `typography.raw()`.
++
++       O token e um `const` num modulo que o empacotador ordena DEPOIS
++       destes arquivos dentro do mesmo pedaco do bundle. Le-lo durante a
++       avaliacao do modulo -- que e o que um styled() faz -- caia na zona
++       morta temporal e derrubava a aplicacao inteira na inicializacao,
++       com "Cannot access 'Tt' before initialization". Foi o que quebrou
++       a 0.36.0. Trocar o caminho do import nao resolve: resolve no mesmo
++       grafo e a ordem continua a mesma.
++
++       Origem: components/ui/components/design/Text.tsx */
++    lineHeight: "0.875rem",
++    fontSize: "0.6875rem",
++    letterSpacing: "0.03125rem",
++    fontWeight: 500,
 +    flexShrink: 0,
 +    padding: "2px 8px",
 +    borderRadius: "var(--borderRadius-full)",

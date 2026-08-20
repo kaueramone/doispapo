@@ -1,9 +1,9 @@
 diff --git a/packages/client/components/app/interface/settings/user/Novidades.tsx b/packages/client/components/app/interface/settings/user/Novidades.tsx
 new file mode 100644
-index 0000000..cf70c22
+index 0000000..558b4a8
 --- /dev/null
 +++ b/packages/client/components/app/interface/settings/user/Novidades.tsx
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,389 @@
 +import {
 +  For,
 +  Match,
@@ -21,15 +21,13 @@ index 0000000..cf70c22
 +import MdFavoriteBorder from "@material-design-icons/svg/outlined/favorite_border.svg?component-solid";
 +
 +import { useClient } from "@revolt/client";
-+// Ver a nota em Feedback.tsx: `typography` pelo barril fecha um ciclo de
-+// importacao e derruba a aplicacao inteira na inicializacao.
++// Cada peca pelo seu caminho, como o resto do projeto faz.
 +import { iconSize } from "@revolt/ui";
 +import {
 +  Avatar,
 +  Button,
 +  Text,
 +  TextField,
-+  typography,
 +} from "@revolt/ui/components/design";
 +import { Column } from "@revolt/ui/components/layout";
 +
@@ -266,7 +264,23 @@ index 0000000..cf70c22
 +
 +const Corpo = styled("span", {
 +  base: {
-+    ...typography.raw({ class: "body", size: "small" }),
++        /* Os valores do token "body/small" escritos aqui, e nao lidos de
++       `typography.raw()`.
++
++       O token e um `const` num modulo que o empacotador ordena DEPOIS
++       destes arquivos dentro do mesmo pedaco do bundle. Le-lo durante a
++       avaliacao do modulo -- que e o que um styled() faz -- caia na zona
++       morta temporal e derrubava a aplicacao inteira na inicializacao,
++       com "Cannot access 'Tt' before initialization". Foi o que quebrou
++       a 0.36.0. Trocar o caminho do import nao resolve: resolve no mesmo
++       grafo e a ordem continua a mesma.
++
++       Origem: components/ui/components/design/Text.tsx */
++    overflowWrap: "anywhere",
++    lineHeight: "1rem",
++    fontSize: "0.75rem",
++    letterSpacing: "0.025rem",
++    fontWeight: 400,
 +    whiteSpace: "pre-wrap",
 +    color: "var(--md-sys-color-on-surface-variant)",
 +  },
@@ -274,7 +288,22 @@ index 0000000..cf70c22
 +
 +const Quando = styled("span", {
 +  base: {
-+    ...typography.raw({ class: "label", size: "small" }),
++        /* Os valores do token "label/small" escritos aqui, e nao lidos de
++       `typography.raw()`.
++
++       O token e um `const` num modulo que o empacotador ordena DEPOIS
++       destes arquivos dentro do mesmo pedaco do bundle. Le-lo durante a
++       avaliacao do modulo -- que e o que um styled() faz -- caia na zona
++       morta temporal e derrubava a aplicacao inteira na inicializacao,
++       com "Cannot access 'Tt' before initialization". Foi o que quebrou
++       a 0.36.0. Trocar o caminho do import nao resolve: resolve no mesmo
++       grafo e a ordem continua a mesma.
++
++       Origem: components/ui/components/design/Text.tsx */
++    lineHeight: "0.875rem",
++    fontSize: "0.6875rem",
++    letterSpacing: "0.03125rem",
++    fontWeight: 500,
 +    color: "var(--md-sys-color-outline)",
 +  },
 +});
@@ -288,7 +317,22 @@ index 0000000..cf70c22
 +
 +const Contador = styled("span", {
 +  base: {
-+    ...typography.raw({ class: "label", size: "small" }),
++        /* Os valores do token "label/small" escritos aqui, e nao lidos de
++       `typography.raw()`.
++
++       O token e um `const` num modulo que o empacotador ordena DEPOIS
++       destes arquivos dentro do mesmo pedaco do bundle. Le-lo durante a
++       avaliacao do modulo -- que e o que um styled() faz -- caia na zona
++       morta temporal e derrubava a aplicacao inteira na inicializacao,
++       com "Cannot access 'Tt' before initialization". Foi o que quebrou
++       a 0.36.0. Trocar o caminho do import nao resolve: resolve no mesmo
++       grafo e a ordem continua a mesma.
++
++       Origem: components/ui/components/design/Text.tsx */
++    lineHeight: "0.875rem",
++    fontSize: "0.6875rem",
++    letterSpacing: "0.03125rem",
++    fontWeight: 500,
 +    paddingInlineStart: "var(--gap-sm)",
 +    fontVariantNumeric: "tabular-nums",
 +  },
@@ -327,7 +371,23 @@ index 0000000..cf70c22
 +
 +const Vazio = styled("div", {
 +  base: {
-+    ...typography.raw({ class: "body", size: "small" }),
++        /* Os valores do token "body/small" escritos aqui, e nao lidos de
++       `typography.raw()`.
++
++       O token e um `const` num modulo que o empacotador ordena DEPOIS
++       destes arquivos dentro do mesmo pedaco do bundle. Le-lo durante a
++       avaliacao do modulo -- que e o que um styled() faz -- caia na zona
++       morta temporal e derrubava a aplicacao inteira na inicializacao,
++       com "Cannot access 'Tt' before initialization". Foi o que quebrou
++       a 0.36.0. Trocar o caminho do import nao resolve: resolve no mesmo
++       grafo e a ordem continua a mesma.
++
++       Origem: components/ui/components/design/Text.tsx */
++    overflowWrap: "anywhere",
++    lineHeight: "1rem",
++    fontSize: "0.75rem",
++    letterSpacing: "0.025rem",
++    fontWeight: 400,
 +    padding: "var(--gap-xl)",
 +    textAlign: "center",
 +    color: "var(--md-sys-color-on-surface-variant)",

@@ -58,7 +58,11 @@ function ruido(texto) {
   const pagina = await contexto.newPage();
 
   const erros = [];
-  pagina.on("pageerror", (e) => erros.push(String(e && e.message ? e.message : e)));
+  // A pilha e o que permite mapear de volta ao fonte: sem ela sobra a
+  // mensagem, que diz o QUE quebrou e nao ONDE.
+  pagina.on("pageerror", (e) =>
+    erros.push(String((e && (e.stack || e.message)) || e)),
+  );
   pagina.on("console", (m) => {
     if (m.type() === "error") erros.push(m.text());
   });
