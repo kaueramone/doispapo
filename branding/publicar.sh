@@ -51,6 +51,21 @@ for b in dist-nova/assets/index-*.js; do
 done
 echo "  bundle passou no node --check"
 
+# Portao de fumaca: um navegador de verdade abre ESTE build e confere que
+# o aplicativo monta sem erro nao tratado.
+#
+# O verificar.py confere estrutura e o node --check confere sintaxe --
+# nenhum dos dois EXECUTA nada. A 0.36.0 passou nos dois e derrubou a
+# producao: um ciclo de importacao deixava uma variavel na zona morta
+# temporal, o modulo estourava na inicializacao e a tela ficava branca.
+#
+# Roda ANTES da troca, contra um container separado. Testar o site depois
+# de publicar tambem detectaria, mas so depois de o build quebrado ja ter
+# sido servido a quem abrisse naquele intervalo.
+echo
+echo "==> portao de fumaca (o aplicativo sobe?)"
+"$FONTE/fumaca.sh" "$BR/dist-nova"
+
 # Quando chamado pelo lancar.sh, confere o numero de versao carimbado no
 # bundle ANTES da troca. A versao vem de `git describe` lido na geracao;
 # um build feito antes da tag sai com o numero anterior. Barrar aqui evita

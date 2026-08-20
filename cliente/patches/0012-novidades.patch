@@ -1,9 +1,9 @@
 diff --git a/packages/client/components/app/interface/settings/user/Novidades.tsx b/packages/client/components/app/interface/settings/user/Novidades.tsx
 new file mode 100644
-index 0000000..aaa523b
+index 0000000..cf70c22
 --- /dev/null
 +++ b/packages/client/components/app/interface/settings/user/Novidades.tsx
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,329 @@
 +import {
 +  For,
 +  Match,
@@ -21,15 +21,17 @@ index 0000000..aaa523b
 +import MdFavoriteBorder from "@material-design-icons/svg/outlined/favorite_border.svg?component-solid";
 +
 +import { useClient } from "@revolt/client";
++// Ver a nota em Feedback.tsx: `typography` pelo barril fecha um ciclo de
++// importacao e derruba a aplicacao inteira na inicializacao.
++import { iconSize } from "@revolt/ui";
 +import {
 +  Avatar,
 +  Button,
-+  Column,
 +  Text,
 +  TextField,
-+  iconSize,
 +  typography,
-+} from "@revolt/ui";
++} from "@revolt/ui/components/design";
++import { Column } from "@revolt/ui/components/layout";
 +
 +/** Where our own service lives, behind the same origin */
 +const API = "/api-convites";

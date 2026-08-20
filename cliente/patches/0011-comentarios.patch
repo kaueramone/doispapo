@@ -1,8 +1,8 @@
 diff --git a/packages/client/components/app/interface/settings/user/Feedback.tsx b/packages/client/components/app/interface/settings/user/Feedback.tsx
-index 813ccb5..1c05c40 100644
+index 813ccb5..13aab34 100644
 --- a/packages/client/components/app/interface/settings/user/Feedback.tsx
 +++ b/packages/client/components/app/interface/settings/user/Feedback.tsx
-@@ -1,137 +1,341 @@
+@@ -1,137 +1,347 @@
 -import { useNavigate } from "@solidjs/router";
 -import { Match, Switch } from "solid-js";
 +import { For, Match, Show, Switch, createResource, createSignal } from "solid-js";
@@ -22,15 +22,21 @@ index 813ccb5..1c05c40 100644
 -import { CONFIGURATION } from "@revolt/common";
 -import { useModals } from "@revolt/modal";
 -import { CategoryButton, Column, iconSize } from "@revolt/ui";
++// Cada peca pelo seu caminho, e nao pelo barril @revolt/ui.
++//
++// O barril reexporta a arvore inteira de componentes, inclusive os de
++// feature, que importam de volta @revolt/app. Trazer `typography` por ali
++// -- e ele e lido durante a AVALIACAO do modulo, dentro dos styled() --
++// fechava o ciclo antes da inicializacao e a tela inteira morria com
++// "Cannot access 'Tt' before initialization". Foi o que derrubou a 0.36.0.
++import { CategoryButton, iconSize } from "@revolt/ui";
 +import {
 +  Button,
-+  CategoryButton,
-+  Column,
 +  Text,
 +  TextField,
-+  iconSize,
 +  typography,
-+} from "@revolt/ui";
++} from "@revolt/ui/components/design";
++import { Column } from "@revolt/ui/components/layout";
 +
 +/** Where our own service lives, behind the same origin */
 +const API = "/api-convites";
