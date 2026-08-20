@@ -6,98 +6,189 @@
 <title>Painel · Dois Papo</title>
 <meta name="robots" content="noindex,nofollow">
 <style>
-  :root{--bg:#0b1119;--bg2:#0f1724;--card:#141d2b;--line:#22304a;
-    --tx:#e8edf6;--tx2:#93a1bb;--azul:#2E8BEB;--roxo:#8C41D9;
-    --ok:#3fb950;--al:#d29922;--er:#f85149;
-    --grad:linear-gradient(100deg,var(--azul),var(--roxo))}
+  :root{
+    /* Superficies em degraus, nao uma cor so: o olho precisa de camada
+       para separar "fundo", "painel" e "cartao" sem depender de borda. */
+    --bg:#0b1119; --bg2:#0f1724; --card:#141d2b; --card2:#182338;
+    --line:#22304a; --line2:#2c3d5c;
+    --tx:#e8edf6; --tx2:#93a1bb; --tx3:#6b7a96;
+    --azul:#2E8BEB; --roxo:#8C41D9;
+    --ok:#3fb950; --al:#d29922; --er:#f85149;
+    --grad:linear-gradient(100deg,var(--azul),var(--roxo));
+    --lateral:236px;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--tx);
-    font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+    font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased}
   button{font:inherit;cursor:pointer}
-  code{font-family:ui-monospace,monospace;font-size:12.5px}
+  code{font-family:ui-monospace,monospace;font-size:12.5px;
+    background:rgba(46,139,235,.1);padding:1px 6px;border-radius:5px;
+    color:#bcd8f7}
+  ::selection{background:rgba(140,65,217,.4)}
+
+  /* Fio da marca no topo de tudo. Um detalhe so, e a pagina deixa de
+     parecer um formulario solto. */
+  body::before{content:"";position:fixed;inset:0 0 auto;height:3px;
+    background:var(--grad);z-index:100}
 
   /* ---------- login ---------- */
   #login{min-height:100vh;display:flex;align-items:center;
-    justify-content:center;padding:24px}
-  #login .cx{width:100%;max-width:370px;background:var(--card);
-    border:1px solid var(--line);border-radius:16px;padding:30px}
-  #login h1{font-size:21px;margin-bottom:4px}
-  #login p.s{color:var(--tx2);font-size:13.5px;margin-bottom:20px}
-  label{display:block;font-size:12.5px;color:var(--tx2);margin:12px 0 5px}
-  input,select{width:100%;background:var(--bg);color:var(--tx);
-    border:1px solid var(--line);border-radius:9px;padding:10px 12px;
-    font:15px system-ui}
-  input:focus,select:focus{outline:0;border-color:var(--roxo)}
-  .bt{width:100%;margin-top:18px;border:0;border-radius:10px;padding:12px;
-    font:650 14px system-ui;color:#fff;background:var(--grad)}
+    justify-content:center;padding:24px;
+    background:radial-gradient(1000px 500px at 50% -10%,
+      rgba(46,139,235,.13),transparent 70%)}
+  #login .cx{width:100%;max-width:380px;background:var(--card);
+    border:1px solid var(--line);border-radius:18px;padding:32px;
+    box-shadow:var(--sombra)}
+  #login .marca{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+  #login .marca .ponto{width:30px;height:30px;border-radius:9px;
+    background:var(--grad);flex:0 0 auto}
+  #login .marca span{font-weight:700;font-size:16px;letter-spacing:-.01em}
+  #login h1{font-size:20px;margin-bottom:5px;letter-spacing:-.01em}
+  #login p.s{color:var(--tx2);font-size:13.5px;margin-bottom:18px}
+  label{display:block;font-size:12.5px;color:var(--tx2);margin:14px 0 6px;
+    font-weight:500}
+  input,select,textarea{width:100%;background:var(--bg);color:var(--tx);
+    border:1px solid var(--line);border-radius:10px;padding:10px 12px;
+    font:15px system-ui;transition:border-color .15s,box-shadow .15s}
+  textarea{resize:vertical;line-height:1.55}
+  input:focus,select:focus,textarea:focus{outline:0;border-color:var(--azul);
+    box-shadow:0 0 0 3px rgba(46,139,235,.16)}
+  input[type=checkbox]{width:auto}
+  .bt{width:100%;margin-top:20px;border:0;border-radius:11px;padding:12px;
+    font:650 14px system-ui;color:#fff;background:var(--grad);
+    transition:filter .15s,transform .1s}
+  .bt:hover{filter:brightness(1.1)}
+  .bt:active{transform:translateY(1px)}
   .bt[disabled]{opacity:.5;cursor:progress}
-  .msg{margin-top:14px;padding:10px 12px;border-radius:8px;font-size:13.5px;
+  .msg{margin-top:14px;padding:10px 12px;border-radius:9px;font-size:13.5px;
     display:none}
   .msg.on{display:block;background:rgba(248,81,73,.12);
     border:1px solid rgba(248,81,73,.35);color:#ffb3b3}
   .msg.ok{background:rgba(63,185,80,.12);border-color:rgba(63,185,80,.35);
     color:#8df0b0}
 
-  /* ---------- app ---------- */
-  #app{display:none}
-  .topo{display:flex;align-items:center;gap:16px;padding:14px 22px;
-    border-bottom:1px solid var(--line);background:var(--bg2);
-    position:sticky;top:0;z-index:10;flex-wrap:wrap}
-  .topo b{font-size:16px}
-  .topo .sp{flex:1}
-  .abas{display:flex;gap:4px;flex-wrap:wrap}
-  .abas button{background:transparent;border:1px solid transparent;
-    color:var(--tx2);padding:7px 13px;border-radius:8px;font-size:13.5px}
-  .abas button.on{background:var(--card);border-color:var(--line);
-    color:var(--tx)}
-  .sair{background:transparent;border:1px solid var(--line);color:var(--tx2);
-    padding:7px 13px;border-radius:8px;font-size:13px}
-  main{max-width:1200px;margin:0 auto;padding:24px 22px 70px}
-  .pg{display:none}.pg.on{display:block}
-  h2{font-size:19px;margin-bottom:4px}
-  .sub{color:var(--tx2);font-size:13.5px;margin-bottom:18px}
+  /* ---------- estrutura ---------- */
+  /* O display e ligado pelo JavaScript (abrirApp), entao as colunas ficam
+     aqui e nao numa classe: assim o inline so decide SE aparece, nunca
+     como. */
+  #app{display:none;grid-template-columns:var(--lateral) 1fr;
+    min-height:100vh}
 
+  .lateral{background:var(--bg2);border-right:1px solid var(--line);
+    padding:20px 14px;display:flex;flex-direction:column;gap:6px;
+    position:sticky;top:0;height:100vh}
+  .lateral .marca{display:flex;align-items:center;gap:10px;
+    padding:4px 8px 18px}
+  .lateral .marca .ponto{width:26px;height:26px;border-radius:8px;
+    background:var(--grad);flex:0 0 auto}
+  .lateral .marca b{font-size:15px;letter-spacing:-.01em}
+
+  /* A navegacao continua sendo `.abas button[data-p]` -- o JavaScript
+     depende desse seletor. Muda a aparencia, nao o contrato. */
+  .abas{display:flex;flex-direction:column;gap:2px}
+  .abas button{position:relative;text-align:left;background:transparent;
+    border:0;color:var(--tx2);padding:9px 12px;border-radius:9px;
+    font-size:13.5px;transition:background .15s,color .15s}
+  .abas button:hover{background:var(--card);color:var(--tx)}
+  .abas button.on{background:var(--card);color:var(--tx);font-weight:600}
+  .abas button.on::before{content:"";position:absolute;left:0;top:50%;
+    transform:translateY(-50%);width:3px;height:17px;border-radius:0 3px 3px 0;
+    background:var(--grad)}
+
+  .lateral .sp{flex:1}
+  .sair{background:transparent;border:1px solid var(--line);color:var(--tx2);
+    padding:9px 12px;border-radius:9px;font-size:13px;text-align:left;
+    transition:border-color .15s,color .15s}
+  .sair:hover{color:var(--tx);border-color:var(--line2)}
+  .assinatura{color:var(--tx3);font-size:11px;padding:12px 8px 0;
+    line-height:1.4}
+
+  main{max-width:1180px;padding:34px 32px 80px;width:100%}
+  .pg{display:none}.pg.on{display:block;animation:entra .18s ease}
+  @keyframes entra{from{opacity:0;transform:translateY(4px)}to{opacity:1}}
+  @media(prefers-reduced-motion:reduce){.pg.on{animation:none}}
+  h2{font-size:22px;margin-bottom:5px;letter-spacing:-.02em}
+  .sub{color:var(--tx2);font-size:13.5px;margin-bottom:24px;max-width:70ch}
+
+  /* ---------- cartoes de numero ---------- */
   .cards{display:grid;gap:12px;
-    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:24px}
-  .c{background:var(--card);border:1px solid var(--line);border-radius:12px;
-    padding:16px}
-  .c .n{font-size:26px;font-weight:750;line-height:1.15;
+    grid-template-columns:repeat(auto-fit,minmax(158px,1fr));margin-bottom:26px}
+  /* Numero fixo de colunas na tela larga: com auto-fit, oito cartoes caem
+     como 6+2 e sobra um vao atravessado no meio da pagina. */
+  @media(min-width:1100px){.cards{grid-template-columns:repeat(4,minmax(0,1fr));
+    max-width:920px}}
+  .c{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:16px 18px;transition:border-color .15s,transform .15s}
+  .c:hover{border-color:var(--line2);transform:translateY(-1px)}
+  .c .n{font-size:28px;font-weight:750;line-height:1.1;letter-spacing:-.02em;
     background:var(--grad);-webkit-background-clip:text;
     background-clip:text;color:transparent}
-  .c .r{font-size:12.5px;color:var(--tx2);margin-top:2px}
+  .c .r{font-size:12.5px;color:var(--tx2);margin-top:3px}
 
+  /* ---------- blocos e tabelas ---------- */
   .bloco{background:var(--card);border:1px solid var(--line);
-    border-radius:13px;padding:18px;margin-bottom:16px}
-  .bloco h3{font-size:15px;margin-bottom:12px}
+    border-radius:14px;padding:20px;margin-bottom:16px}
+  .bloco h3{font-size:15px;margin-bottom:14px}
   table{width:100%;border-collapse:collapse;font-size:13.5px}
-  th{text-align:left;color:var(--tx2);font-size:11.5px;text-transform:uppercase;
-    letter-spacing:.06em;padding:7px 8px;border-bottom:1px solid var(--line);
-    white-space:nowrap}
-  td{padding:8px;border-bottom:1px solid rgba(34,48,74,.5);
+  th{text-align:left;color:var(--tx3);font-size:11px;text-transform:uppercase;
+    letter-spacing:.07em;padding:0 10px 9px;
+    border-bottom:1px solid var(--line);white-space:nowrap;font-weight:600}
+  td{padding:10px;border-bottom:1px solid rgba(34,48,74,.45);
     vertical-align:middle}
+  tbody tr{transition:background .12s}
+  tbody tr:hover{background:var(--card2)}
   tr:last-child td{border-bottom:0}
-  .vazio{color:var(--tx2);font-size:13.5px;padding:18px 0;text-align:center}
+  .vazio{color:var(--tx3);font-size:13.5px;padding:28px 0;text-align:center}
 
-  .tag{font-size:11.5px;padding:2px 8px;border-radius:999px;
-    border:1px solid var(--line);color:var(--tx2);white-space:nowrap}
-  .tag.ok{color:#8df0b0;border-color:rgba(63,185,80,.4)}
-  .tag.al{color:#f0d48a;border-color:rgba(210,153,34,.4)}
-  .tag.er{color:#ffb3b3;border-color:rgba(248,81,73,.4)}
+  .tag{font-size:11px;padding:3px 9px;border-radius:999px;font-weight:600;
+    border:1px solid var(--line);color:var(--tx2);white-space:nowrap;
+    display:inline-block}
+  .tag.ok{color:#8df0b0;border-color:rgba(63,185,80,.4);
+    background:rgba(63,185,80,.1)}
+  .tag.al{color:#f0d48a;border-color:rgba(210,153,34,.4);
+    background:rgba(210,153,34,.1)}
+  .tag.er,.tag.perigo{color:#ffb3b3;border-color:rgba(248,81,73,.4);
+    background:rgba(248,81,73,.1)}
 
   .ac{background:var(--bg2);border:1px solid var(--line);color:var(--tx2);
-    border-radius:7px;padding:5px 10px;font-size:12.5px;margin-right:5px}
-  .ac:hover{color:var(--tx);border-color:var(--roxo)}
-  .ac.perigo:hover{color:#ffb3b3;border-color:rgba(248,81,73,.5)}
+    border-radius:8px;padding:5px 11px;font-size:12.5px;margin-right:5px;
+    transition:color .15s,border-color .15s,background .15s}
+  .ac:hover{color:var(--tx);border-color:var(--azul);background:var(--card2)}
+  .ac.perigo:hover{color:#ffb3b3;border-color:rgba(248,81,73,.55);
+    background:rgba(248,81,73,.08)}
 
   .barra{height:9px;border-radius:5px;background:var(--grad);min-width:3px}
-  .linhaB{display:flex;align-items:center;gap:10px;margin-bottom:7px;
+  .linhaB{display:flex;align-items:center;gap:10px;margin-bottom:8px;
     font-size:13px}
   .linhaB .rot{flex:0 0 auto;color:var(--tx2);min-width:60px}
-  .linhaB .val{flex:0 0 auto;color:var(--tx2);min-width:44px;text-align:right}
+  .linhaB .val{flex:0 0 auto;color:var(--tx2);min-width:44px;text-align:right;
+    font-variant-numeric:tabular-nums}
   .linhaB .cx{flex:1;background:var(--bg2);border-radius:5px;overflow:hidden}
 
-  .flex{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+  .flex{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
   .flex > div{flex:1;min-width:150px}
+  .flex .sp{flex:1;min-width:0}
+
+  /* ---------- telas estreitas ---------- */
+  @media(max-width:860px){
+    /* `auto 1fr` e o que impede a faixa de navegacao de ser esticada: sem
+       isso o grid divide a altura minima de 100vh entre as duas linhas e a
+       barra fica com o dobro da altura que precisa. */
+    #app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+    .lateral{position:static;height:auto;flex-direction:row;
+      align-items:center;gap:10px;flex-wrap:wrap;padding:12px 14px;
+      border-right:0;border-bottom:1px solid var(--line)}
+    .lateral .marca{padding:0;flex:0 0 auto}
+    .lateral .assinatura{display:none}
+    .abas{flex-direction:row;flex:1;flex-wrap:wrap}
+    .abas button{white-space:nowrap;padding:7px 10px}
+    .lateral .sp{display:none}
+    .sair{flex:0 0 auto}
+    .abas button.on::before{display:none}
+    main{padding:24px 16px 60px}
+  }
 </style>
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 </head>
@@ -106,6 +197,7 @@
 <!-- ------------------------------------------------------------ login -->
 <div id="login">
   <div class="cx">
+    <div class="marca"><div class="ponto"></div><span>Dois Papo</span></div>
     <h1>Painel administrativo</h1>
     <p class="s">Acesso restrito. Credenciais próprias, independentes da
       plataforma.</p>
@@ -124,9 +216,9 @@
 
 <!-- -------------------------------------------------------------- app -->
 <div id="app">
-  <div class="topo">
-    <b>Dois Papo</b>
-    <div class="abas">
+  <aside class="lateral">
+    <div class="marca"><div class="ponto"></div><b>Dois Papo</b></div>
+    <nav class="abas">
       <button data-p="visao" class="on">Visão geral</button>
       <button data-p="acessos">Acessos</button>
       <button data-p="fila">Fila de espera</button>
@@ -135,10 +227,11 @@
       <button data-p="feedback">Comentários</button>
       <button data-p="novidades">Novidades</button>
       <button data-p="conta">Conta</button>
-    </div>
+    </nav>
     <div class="sp"></div>
     <button class="sair" id="b-sair">Sair</button>
-  </div>
+    <div class="assinatura">desenvolvido por<br>kaueramone.dev</div>
+  </aside>
 
   <main>
     <section class="pg on" id="pg-visao">

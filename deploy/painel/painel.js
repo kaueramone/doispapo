@@ -51,7 +51,7 @@ function entrar(e){
 }
 function abrirApp(trocar){
   $("#login").style.display = "none";
-  $("#app").style.display = "block";
+  $("#app").style.display = "grid";
   api("/api/sessao").then(function(r){
     if(r.d && r.d.usuario) $("#su").value = r.d.usuario;
   });
