@@ -9,86 +9,100 @@ escrito é o que se sabe hoje — inclusive o que ainda não se sabe.
 ## Destacar câmera ou tela da grade para uma janela própria
 
 **Pedido.** Com câmeras e telas na janela cinza, clicar com o botão
-direito num quadro e escolher tirá-lo da grade. Ele vira uma janela solta,
+direito num quadro e tirá-lo da grade. Ele vira uma janela solta,
 arrastável e redimensionável, para a pessoa posicionar cada transmissão
-onde quiser na sua tela. No navegador, uma aba nova; no desktop, uma
-janela nova.
+onde quiser na sua tela. É **arranjo local**: não muda nada para os
+outros participantes da chamada.
 
-**Onde encosta no código de hoje**
+### O que o Discord faz de fato (pesquisado, 2026-08)
 
-| Peça | Papel |
+Vale corrigir a referência antes de projetar em cima dela. O Discord tem
+**Pop Out View**: destaca a **janela inteira da chamada** — com todas as
+transmissões dentro — para **uma** janela separada, que se move pela tela,
+tem *Stay On Top* para fixar acima das outras, e botão de tela cheia.
+
+O que ele **não** tem é uma janela por transmissão. Destacar cada stream
+para sua própria janela é pedido recorrente da comunidade há anos, com
+várias linhas abertas no fórum de suporte, e segue não implementado. Hoje
+a saída de quem precisa disso é capturar a janela do Discord várias vezes
+e recortar cada pedaço.
+
+Ou seja: o que foi pedido aqui é **mais** do que o Discord entrega. Isso
+não é motivo para não fazer — é motivo para fatiar, porque a primeira
+fatia já dá paridade com ele.
+
+### O que a plataforma web oferece
+
+**`documentPictureInPicture`** — janela real do sistema, sempre no topo,
+que hospeda DOM da própria página.
+
+| | |
 |---|---|
-| `ParticipantTile.tsx` | o quadro que seria destacado |
-| `VoiceCallCardActiveRoom.tsx` | a grade, e o foco (`toggleFocus`) |
-| `rtc/state.tsx` → `visualTracks()` | quem entra na grade |
-| `branding/tela.js` + `rebrand.py` §1g | assinatura de faixa sob demanda |
+| Contexto de JavaScript | **compartilhado** com a página que abriu |
+| Sempre no topo | sim, por natureza |
+| Quantidade | **uma por aba**, limite do próprio navegador |
+| Posição | definida pelo navegador; o site não escolhe |
+| Requisito | contexto seguro (HTTPS) — já temos |
+| Suporte | Chromium; **não** está no Firefox nem no Safari |
 
-### Duas paredes que precisam ser resolvidas antes de escrever tela
+O contexto compartilhado é o que derruba a parede 1: o `<video>` continua
+sendo o mesmo elemento, no mesmo documento lógico, então o observador de
+visibilidade não o considera fora de tela e a faixa segue assinada.
 
-**1. Sair da grade hoje significa parar de receber o vídeo.**
+**`window.open` na mesma origem** — para ir além de uma janela.
 
-O aplicativo cancela a assinatura da faixa por visibilidade —
-`IntersectionObserver` a 80%, com 3s de carência — e o nosso `tela.js`
-acrescenta uma segunda condição por cima (§1g do `rebrand.py`). Um quadro
-levado para fora do documento principal fica invisível para esse
-observador, a assinatura cai, e a janela destacada mostra preto.
+| | |
+|---|---|
+| Contexto de JavaScript | compartilhado via `window.opener` |
+| Sempre no topo | não |
+| Quantidade | várias |
+| Posição e tamanho | a pessoa ajusta; o site pode sugerir |
+| Suporte | todos os navegadores |
+| Pega | bloqueador de pop-up — precisa de gesto do usuário (o clique do menu de contexto serve) |
 
-Ou seja: **destacar não é só mover um elemento**. É preciso um estado
-"este quadro está sendo assistido em outro lugar" que isente a faixa das
-duas regras de cancelamento. Se isso for esquecido, o defeito aparece uns
-segundos depois de destacar — tempo suficiente para parecer instabilidade
-de rede em vez de bug nosso.
+### Desenho sugerido, em duas fatias
 
-**2. No desktop a janela nova não compartilha o contexto de JavaScript.**
+**Fatia 1 — paridade com o Discord, e um pouco além.** Destacar *um*
+quadro via `documentPictureInPicture`. Resolve o caso comum (uma tela
+compartilhada que a pessoa quer no segundo monitor), não precisa de janela
+nativa, e já nasce sempre-no-topo. Como é o mesmo contexto, não há
+duplicação de assinatura nem participante fantasma.
 
-Isso separa os dois ambientes de verdade:
+Detalhe que já temos meio caminho andado: a janela da chamada **já é**
+flutuante e arrastável, com canto magnético e tela cheia
+(`VoiceCallCard.tsx`). O que falta é ela poder sair da página.
 
-- **Navegador.** Uma janela aberta com `window.open` na mesma origem
-  compartilha o contexto com quem abriu (`window.opener`). Dá para
-  entregar a `MediaStream` para a janela filha, ou literalmente mover o
-  `<video>` para lá. Funciona.
+**Fatia 2 — várias janelas.** `window.open` para o segundo quadro em
+diante. Aqui aparece a diferença entre navegador e desktop, e só aqui.
 
-- **Desktop (Tauri v2).** Uma janela nova é **outro webview**, com
-  contexto próprio. Não há como passar uma `MediaStream` para ela. As
-  saídas conhecidas, todas com custo:
-  1. a janela destacada entra na sala do LiveKit como um segundo assinante
-     — gasta banda em dobro e aparece como mais um participante, a menos
-     que se invente uma identidade oculta;
-  2. manter o vídeo na janela principal e usar uma janela Tauri
-     transparente sempre-no-topo como moldura — frágil, e quebra ao mover
-     a janela principal;
-  3. transportar quadros por IPC — caro e com atraso.
+### Desktop (Tauri v2)
 
-**Caminho que provavelmente resolve os dois de uma vez:**
-`documentPictureInPicture`. É uma janela real do sistema, solta,
-redimensionável e sempre no topo, que hospeda DOM da própria página —
-então o `<video>` continua no mesmo contexto e a faixa segue assinada
-normalmente. E como o Tauri no Windows usa WebView2, que é Chromium, a
-mesma implementação tende a valer para o desktop **sem precisar de janela
-nativa nenhuma**.
+O invólucro aponta para `chat.doispapo.com` e não tem frontend próprio. Um
+`WebviewWindow` novo do Tauri é **outro webview, com contexto próprio** —
+não dá para entregar uma `MediaStream` a ele, e por isso não serve.
 
-O limite conhecido: **uma janela de Picture-in-Picture por documento**. O
-pedido fala em posicionar as telas *que quiser*, no plural. Então ou
-começamos com uma destacada por vez, ou combinamos Picture-in-Picture para
-a primeira e `window.open` para as demais — o que reintroduz a diferença
-entre navegador e desktop, só que restrita ao segundo quadro em diante.
+O caminho é não criar janela nativa nenhuma: o WebView2 do Windows é
+Chromium *evergreen*, sempre na versão recente, então
+`documentPictureInPicture` deve funcionar dentro do webview que já existe.
+**Isso precisa ser testado antes de virar plano** — é a única suposição
+aqui que não foi verificada. Para a fatia 2, falta apurar o que o Tauri
+faz com `window.open` (pode abrir no navegador do sistema em vez de um
+webview).
 
 ### O que precisa ser decidido
 
-1. Uma janela destacada por vez (simples, funciona nos dois ambientes) ou
-   várias (exige o caminho híbrido acima)?
+1. Fatia 1 sozinha resolve o seu caso, ou várias janelas é requisito desde
+   o começo?
 2. A janela destacada leva só o vídeo, ou também nome, indicador de fala e
-   controle de volume?
-3. Fechar a janela devolve o quadro à grade, ou deixa de assistir?
+   volume?
+3. Fechar devolve o quadro à grade, ou deixa de assistir?
 4. Ao sair da chamada, a janela destacada fecha sozinha — assumo que sim.
 
 ### Tamanho
 
-Não é pequeno. O menu de contexto e o mover do elemento são a parte fácil;
-o trabalho de verdade está na regra de assinatura (parede 1) e em provar o
-comportamento no Tauri (parede 2). Vale fatiar: primeiro uma janela por
-vez via `documentPictureInPicture` no navegador, medir, e só então decidir
-sobre desktop e sobre várias janelas.
+Fatia 1 é modesta: menu de contexto no `ParticipantTile`, mover o nó para
+a janela de PiP, copiar as folhas de estilo, e devolver ao fechar. Fatia 2
+é bem maior, e carrega sozinha quase toda a incerteza de desktop.
 
 ---
 
