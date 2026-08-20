@@ -58,13 +58,25 @@ echo "  bundle passou no node --check"
 if [ -n "${VERSAO_ESPERADA:-}" ]; then
   # Dois `grep -o` encadeados picam a linha minificada em pedacos e
   # devolvem lixo; extrair o grupo de uma vez e o unico jeito confiavel.
+  #
+  # NAO procure pelo nome da constante. A versao anterior casava
+  # `const dW="..."`, e `dW` era so o nome que o minificador tinha
+  # sorteado naquele build. Assim que o bundle passou a ser compilado do
+  # fonte com codigo nosso dentro, o mesmo valor virou `uW` e a
+  # conferencia nao achou nada - reprovando um build que estava
+  # perfeitamente carimbado.
+  #
+  # O que nao depende de sorteio e a forma: uma constante com o numero,
+  # e um objeto logo em seguida que a usa como `version`. E isso que
+  # ancora a busca; os nomes ficam por conta do grupo de captura.
   BAKED=$(python3 - <<'EOF'
 import re, glob
+padrao = re.compile(r'const\s+([A-Za-z_$][\w$]*)\s*=\s*"([0-9][0-9.]*)"\s*,'
+                    r'\s*[A-Za-z_$][\w$]*\s*=\s*\{\s*version\s*:\s*\1\b')
 for f in sorted(glob.glob('dist-nova/assets/index-*.js')):
-    m = re.search(r'const dW="([0-9][0-9.]*)"',
-                  open(f, encoding='utf-8', errors='replace').read())
+    m = padrao.search(open(f, encoding='utf-8', errors='replace').read())
     if m:
-        print(m.group(1)); break
+        print(m.group(2)); break
 EOF
 )
   if [ "$BAKED" != "$VERSAO_ESPERADA" ]; then

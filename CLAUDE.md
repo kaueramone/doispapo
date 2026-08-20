@@ -13,6 +13,7 @@ Instância pública em `chat.doispapo.com`, landing em `doispapo.com`.
 
 ```
 doispapo/
+├── cliente/                fonte do cliente web: patches + build
 ├── deploy/compose.yml      stack de containers
 ├── site/                   landing page (HTML estático)
 ├── branding/
@@ -80,10 +81,20 @@ atribuída em outro — os handlers são uma sequência de ramos por rota, e
 esse defeito passa em qualquer linter de escopo porque o nome existe na
 função. Já derrubou o envio de som com 502.
 
-## Rebranding do cliente web
+## Cliente web
 
-O cliente vem como imagem pré-compilada. `branding/rebrand.py` extrai o
-build, aplica a marca e gera um `dist-patched` que é montado por cima.
+O cliente é **compilado do fonte** (`cliente/`), no commit fixado do
+upstream, com as nossas alterações como série de patches em
+`cliente/patches/`. Não é um fork: nada é commitado na árvore do fonte.
+Ver `cliente/README.md`.
+
+Um build sem patch nenhum reproduz a imagem publicada byte a byte — é o
+que torna a troca de pipeline reversível, e o `construir.sh` refaz essa
+conferência sozinho sempre que a série está vazia.
+
+`branding/rebrand.py` continua rodando por cima do build, aplicando a
+marca, as traduções e os remendos que ainda vivem no bundle, e gera um
+`dist-patched` que é montado no container.
 
 **Nunca rode o `rebrand.py` apontando para `dist-patched`.** Esse é o
 diretório que o container serve ao vivo; o script abre cada arquivo em
@@ -98,7 +109,7 @@ confere enquanto ele ainda está fora do ar e só então troca de lugar:
 
 ```bash
 branding/publicar.sh              # gerar, conferir e publicar
-deploy/lancar.sh 0.27.0 "…"       # o mesmo, com commit + tag + push
+deploy/lancar.sh 0.33.0 "…"       # o mesmo, com commit + tag + push
 ```
 
 `branding/verificar.py` é o portão. Reprova o build se o `index.html`
