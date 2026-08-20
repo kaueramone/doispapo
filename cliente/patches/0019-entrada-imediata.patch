@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx b/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx
-index 3e9495c..df4ad5c 100644
+index 3e9495c..c719a7a 100644
 --- a/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx
 +++ b/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx
 @@ -14,7 +14,8 @@ import { styled } from "styled-system/jsx";
@@ -53,3 +53,49 @@ index 3e9495c..df4ad5c 100644
          <For each={[...props.channel.voiceParticipants.values()]}>
            {(participant) => <ParticipantPreview participant={participant} />}
          </For>
+@@ -72,8 +103,34 @@ function VariantPreview(props: { channel: Channel }) {
+  * Live variant of participant
+  */
+ function ParticipantLive() {
++  const voice = useVoice();
+   const participant = useEnsureParticipant();
+ 
++  /**
++   * O que esta pessoa esta publicando agora.
++   *
++   * Estes dois valores eram passados como `false` fixo, entao os
++   * indicadores de camera e tela simplesmente nao existiam para quem
++   * estava DENTRO do canal -- apareciam so na variante de fora, que le do
++   * estado da API.
++   *
++   * Camera e tela usam criterios diferentes de proposito: desligar a
++   * camera e um mute (a publicacao continua), enquanto parar de
++   * compartilhar despublica a faixa. Alem disso a tela nasce publicada
++   * como mutada por alguns segundos -- exigir "nao mutada" aqui apagaria o
++   * indicador justamente no comeco.
++   */
++  const publicandoCamera = () => {
++    voice.visualTick();
++    const pub = participant.getTrackPublication(Track.Source.Camera);
++    return !!pub && !pub.isMuted;
++  };
++
++  const publicandoTela = () => {
++    voice.visualTick();
++    return !!participant.getTrackPublication(Track.Source.ScreenShare);
++  };
++
+   const isMuted = useIsMuted({
+     participant,
+     source: Track.Source.Microphone,
+@@ -87,8 +144,8 @@ function ParticipantLive() {
+       speaking={isSpeaking()}
+       muted={isMuted()}
+       deafened={false}
+-      camera={false}
+-      screenshare={false}
++      camera={publicandoCamera()}
++      screenshare={publicandoTela()}
+       isLive
+     />
+   );

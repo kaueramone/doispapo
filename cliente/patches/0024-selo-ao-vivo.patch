@@ -1,0 +1,50 @@
+diff --git a/packages/client/components/ui/components/features/voice/VoiceStatefulUserIcons.tsx b/packages/client/components/ui/components/features/voice/VoiceStatefulUserIcons.tsx
+index 9276e16..f1df7c8 100644
+--- a/packages/client/components/ui/components/features/voice/VoiceStatefulUserIcons.tsx
++++ b/packages/client/components/ui/components/features/voice/VoiceStatefulUserIcons.tsx
+@@ -1,6 +1,7 @@
+ import { Show } from "solid-js";
+ 
+-import { useLingui } from "@lingui-solid/solid/macro";
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
++import { cva } from "styled-system/css";
+ 
+ import { useState } from "@revolt/state";
+ 
+@@ -52,6 +53,36 @@ export function VoiceStatefulUserIcons(props: {
+       <Show when={props.screenshare}>
+         <Symbol size={16}>screen_share</Symbol>
+       </Show>
++      {/*
++        Selo de transmissão ao lado do nome.
++
++        Os dois símbolos acima dizem O QUE está sendo transmitido, mas são
++        discretos demais para responder à pergunta que se faz de relance na
++        lista: quem está transmitindo agora. O selo responde isso; os
++        símbolos continuam dizendo qual das duas coisas é.
++      */}
++      <Show when={props.camera || props.screenshare}>
++        <span class={aoVivo()}>
++          <Trans>LIVE</Trans>
++        </span>
++      </Show>
+     </>
+   );
+ }
++
++const aoVivo = cva({
++  base: {
++    flexShrink: 0,
++    padding: "1px 6px",
++    borderRadius: "var(--borderRadius-full)",
++
++    fontSize: "0.5625rem",
++    fontWeight: 700,
++    letterSpacing: "0.06em",
++    lineHeight: 1.4,
++    textTransform: "uppercase",
++
++    color: "#fff",
++    background: "var(--md-sys-color-error)",
++  },
++});
