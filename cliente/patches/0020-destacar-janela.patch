@@ -1,9 +1,9 @@
 diff --git a/packages/client/components/ui/components/features/voice/destacar.ts b/packages/client/components/ui/components/features/voice/destacar.ts
 new file mode 100644
-index 0000000..9bb7f9e
+index 0000000..62341f4
 --- /dev/null
 +++ b/packages/client/components/ui/components/features/voice/destacar.ts
-@@ -0,0 +1,159 @@
+@@ -0,0 +1,199 @@
 +/**
 + * Tirar uma câmera ou tela da grade para uma janela própria.
 + *
@@ -69,6 +69,50 @@ index 0000000..9bb7f9e
 +  }
 +}
 +
++type ComPiP = Window & {
++  documentPictureInPicture?: {
++    requestWindow: (o?: {
++      width?: number;
++      height?: number;
++    }) => Promise<Window>;
++  };
++};
++
++/**
++ * Consegue uma janela, pelo caminho que este ambiente permitir.
++ *
++ * `window.open` é a primeira escolha: dá VÁRIAS janelas e a pessoa
++ * posiciona cada uma onde quiser. É o que atende o pedido.
++ *
++ * Só que ele não funciona em todo lugar. No aplicativo de desktop (Tauri)
++ * o pedido passa por um manipulador de janela nova que decide permitir,
++ * negar ou abrir por fora — e mesmo se permitisse, seria outro webview,
++ * com contexto de JavaScript próprio, para onde não há como entregar um
++ * `MediaStream`. Na prática ele devolve nulo e nada acontece.
++ *
++ * Daí a reserva: `documentPictureInPicture` hospeda DOM da própria página,
++ * então o contexto continua o mesmo. Custa o limite de **uma** janela por
++ * documento — menos do que o pedido, e muito mais do que nada.
++ */
++async function abrirJanela(id: string): Promise<Window | null> {
++  const janela = window.open(
++    "",
++    `dp-destaque-${id}`,
++    "popup=yes,width=720,height=440",
++  );
++  if (janela) return janela;
++
++  const pip = (window as ComPiP).documentPictureInPicture;
++  if (!pip) return null;
++
++  try {
++    return await pip.requestWindow({ width: 720, height: 440 });
++  } catch {
++    // Já existe uma janela de Picture-in-Picture, ou o usuário recusou.
++    return null;
++  }
++}
++
 +export type PedidoDestaque = {
 +  /** Identificador estável da faixa, o mesmo que o estado de voz usa */
 +  id: string;
@@ -87,18 +131,14 @@ index 0000000..9bb7f9e
 + * e sem esse retorno o quadro sairia da grade sem aparecer em lugar nenhum
 + * — a transmissão simplesmente sumiria da tela da pessoa.
 + */
-+export function destacar(pedido: PedidoDestaque): boolean {
++export async function destacar(pedido: PedidoDestaque): Promise<boolean> {
 +  const existente = ABERTAS.get(pedido.id);
 +  if (existente && !existente.closed) {
 +    existente.focus();
 +    return true;
 +  }
 +
-+  const janela = window.open(
-+    "",
-+    `dp-destaque-${pedido.id}`,
-+    "popup=yes,width=720,height=440",
-+  );
++  const janela = await abrirJanela(pedido.id);
 +  if (!janela) return false;
 +
 +  janela.document.title = pedido.titulo;

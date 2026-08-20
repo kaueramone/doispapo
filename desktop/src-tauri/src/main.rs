@@ -45,31 +45,118 @@ fn e_mais_nova(remota: &str, local: &str) -> bool {
     false
 }
 
+/// Recarrega o conteúdo descartando o service worker.
+///
+/// O invólucro e o aplicativo web têm ciclos diferentes: o executável quase
+/// não muda, e o cliente web é publicado com frequência. Quem está com o
+/// invólucro em dia pode mesmo assim estar vendo um cliente antigo, porque
+/// o service worker serve o que guardou até decidir trocar.
+///
+/// Recarregar sozinho não resolve isso — por isso o registro é removido
+/// antes, e só então a página recarrega.
+fn recarregar_conteudo(app: &tauri::AppHandle) {
+    if let Some(janela) = app.get_webview_window("principal") {
+        // O recarregamento fica FORA da cadeia opcional de propósito. Com
+        // `navigator.serviceWorker?.…`, um ambiente sem service worker
+        // curto-circuitaria a expressão inteira e nem recarregaria — o
+        // botão não faria nada, que é o defeito que este trabalho corrige.
+        let _ = janela.eval(
+            "Promise.resolve(\
+               navigator.serviceWorker ? \
+                 navigator.serviceWorker.getRegistrations() : [])\
+             .then(rs => Promise.all(rs.map(r => r.unregister())))\
+             .catch(() => {})\
+             .then(() => location.reload(), () => location.reload());",
+        );
+        let _ = janela.show();
+        let _ = janela.set_focus();
+    }
+}
+
+/// Aviso simples, só quando a verificação foi pedida pelo menu.
+///
+/// Não bloqueante de propósito: um diálogo que trava a espera dentro do
+/// runtime assíncrono prende a tarefa até alguém clicar.
+fn avisar(app: &tauri::AppHandle, pedida: bool, texto: &str) {
+    if !pedida {
+        return;
+    }
+    app.dialog()
+        .message(texto.to_string())
+        .title("Dois Papo")
+        .kind(MessageDialogKind::Info)
+        .show(|_| {});
+}
+
 /// Consulta a última release publicada e avisa se houver versão nova.
-async fn verificar_atualizacao(app: tauri::AppHandle) {
+///
+/// `pedida` distingue o clique no menu da checagem automática da abertura.
+/// Silêncio é a resposta certa para a automática — ninguém quer um aviso
+/// "está tudo em dia" a cada vez que abre o programa. Para o clique, é a
+/// resposta errada: a pessoa perguntou e não recebeu nada, o que faz o item
+/// de menu parecer quebrado.
+async fn verificar_atualizacao(app: tauri::AppHandle, pedida: bool) {
     let cliente = match reqwest::Client::builder()
         .user_agent(format!("DoisPapo/{VERSAO}"))
         .timeout(std::time::Duration::from_secs(12))
         .build()
     {
         Ok(c) => c,
-        Err(_) => return,
+        Err(_) => {
+            avisar(&app, pedida, "Não foi possível verificar agora.");
+            return;
+        }
     };
 
     let resposta = match cliente.get(API_RELEASES).send().await {
         Ok(r) => r,
-        Err(_) => return, // sem rede: silêncio, não é problema do usuário
+        Err(_) => {
+            avisar(
+                &app,
+                pedida,
+                "Não foi possível verificar agora. Confira sua conexão.",
+            );
+            return;
+        }
     };
     let dados: serde_json::Value = match resposta.json().await {
         Ok(d) => d,
-        Err(_) => return,
+        Err(_) => {
+            avisar(&app, pedida, "Não foi possível verificar agora.");
+            return;
+        }
     };
     let tag = match dados.get("tag_name").and_then(|t| t.as_str()) {
         Some(t) => t,
-        None => return,
+        None => {
+            avisar(&app, pedida, "Não foi possível verificar agora.");
+            return;
+        }
     };
 
     if !e_mais_nova(tag, VERSAO) {
+        if pedida {
+            // Estar com o invólucro em dia não garante estar com o cliente
+            // web em dia, então a resposta vem com a ação que resolve isso.
+            let app3 = app.clone();
+            app.dialog()
+                .message(format!(
+                    "Você está na versão mais recente ({VERSAO}).\n\n\
+                     Se algo parecer desatualizado na tela, recarregar limpa \
+                     o que ficou guardado e busca a versão nova do aplicativo."
+                ))
+                .title("Dois Papo está em dia")
+                .kind(MessageDialogKind::Info)
+                .buttons(MessageDialogButtons::OkCancelCustom(
+                    "Recarregar".into(),
+                    "Fechar".into(),
+                ))
+                .show(move |recarregar| {
+                    if recarregar {
+                        recarregar_conteudo(&app3);
+                    }
+                });
+        }
         return;
     }
 
@@ -116,7 +203,7 @@ fn main() {
                     "abrir" => revelar(app),
                     "buscar" => {
                         let a = app.clone();
-                        tauri::async_runtime::spawn(verificar_atualizacao(a));
+                        tauri::async_runtime::spawn(verificar_atualizacao(a, true));
                     }
                     "sair" => app.exit(0),
                     _ => {}
@@ -137,7 +224,7 @@ fn main() {
             let a = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_secs(8)).await;
-                verificar_atualizacao(a).await;
+                verificar_atualizacao(a, false).await;
             });
 
             Ok(())

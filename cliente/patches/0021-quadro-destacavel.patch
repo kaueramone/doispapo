@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
-index 6df8439..b1fe196 100644
+index 6df8439..9a08637 100644
 --- a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 +++ b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 @@ -1,4 +1,4 @@
@@ -8,11 +8,11 @@ index 6df8439..b1fe196 100644
  import {
    TrackReference,
    useEnsureParticipant,
-@@ -12,7 +12,12 @@ import { Track } from "livekit-client";
+@@ -12,15 +12,27 @@ import { Track } from "livekit-client";
  import { cva } from "styled-system/css";
  import { styled } from "styled-system/jsx";
  
-+import { Trans } from "@lingui-solid/solid/macro";
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
 +
 +import MdOpenInNew from "@material-design-icons/svg/outlined/open_in_new.svg?component-solid";
 +
@@ -20,8 +20,10 @@ index 6df8439..b1fe196 100644
 +import { ContextMenuButton } from "@revolt/app/menus/ContextMenu";
  import { useUser } from "@revolt/markdown/users";
  import { useVoice } from "@revolt/rtc";
++import { useSnackbar } from "@revolt/ui";
  import { useState } from "@revolt/state";
-@@ -21,6 +26,12 @@ import { Row } from "@revolt/ui/components/layout";
+ import { Avatar } from "@revolt/ui/components/design";
+ import { Row } from "@revolt/ui/components/layout";
  import { OverflowingText } from "@revolt/ui/components/utils";
  import { Symbol } from "@revolt/ui/components/utils/Symbol";
  
@@ -34,7 +36,15 @@ index 6df8439..b1fe196 100644
  import { VoiceStatefulUserIcons } from "../VoiceStatefulUserIcons";
  
  type TileProps = {
-@@ -39,6 +50,52 @@ export function ParticipantTile(props: TileProps) {
+@@ -33,12 +45,70 @@ type TileProps = {
+ export function ParticipantTile(props: TileProps) {
+   const voice = useVoice();
+   const state = useState();
++  const snackbar = useSnackbar();
++  const { t } = useLingui();
+   const participant = useEnsureParticipant();
+   const track = useTrackRefContext();
+   const user = useUser(participant.identity);
  
    let videoRef: HTMLVideoElement | undefined;
  
@@ -50,7 +60,7 @@ index 6df8439..b1fe196 100644
 +   * o <VideoTrack> que a mantinha viva pela visibilidade, e no caso de
 +   * tela compartilhada o tela.js ainda a bloquearia por conta propria.
 +   */
-+  function destacarEste() {
++  async function destacarEste() {
 +    const pub = (track as TrackReference).publication;
 +    const midia = pub?.track?.mediaStream;
 +    if (!midia) return;
@@ -68,7 +78,7 @@ index 6df8439..b1fe196 100644
 +    dpTelaAssistir?.(pub.trackSid, true);
 +
 +    const id = idFaixa();
-+    const ok = destacar({
++    const ok = await destacar({
 +      id,
 +      titulo: user().username ?? "",
 +      stream: midia,
@@ -78,16 +88,26 @@ index 6df8439..b1fe196 100644
 +      },
 +    });
 +
-+    // Bloqueador de pop-up recusa calado. Se a janela nao abriu, o quadro
-+    // TEM que continuar na grade -- caso contrario a transmissao some da
-+    // tela da pessoa sem nenhuma explicacao.
-+    if (ok) voice.marcarDestacado(id, true);
++    // Bloqueador de pop-up recusa calado, e o aplicativo de desktop recusa
++    // sempre. Se a janela nao abriu, o quadro TEM que continuar na grade --
++    // e a pessoa precisa saber por que nada aconteceu, senao conclui que o
++    // recurso esta quebrado.
++    if (ok) {
++      voice.marcarDestacado(id, true);
++    } else {
++      dpTelaAssistir?.(pub.trackSid, false);
++      snackbar.show({
++        message: t`Could not open the window. Check if pop-ups are blocked.`,
++        placement: "bottom",
++        closeable: true,
++      });
++    }
 +  }
 +
    const [videoDims, setVideoDims] = createSignal<{
      height: number;
      width: number;
-@@ -86,13 +143,34 @@ export function ParticipantTile(props: TileProps) {
+@@ -86,13 +156,34 @@ export function ParticipantTile(props: TileProps) {
    return (
      <Show when={!isScreenShare() || !isRemoteScreenShareMuted()}>
        <div
@@ -124,7 +144,7 @@ index 6df8439..b1fe196 100644
          }
          onClick={() => voice.toggleFocus(track)}
          use:floating={{
-@@ -107,6 +185,23 @@ export function ParticipantTile(props: TileProps) {
+@@ -107,6 +198,23 @@ export function ParticipantTile(props: TileProps) {
                member={user().member}
                inVoice={!isScreenShare()}
                isScreenshare={isScreenShare()}

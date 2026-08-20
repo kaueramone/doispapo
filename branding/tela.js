@@ -188,8 +188,9 @@
         parar.textContent = "Parar de assistir";
         parar.addEventListener("click", function (ev) {
           ev.stopPropagation();
-          delete assistindo[s];
-          try { pub.setSubscribed(false); } catch (e) {}
+          // Simetrico ao botao de assistir: solta o audio junto, senao a
+          // faixa de som continuaria assinada com a imagem ja parada.
+          marcarAssistido(pub, false);
           pintar(pub);
         });
         alvo.appendChild(parar);
@@ -218,8 +219,7 @@
     bt.textContent = "Assistir";
     bt.addEventListener("click", function (ev) {
       ev.stopPropagation();
-      assistindo[s] = true;
-      try { pub.setSubscribed(true); } catch (e) {}
+      marcarAssistido(pub, true);
       pintar(pub);
       // o elemento só ganha stream depois que a faixa chega
       setTimeout(function () { pintar(pub); }, 1200);
@@ -227,6 +227,45 @@
     cx.appendChild(b); cx.appendChild(sp); cx.appendChild(bt);
     capa.appendChild(cx);
     alvo.appendChild(capa);
+  }
+
+  /* Uma tela compartilhada sao DUAS publicacoes: o video e, quando quem
+     transmite marca "compartilhar audio", uma faixa de audio separada,
+     com sid proprio.
+
+     Marcar so a do video deixava a do audio para sempre bloqueada -- o
+     cuidar() desassina audio de tela enquanto o sid DELE nao estiver em
+     `assistindo`, e esse sid nunca era marcado. Resultado: ninguem ouvia
+     o som de tela nenhuma, e o problema nao aparecia na imagem, que
+     funcionava normalmente.
+
+     Aqui as duas andam juntas, ligadas pelo participante. */
+  function irmaDeAudio(pub) {
+    try {
+      var p = pub && (pub.participant || (pub.track && pub.track.participant));
+      if (!p || !p.getTrackPublication) return null;
+      return p.getTrackPublication("screen_share_audio") || null;
+    } catch (e) { return null; }
+  }
+
+  function marcarAssistido(pub, ligado) {
+    try {
+      var lista = [pub, irmaDeAudio(pub)];
+      for (var i = 0; i < lista.length; i++) {
+        var p = lista[i];
+        if (!p) continue;
+        var k = sid(p);
+        if (!k) continue;
+        publicacoes[k] = p;
+        if (ligado) {
+          assistindo[k] = true;
+          try { p.setSubscribed(true); } catch (e) {}
+        } else {
+          delete assistindo[k];
+          try { p.setSubscribed(false); } catch (e) {}
+        }
+      }
+    } catch (e) {}
   }
 
   function nomeDe(pub) {
@@ -303,10 +342,11 @@
   window.dpTelaAssistir = function (s, ligado) {
     try {
       if (!s) return;
-      if (ligado) {
-        assistindo[s] = true;
-        var pub = publicacoes[s];
-        if (pub) try { pub.setSubscribed(true); } catch (e) {}
+      var pub = publicacoes[s];
+      if (pub) {
+        marcarAssistido(pub, ligado);
+      } else if (ligado) {
+        assistindo[s] = true;      // ainda nao vimos a publicacao
       } else {
         delete assistindo[s];
       }
