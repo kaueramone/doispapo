@@ -1,8 +1,24 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..fb2fdff 100644
+index d03d90e..403096e 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
-@@ -75,6 +75,38 @@ class Voice {
+@@ -42,6 +42,15 @@ type State =
+   | "CONNECTED"
+   | "RECONNECTING";
+ 
++/** Nome do canal para onde quem fica inativo e levado */
++export const NOME_CANAL_AUSENTE = "Ausente";
++
++/** Quanto tempo sem atividade antes de mover para o canal Ausente */
++const AUSENTE_MS = 10 * 60 * 1000;
++
++/** De quanto em quanto tempo conferimos a inatividade */
++const AUSENTE_CHECAGEM_MS = 30 * 1000;
++
+ type ScreenShareQuality = {
+   name: ScreenShareQualityName;
+   resolution: VideoResolution;
+@@ -75,6 +84,42 @@ class Voice {
    fullscreen: Accessor<boolean>;
    #setFullscreen: Setter<boolean>;
  
@@ -38,10 +54,14 @@ index d03d90e..fb2fdff 100644
 +  destacados: Accessor<string[]>;
 +  #setDestacados: Setter<string[]>;
 +
++  /** Instante da ultima atividade: falar, transmitir ou assistir */
++  #ultimaAtividade = Date.now();
++  #relogioAusente: ReturnType<typeof setInterval> | undefined;
++
    focusId: Accessor<string | undefined>;
    #setFocus: Setter<string | undefined>;
  
-@@ -124,6 +156,18 @@ class Voice {
+@@ -124,6 +169,18 @@ class Voice {
      this.fullscreen = fullscreen;
      this.#setFullscreen = setFullscreen;
  
@@ -60,7 +80,7 @@ index d03d90e..fb2fdff 100644
      const [focus, setFocus] = createSignal<string>();
      this.focusId = focus;
      this.#setFocus = setFocus;
-@@ -141,6 +185,7 @@ class Voice {
+@@ -141,6 +198,7 @@ class Voice {
  
    async connect(channel: Channel, auth?: { url: string; token: string }) {
      this.disconnect();
@@ -68,15 +88,29 @@ index d03d90e..fb2fdff 100644
  
      const room = new Room({
        audioCaptureDefaults: {
-@@ -174,6 +219,7 @@ class Voice {
+@@ -165,6 +223,9 @@ class Voice {
+       { room, onlySubscribed: false },
+     );
+ 
++    this.#ultimaAtividade = Date.now();
++    this.#iniciarRelogioAusente();
++
+     batch(() => {
+       this.#setRoom(room);
+       this.#setChannel(channel);
+@@ -174,7 +235,11 @@ class Voice {
      });
  
      room.addListener("connected", () => {
 +      this.#setEntrando();
        this.#setState("CONNECTED");
++      // Entrar no canal de ausentes nao liga o microfone: o proposito do
++      // canal e justamente nao ocupar nada de ninguem.
++      if (this.ehCanalAusente(channel)) this.#settings.micOn = false;
        if (this.speakingPermission)
          room.localParticipant
-@@ -199,6 +245,17 @@ class Voice {
+           .setMicrophoneEnabled(this.#settings.micOn)
+@@ -199,6 +264,25 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -91,10 +125,18 @@ index d03d90e..fb2fdff 100644
 +    room.addListener("trackPublished", this.#bumpVisual);
 +    room.addListener("trackUnpublished", this.#bumpVisual);
 +
++    // Falar e o sinal mais direto de presenca. O evento ja existe e chega
++    // pelo SFU, entao nao precisamos medir audio por conta propria aqui.
++    room.addListener("activeSpeakersChanged", (falantes) => {
++      if (falantes.some((p) => p.identity === room.localParticipant.identity)) {
++        this.#ultimaAtividade = Date.now();
++      }
++    });
++
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +288,7 @@ class Voice {
+@@ -231,16 +315,7 @@ class Voice {
        }
      });
  
@@ -112,7 +154,7 @@ index d03d90e..fb2fdff 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +299,30 @@ class Voice {
+@@ -251,6 +326,103 @@ class Voice {
      });
    }
  
@@ -140,16 +182,91 @@ index d03d90e..fb2fdff 100644
 +    );
 +  }
 +
++  /** Se este canal e o destino de quem fica inativo */
++  ehCanalAusente(canal?: Channel) {
++    return (
++      !!canal?.name &&
++      canal.name.trim().toLowerCase() === NOME_CANAL_AUSENTE.toLowerCase()
++    );
++  }
++
++  /**
++   * Se a pessoa esta fazendo algo que conta como presenca.
++   *
++   * Falar e o sinal principal, mas nao o unico: quem esta com camera
++   * ligada, compartilhando, ou assistindo a uma tela esta claramente ali.
++   * Mover alguem no meio de quinze minutos de gameplay assistido em
++   * silencio seria pior do que nao ter o recurso.
++   */
++  #estaPresente() {
++    if (this.video() || this.screenshare()) return true;
++
++    // Quem esta assistindo a uma tela: o controle disso mora no script de
++    // compartilhamento sob demanda, do outro lado da injecao. Se ele nao
++    // estiver carregado, a leitura simplesmente nao acontece.
++    try {
++      const tela = (
++        window as unknown as { dpTela?: () => { assistindo?: string[] } }
++      ).dpTela;
++      if (tela && (tela().assistindo?.length ?? 0) > 0) return true;
++    } catch {
++      /* nada a fazer: presenca por outros meios continua valendo */
++    }
++
++    return false;
++  }
++
++  #iniciarRelogioAusente() {
++    this.#pararRelogioAusente();
++    this.#relogioAusente = setInterval(
++      () => this.#conferirAusencia(),
++      AUSENTE_CHECAGEM_MS,
++    );
++  }
++
++  #pararRelogioAusente() {
++    if (this.#relogioAusente) {
++      clearInterval(this.#relogioAusente);
++      this.#relogioAusente = undefined;
++    }
++  }
++
++  async #conferirAusencia() {
++    const atual = this.channel();
++    if (!atual || this.state() !== "CONNECTED") return;
++
++    // Ja esta no canal de ausentes: nao ha para onde mover.
++    if (this.ehCanalAusente(atual)) return;
++
++    if (this.#estaPresente()) {
++      this.#ultimaAtividade = Date.now();
++      return;
++    }
++
++    if (Date.now() - this.#ultimaAtividade < AUSENTE_MS) return;
++
++    const destino = atual.server?.channels?.find(
++      (c) => c.isVoice && this.ehCanalAusente(c),
++    );
++    // Sem canal de ausentes no servidor, a pessoa fica onde esta. Criar um
++    // aqui seria criar canal a partir de quem talvez nem tenha permissao.
++    if (!destino || destino.id === atual.id) return;
++
++    await this.connect(destino);
++  }
++
    disconnect() {
      try {
        const room = this.room();
-@@ -259,8 +331,14 @@ class Voice {
+@@ -259,8 +431,16 @@ class Voice {
        room.removeAllListeners();
        room.disconnect();
  
 +      // Janela destacada sem chamada por tras mostraria um quadro parado
 +      // para sempre. Quem fecha e o modulo de destaque, avisado aqui.
 +      window.dispatchEvent(new CustomEvent("dp-voz-encerrada"));
++
++      this.#pararRelogioAusente();
 +
        batch(() => {
          this.#setState("READY");
@@ -158,7 +275,7 @@ index d03d90e..fb2fdff 100644
          this.#setRoom();
          this.#setChannel();
          this.#setFullscreen(false);
-@@ -577,7 +655,7 @@ class Voice {
+@@ -577,7 +757,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -167,7 +284,7 @@ index d03d90e..fb2fdff 100644
      );
    }
  
-@@ -588,7 +666,7 @@ class Voice {
+@@ -588,7 +768,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -176,7 +293,7 @@ index d03d90e..fb2fdff 100644
        : undefined;
    }
  
-@@ -600,15 +678,85 @@ class Voice {
+@@ -600,15 +780,85 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  

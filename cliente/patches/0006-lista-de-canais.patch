@@ -1,8 +1,25 @@
 diff --git a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
-index fa1ef5a..d5c9f0c 100644
+index fa1ef5a..618a092 100644
 --- a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
 +++ b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
-@@ -34,6 +34,7 @@ import {
+@@ -6,6 +6,7 @@ import {
+   Setter,
+   Show,
+   Switch,
++  createEffect,
+   createMemo,
+ } from "solid-js";
+ 
+@@ -18,7 +19,7 @@ import { KeybindAction, createKeybind } from "@revolt/keybinds";
+ import { TextWithEmoji } from "@revolt/markdown";
+ import { useModals } from "@revolt/modal";
+ import { useNavigate } from "@revolt/routing";
+-import { useVoice } from "@revolt/rtc";
++import { NOME_CANAL_AUSENTE, useVoice } from "@revolt/rtc";
+ import { useState } from "@revolt/state";
+ import {
+   Column,
+@@ -34,6 +35,7 @@ import {
    typography,
  } from "@revolt/ui";
  import { VoiceChannelPreview } from "@revolt/ui/components/features/voice/VoiceChannelPreview";
@@ -10,7 +27,42 @@ index fa1ef5a..d5c9f0c 100644
  import { createDragHandle } from "@revolt/ui/components/utils/Draggable";
  import { Symbol } from "@revolt/ui/components/utils/Symbol";
  
-@@ -252,6 +253,7 @@ export const ServerSidebar = (props: Props) => {
+@@ -93,6 +95,34 @@ export const ServerSidebar = (props: Props) => {
+   const navigate = useNavigate();
+   const { isMobile } = useDevice();
+ 
++  /**
++   * Garante que o servidor tenha o canal de ausentes.
++   *
++   * Criado pelo cliente de quem TEM permissao, e nao por um processo no
++   * servidor: assim a criacao passa pela mesma API e pelas mesmas regras
++   * de permissao de qualquer canal, em vez de escrever no banco por fora.
++   *
++   * Roda uma vez por servidor por sessao. `criando` evita que duas
++   * renderizacoes seguidas criem dois canais iguais.
++   */
++  const criando = new Set<string>();
++  createEffect(() => {
++    const servidor = props.server;
++    if (!servidor || criando.has(servidor.id)) return;
++    if (!servidor.havePermission("ManageChannel")) return;
++
++    const existe = servidor.channels?.some(
++      (c) =>
++        c?.name?.trim().toLowerCase() === NOME_CANAL_AUSENTE.toLowerCase(),
++    );
++    if (existe) return;
++
++    criando.add(servidor.id);
++    servidor
++      .createChannel({ type: "Voice", name: NOME_CANAL_AUSENTE })
++      .catch(() => criando.delete(servidor.id));
++  });
++
+   // Users can manage certain parts of the server individually, regardless of their ManageServer Permission
+   const canManageServer = () =>
+     props.server.orPermission(
+@@ -252,6 +282,7 @@ export const ServerSidebar = (props: Props) => {
            )}
          </Draggable>
        </div>
@@ -18,7 +70,7 @@ index fa1ef5a..d5c9f0c 100644
      </SidebarBase>
    );
  };
-@@ -494,6 +496,20 @@ function Entry(
+@@ -494,6 +525,20 @@ function Entry(
      <Column gap="sm">
        <MenuButton
          href={`/server/${props.channel.serverId}/channel/${props.channel.id}`}
