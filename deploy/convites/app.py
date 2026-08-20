@@ -49,6 +49,149 @@ def usuario_da_sessao(token):
     return s.get("user_id") if s else None
 
 
+# ------------------------------------------------------------- metricas
+# Tres fontes, deliberadamente separadas -- misturar medicao com
+# estimativa num mesmo numero e como se mente com grafico.
+#
+#   1. Contadores de rede da MAQUINA, via amostra-rede.sh. Verdade
+#      absoluta sobre quanto trafego entrou e saiu, sem saber de quem.
+#   2. Metricas do SFU (Prometheus). Participantes, salas, qualidade,
+#      latencia de encaminhamento e pacotes descartados. Sao por no, sem
+#      rotulo de sala -- entao tambem nao dividem por comunidade.
+#   3. Composicao das salas, amostrada da API do SFU. E o unico caminho
+#      para saber QUEM consumiu: quantas faixas de cada tipo, em qual
+#      canal, de qual servidor.
+#
+# O rateio por comunidade sai de (3) e e ESTIMATIVA. O total de (1) e
+# medicao. O painel mostra os dois lado a lado, rotulados.
+METRICAS_URL = os.environ.get("LIVEKIT_METRICAS", "http://livekit:6789/metrics")
+REDE_ARQUIVO = os.environ.get("REDE_ARQUIVO", "/rede/atual")
+METRICAS_INTERVALO = 60
+
+# Taxas medidas nesta instancia (ver docs/desempenho-voz.md). Servem para
+# ratear o total real entre as comunidades, nao para inventar um total.
+KBIT_VIDEO = 2313
+KBIT_AUDIO = 3
+
+
+def _prometheus(texto):
+    """Le o formato do Prometheus para um dicionario simples."""
+    fora = {}
+    for linha in texto.splitlines():
+        if not linha or linha.startswith("#"):
+            continue
+        nome, _, resto = linha.partition("{")
+        if resto:
+            valor = resto.rsplit("}", 1)[-1].strip()
+        else:
+            nome, _, valor = linha.partition(" ")
+            resto = ""
+        # O rotulo `type` precisa ser casado com precisao: `node_type="SERVER"`
+        # contem a sequencia `type="` dentro dele. Procurar por substring
+        # capturava "SERVER" como se fosse o tipo, e ai a busca por
+        # ("livekit_participant_total", "") nunca casava -- todo campo do
+        # SFU vinha zero, num documento bem formado e sem erro nenhum.
+        achou = re.search(r'(?:^|,)type="([^"]*)"', resto)
+        rotulo = achou.group(1) if achou else ""
+        try:
+            fora[(nome.strip(), rotulo)] = float(valor)
+        except ValueError:
+            continue
+    return fora
+
+
+def _rede_agora():
+    try:
+        with open(REDE_ARQUIVO, encoding="utf-8") as fh:
+            t, rx, tx = fh.read().split()
+        return int(t), int(rx), int(tx)
+    except Exception:
+        return None
+
+
+_rede_anterior = None
+
+
+def coletar_metricas():
+    global _rede_anterior
+    agora = time.time()
+    doc = {"em": agora}
+
+    # --- 1. rede real da maquina ---
+    atual = _rede_agora()
+    if atual and _rede_anterior:
+        dt = atual[0] - _rede_anterior[0]
+        if 0 < dt < 600:
+            doc["rede"] = {
+                "segundos": dt,
+                "entrada_bytes": max(0, atual[1] - _rede_anterior[1]),
+                "saida_bytes": max(0, atual[2] - _rede_anterior[2]),
+            }
+    if atual:
+        _rede_anterior = atual
+
+    # --- 2. metricas do SFU ---
+    try:
+        with urllib.request.urlopen(METRICAS_URL, timeout=5) as r:
+            m = _prometheus(r.read().decode("utf-8", "replace"))
+        qs_soma = m.get(("livekit_quality_score_sum", ""), 0)
+        qs_qtd = m.get(("livekit_quality_score_count", ""), 0)
+        doc["sfu"] = {
+            "participantes": m.get(("livekit_participant_total", ""), 0),
+            "salas": m.get(("livekit_room_total", ""), 0),
+            "latencia_encaminhamento": m.get(("livekit_forward_latency", ""), 0),
+            "jitter_encaminhamento": m.get(("livekit_forward_jitter", ""), 0),
+            "pacotes_saida": m.get(("livekit_node_packet_total", "out"), 0),
+            "pacotes_descartados": m.get(("livekit_node_packet_total", "dropped"), 0),
+            "qualidade_media": (qs_soma / qs_qtd) if qs_qtd else None,
+        }
+    except Exception as e:
+        print(f"metricas: SFU indisponivel ({e})", flush=True)
+
+    # --- 3. composicao das salas ---
+    try:
+        salas = _chamar("ListRooms", {}).get("rooms") or []
+        por_canal = {}
+        for sala in salas:
+            nome = sala.get("name")
+            if not nome:
+                continue
+            ps = _chamar("ListParticipants", {"room": nome}, nome).get(
+                "participants") or []
+            video = audio = 0
+            for p in ps:
+                for t in (p.get("tracks") or []):
+                    if t.get("muted"):
+                        continue
+                    if t.get("type") == "VIDEO":
+                        video += 1
+                    else:
+                        audio += 1
+            if ps:
+                por_canal[nome] = {"participantes": len(ps),
+                                   "faixas_video": video,
+                                   "faixas_audio": audio,
+                                   "peso": video * KBIT_VIDEO + audio * KBIT_AUDIO}
+        doc["canais"] = por_canal
+    except Exception as e:
+        print(f"metricas: composicao indisponivel ({e})", flush=True)
+
+    db.dp_metricas.insert_one(doc)
+
+
+def _laco_metricas():
+    while True:
+        try:
+            coletar_metricas()
+        except Exception as e:
+            print(f"metricas: falha na coleta ({e})", flush=True)
+        time.sleep(METRICAS_INTERVALO)
+
+
+def inicia_metricas():
+    threading.Thread(target=_laco_metricas, daemon=True).start()
+
+
 # ------------------------------------------------- feedback e novidades
 # Ate a 0.35 a tela de Comentarios levava para discussoes no GitHub do
 # upstream: tres links para fora, num projeto que nao e o nosso. Quem
@@ -1049,4 +1192,5 @@ if __name__ == "__main__":
     db.account_invites.create_index("origem")
     print(f"servico de convites em :{PORTA} (limite {LIMITE})", flush=True)
     inicia_repasse()
+    inicia_metricas()
     ThreadingHTTPServer(("0.0.0.0", PORTA), Handler).serve_forever()

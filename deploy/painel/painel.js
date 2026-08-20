@@ -75,7 +75,8 @@ function aba(nome){
   });
   ({visao:carregarVisao, acessos:carregarMetricas, fila:carregarFila,
     usuarios:carregarUsuarios, convites:carregarConvites,
-    feedback:carregarFeedback, novidades:carregarNovidades
+    feedback:carregarFeedback, novidades:carregarNovidades,
+    consumo:carregarConsumo
    }[nome] || function(){})();
 }
 
@@ -308,7 +309,70 @@ $("#f-senha").addEventListener("submit", function(e){
     });
 });
 
-  /* --------------------------------------------------------- comentários */
+  /* ------------------------------------------------------------ consumo */
+function gb(b){
+  if(!b) return "0 GB";
+  var g = b/1073741824;
+  return (g >= 10 ? g.toFixed(0) : g.toFixed(2)) + " GB";
+}
+
+function carregarConsumo(){
+  api("/api/consumo?dias="+encodeURIComponent($("#c-dias").value))
+    .then(function(r){
+      var d = r.d || {};
+      if(!d.amostras){
+        $("#c-cards").innerHTML = "";
+        $("#c-dias-tab").innerHTML =
+          '<p class="vazio">Ainda não há amostras. A coleta roda a cada '+
+          'minuto e começou agora.</p>';
+        $("#c-comunidades").innerHTML = "";
+        return;
+      }
+      var m = d.medido||{}, dec = d.decisao||{};
+      $("#c-cards").innerHTML = [
+        ["<b>"+gb(m.total_bytes)+"</b>", "no período (medido)"],
+        ["<b>"+gb(m.por_dia_bytes)+"</b>", "por dia"],
+        ["<b>"+gb(m.projecao_mes_bytes)+"</b>", "projeção de 30 dias"],
+        ["<b>"+Math.round(dec.minutos_chamada_por_dia||0)+"</b>", "min de chamada/dia"],
+        ["<b>"+(dec.pico_faixas_video||0)+"</b>", "pico de faixas de vídeo"],
+        ["<b>"+(dec.qualidade_media!=null?dec.qualidade_media.toFixed(2):"—")+"</b>",
+         "qualidade média do SFU"]
+      ].map(function(c){
+        return '<div class="c"><div class="n">'+c[0].replace(/<\/?b>/g,"")+
+               '</div><div class="r">'+c[1]+'</div></div>';
+      }).join("");
+
+      var dias = d.dias||[];
+      $("#c-dias-tab").innerHTML = !dias.length ? '<p class="vazio">Sem dados.</p>' :
+        '<table><thead><tr><th>Dia</th><th>Entrada</th><th>Saída</th>'+
+        '<th>Total</th><th>Min. com chamada</th></tr></thead><tbody>'+
+        dias.map(function(x){
+          return '<tr><td>'+esc(x.dia)+'</td><td>'+gb(x.entrada)+'</td><td>'+
+                 gb(x.saida)+'</td><td>'+gb(x.entrada+x.saida)+'</td><td>'+
+                 x.minutos+'</td></tr>';
+        }).join("")+'</tbody></table>';
+
+      var com = d.estimado_por_comunidade||[];
+      $("#c-comunidades").innerHTML = !com.length ? '<p class="vazio">Sem chamadas no período.</p>' :
+        com.map(function(c){
+          return '<div style="margin-bottom:14px">'+
+            '<div class="flex" style="gap:8px;align-items:center">'+
+              '<b>'+esc(c.comunidade)+'</b>'+
+              '<span class="tag">~'+gb(c.bytes)+'</span>'+
+              '<span class="sp"></span>'+
+              '<small>'+c.minutos+' min com chamada</small>'+
+            '</div>'+
+            '<table><tbody>'+c.canais.map(function(x){
+              return '<tr><td>'+esc(x.nome)+'</td><td>~'+gb(x.bytes)+
+                     '</td><td><small>'+x.minutos+' min</small></td></tr>';
+            }).join("")+'</tbody></table></div>';
+        }).join("");
+    });
+}
+
+$("#c-dias").addEventListener("change", carregarConsumo);
+
+/* --------------------------------------------------------- comentários */
 var ESTADOS = {recebido:"Recebido", analisando:"Em análise",
                resolvido:"Resolvido", recusado:"Recusado"};
 var TIPOS = {sugestao:"sugestão", comentario:"comentário", bug:"erro"};

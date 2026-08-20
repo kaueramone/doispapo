@@ -228,6 +228,7 @@
       <button data-p="convites">Convites</button>
       <button data-p="feedback">Comentários</button>
       <button data-p="novidades">Novidades</button>
+      <button data-p="consumo">Consumo</button>
       <button data-p="conta">Conta</button>
     </nav>
     <div class="sp"></div>
@@ -342,6 +343,36 @@
         </div>
       </div>
       <div class="bloco"><div id="t-novidades"></div></div>
+    </section>
+
+    <section class="pg" id="pg-consumo">
+      <h2>Consumo</h2>
+      <p class="sub">Quanto as chamadas custam em tráfego, e quanto disso
+        vem de cada comunidade. O total é <b>medido</b> nos contadores de
+        rede da máquina; a divisão por comunidade é <b>estimada</b> pelo
+        peso das faixas ativas. Os dois nunca são somados.</p>
+      <div class="flex" style="margin-bottom:16px">
+        <div style="max-width:200px">
+          <label for="c-dias">Período</label>
+          <select id="c-dias">
+            <option value="1">Último dia</option>
+            <option value="7" selected>7 dias</option>
+            <option value="30">30 dias</option>
+          </select>
+        </div>
+      </div>
+      <div class="cards" id="c-cards"></div>
+      <div class="bloco">
+        <h3>Medido — tráfego por dia</h3>
+        <div id="c-dias-tab"></div>
+      </div>
+      <div class="bloco">
+        <h3>Estimado — divisão por comunidade</h3>
+        <p class="sub" style="margin-bottom:12px">Rateio do tráfego real
+          pelo peso das faixas de cada canal. Serve para comparar
+          comunidades entre si, não como número absoluto.</p>
+        <div id="c-comunidades"></div>
+      </div>
     </section>
 
     <section class="pg" id="pg-conta">

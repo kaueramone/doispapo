@@ -24,7 +24,7 @@ const { chromium } = require("playwright");
 const URL_ALVO = process.argv[2];
 const TOKEN = process.argv[3];
 const ABAS = ["visao", "acessos", "fila", "usuarios", "convites",
-              "feedback", "novidades", "conta"];
+              "feedback", "novidades", "consumo", "conta"];
 
 /* O desafio da Cloudflare não sobe num navegador sem sessão real, e isso
    não diz nada sobre o painel. Filtrado por padrão conhecido. */

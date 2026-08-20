@@ -300,6 +300,117 @@ class Handler(BaseHTTPRequestHandler):
         if not self.exige():
             return
 
+        # -------------------------------------------------- consumo
+        # Duas leituras lado a lado, nunca somadas:
+        #
+        #   medido    -> contadores de rede da maquina. Verdade sobre
+        #                QUANTO trafegou, sem saber de quem.
+        #   estimado  -> rateio por peso das faixas de cada canal. E o
+        #                unico caminho para saber DE QUEM, e e chute
+        #                informado, nao medicao.
+        #
+        # Junta-las num numero so daria a falsa impressao de que sabemos
+        # o consumo por comunidade com a mesma certeza do total.
+        if r == "/api/consumo":
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            dias = max(1, min(90, int((q.get("dias") or ["7"])[0])))
+            desde = time.time() - dias * 86400
+
+            amostras = list(db.dp_metricas.find(
+                {"em": {"$gte": desde}}).sort("em", 1))
+
+            por_dia = {}
+            por_canal = {}
+            pico_video = 0
+            minutos_chamada = 0
+            qualidades = []
+
+            for a in amostras:
+                dia = time.strftime("%Y-%m-%d", time.localtime(a.get("em", 0)))
+                d = por_dia.setdefault(dia, {"entrada": 0, "saida": 0,
+                                             "minutos": 0})
+                rede = a.get("rede") or {}
+                bytes_total = (rede.get("entrada_bytes", 0)
+                               + rede.get("saida_bytes", 0))
+                d["entrada"] += rede.get("entrada_bytes", 0)
+                d["saida"] += rede.get("saida_bytes", 0)
+
+                canais = a.get("canais") or {}
+                if canais:
+                    d["minutos"] += 1
+                    minutos_chamada += 1
+
+                video = sum(c.get("faixas_video", 0) for c in canais.values())
+                pico_video = max(pico_video, video)
+
+                qm = (a.get("sfu") or {}).get("qualidade_media")
+                if isinstance(qm, (int, float)):
+                    qualidades.append(qm)
+
+                # rateio do trafego real entre os canais ativos, por peso
+                soma = sum(c.get("peso", 0) for c in canais.values())
+                if soma > 0 and bytes_total > 0:
+                    for cid, c in canais.items():
+                        alvo = por_canal.setdefault(cid, {"bytes": 0,
+                                                          "minutos": 0})
+                        alvo["bytes"] += bytes_total * c.get("peso", 0) / soma
+                        alvo["minutos"] += 1
+
+            # canal -> servidor, para agrupar por comunidade
+            ids = list(por_canal)
+            canais_db = {c["_id"]: c for c in db.channels.find(
+                {"_id": {"$in": ids}}, {"name": 1, "server": 1})}
+            servidores = {s["_id"]: s.get("name") for s in db.servers.find(
+                {}, {"name": 1})}
+
+            por_comunidade = {}
+            for cid, v in por_canal.items():
+                ch = canais_db.get(cid) or {}
+                sid = ch.get("server")
+                nome = servidores.get(sid) or "(sem comunidade)"
+                alvo = por_comunidade.setdefault(nome, {"bytes": 0,
+                                                        "minutos": 0,
+                                                        "canais": []})
+                alvo["bytes"] += v["bytes"]
+                alvo["minutos"] += v["minutos"]
+                alvo["canais"].append({"nome": ch.get("name") or cid,
+                                       "bytes": round(v["bytes"]),
+                                       "minutos": v["minutos"]})
+
+            dias_ord = sorted(por_dia)
+            total_bytes = sum(d["entrada"] + d["saida"]
+                              for d in por_dia.values())
+            n_dias = max(1, len(dias_ord))
+
+            return self.responde(200, {
+                "amostras": len(amostras),
+                "dias": [{"dia": k,
+                          "entrada": por_dia[k]["entrada"],
+                          "saida": por_dia[k]["saida"],
+                          "minutos": por_dia[k]["minutos"]}
+                         for k in dias_ord],
+                "medido": {
+                    "total_bytes": total_bytes,
+                    "por_dia_bytes": total_bytes / n_dias,
+                    "projecao_mes_bytes": total_bytes / n_dias * 30,
+                },
+                "decisao": {
+                    "minutos_chamada": minutos_chamada,
+                    "minutos_chamada_por_dia": minutos_chamada / n_dias,
+                    "pico_faixas_video": pico_video,
+                    "qualidade_media": (sum(qualidades) / len(qualidades))
+                                       if qualidades else None,
+                },
+                "estimado_por_comunidade": [
+                    {"comunidade": k, "bytes": round(v["bytes"]),
+                     "minutos": v["minutos"],
+                     "canais": sorted(v["canais"],
+                                      key=lambda c: -c["bytes"])[:8]}
+                    for k, v in sorted(por_comunidade.items(),
+                                       key=lambda kv: -kv[1]["bytes"])
+                ],
+            })
+
         # ------------------------------------------------- feedback
         # O que chega da tela de Comentarios do cliente. O admin le,
         # muda o estado e responde; a resposta volta para "Meus envios"
