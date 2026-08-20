@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
-index 6df8439..e680dfb 100644
+index 6df8439..fa84bfe 100644
 --- a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 +++ b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 @@ -1,4 +1,4 @@
@@ -34,7 +34,7 @@ index 6df8439..e680dfb 100644
  import { VoiceStatefulUserIcons } from "../VoiceStatefulUserIcons";
  
  type TileProps = {
-@@ -33,12 +44,74 @@ type TileProps = {
+@@ -33,12 +44,81 @@ type TileProps = {
  export function ParticipantTile(props: TileProps) {
    const voice = useVoice();
    const state = useState();
@@ -100,8 +100,15 @@ index 6df8439..e680dfb 100644
 +      // (ver src/index.tsx). `useSnackbar()` lança quando não encontra o
 +      // contexto -- e chamá-lo aqui derrubava a montagem de TODO quadro,
 +      // câmera e tela, deixando a chamada sem imagem nenhuma.
++      // A mensagem depende do porque falhou. No aplicativo de desktop nao
++      // existe bloqueador de pop-up: o webview recusa a janela nova e nao
++      // oferece Picture-in-Picture, entao mandar a pessoa "conferir os
++      // pop-ups" e mandar procurar um botao que nao existe.
++      const temPiP = "documentPictureInPicture" in window;
 +      window.alert(
-+        t`Could not open the window. Check if pop-ups are blocked.`,
++        temPiP
++          ? t`Could not open the window. Check if pop-ups are blocked.`
++          : t`Detaching is not available in the desktop app yet. Use the browser for now.`,
 +      );
 +    }
 +  }
@@ -109,7 +116,7 @@ index 6df8439..e680dfb 100644
    const [videoDims, setVideoDims] = createSignal<{
      height: number;
      width: number;
-@@ -86,13 +159,34 @@ export function ParticipantTile(props: TileProps) {
+@@ -86,13 +166,34 @@ export function ParticipantTile(props: TileProps) {
    return (
      <Show when={!isScreenShare() || !isRemoteScreenShareMuted()}>
        <div
@@ -146,7 +153,7 @@ index 6df8439..e680dfb 100644
          }
          onClick={() => voice.toggleFocus(track)}
          use:floating={{
-@@ -107,6 +201,23 @@ export function ParticipantTile(props: TileProps) {
+@@ -107,6 +208,23 @@ export function ParticipantTile(props: TileProps) {
                member={user().member}
                inVoice={!isScreenShare()}
                isScreenshare={isScreenShare()}

@@ -270,9 +270,39 @@
      funcionava normalmente.
 
      Aqui as duas andam juntas, ligadas pelo participante. */
+  /* De quem e esta publicacao.
+
+     `RemoteTrackPublication` NAO tem propriedade `participant` -- conferido
+     no bundle, `this.participant =` nao existe. E `pub.track.participant`
+     so vale quando a faixa esta assinada, que e exatamente o que ainda nao
+     aconteceu quando precisamos disto.
+
+     Sobra procurar na sala, que e onde a relacao de fato mora. Sem isto a
+     irma de audio nunca era encontrada e o som de tela seguia mudo mesmo
+     depois de clicar em assistir. */
+  function participanteDe(pub) {
+    var alvo = sid(pub);
+    if (!alvo) return null;
+    for (var i = 0; i < salas.length; i++) {
+      var achado = null;
+      try {
+        salas[i].remoteParticipants.forEach(function (p) {
+          if (achado) return;
+          p.trackPublications.forEach(function (q) {
+            if (!achado && sid(q) === alvo) achado = p;
+          });
+        });
+      } catch (e) {}
+      if (achado) return achado;
+    }
+    return null;
+  }
+
   function irmaDeAudio(pub) {
     try {
-      var p = pub && (pub.participant || (pub.track && pub.track.participant));
+      var p = (pub && pub.participant) ||
+              (pub && pub.track && pub.track.participant) ||
+              participanteDe(pub);
       if (!p || !p.getTrackPublication) return null;
       return p.getTrackPublication("screen_share_audio") || null;
     } catch (e) { return null; }

@@ -46,6 +46,7 @@ declare -A SERIE=(
   [0020-destacar-janela]=packages/client/components/ui/components/features/voice/destacar.ts
   [0021-quadro-destacavel]=packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
   [0022-menu-com-extras]=packages/client/components/app/menus/UserContextMenu.tsx
+  [0023-audio-de-tela-audivel]=packages/client/components/state/stores/Voice.ts
 )
 
 for nome in $(printf '%s\n' "${!SERIE[@]}" | sort); do

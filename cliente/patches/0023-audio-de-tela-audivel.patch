@@ -1,0 +1,23 @@
+diff --git a/packages/client/components/state/stores/Voice.ts b/packages/client/components/state/stores/Voice.ts
+index 4532b58..598d5cc 100644
+--- a/packages/client/components/state/stores/Voice.ts
++++ b/packages/client/components/state/stores/Voice.ts
+@@ -268,7 +268,17 @@ export class Voice extends AbstractStore<"voice", TypeVoice> {
+    * @returns Whether muted
+    */
+   getScreenShareMuted(userId: string): boolean {
+-    return this.get().screenShareMutes[userId] ?? true;
++    // Padrao NAO mutado.
++    //
++    // O upstream trazia `?? true`, e com a assinatura sob demanda isso vira
++    // dois portoes em serie, ambos fechados: a faixa so e assinada ao
++    // clicar em "Assistir", e mesmo assinada continuava muda ate a pessoa
++    // achar um segundo controle. Em qualquer ordem, silencio -- e nada na
++    // tela explicando por que.
++    //
++    // Quem marcou "compartilhar audio" fez de proposito. Quem assiste
++    // silencia se quiser; o contrario nao se descobre sozinho.
++    return this.get().screenShareMutes[userId] ?? false;
+   }
+ 
+   /**
