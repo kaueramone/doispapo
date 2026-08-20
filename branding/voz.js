@@ -1,12 +1,16 @@
 /* ---------------------------------------------------------------------
    Dois Papo — comportamento dos canais de voz.
 
-   1) Entrar direto: abrir um canal de voz já conecta, sem o segundo
-      clique em "Entrar na chamada".
-   2) Contador: mostra há quanto tempo a chamada está aberta, ao lado do
-      canal. O tempo vem do servidor, alimentado pelos webhooks do
-      LiveKit — contar a partir do que este navegador viu daria número
-      errado para quem chega depois.
+   Entrar direto saiu daqui: era um contorno que clicava no botão
+   "Entrar na chamada" por fora, e o cliente agora conecta sozinho no
+   duplo clique do canal (cliente/patches). Não havia como fazer isso
+   direito por injeção — o script não enxerga o estado do app, só o
+   texto dos botões, e o texto mudava conforme o canal.
+
+   Contador: mostra há quanto tempo a chamada está aberta, ao lado do
+   canal. O tempo vem do servidor, alimentado pelos webhooks do
+   LiveKit — contar a partir do que este navegador viu daria número
+   errado para quem chega depois.
 --------------------------------------------------------------------- */
 (function () {
   "use strict";
@@ -292,54 +296,6 @@
     }
   }
 
-  /* ------------------------------------------------------ entrar direto */
-  var saiuDe = null;   // canal do qual o usuário saiu de propósito
-
-  function botaoEntrar() {
-    var els = document.querySelectorAll("button,[role='button'],a");
-    for (var i = 0; i < els.length; i++) {
-      var t = (els[i].textContent || "").trim();
-      if (t.length > 28) continue;
-      // O texto muda conforme o canal: "Iniciar a chamada" quando vazio,
-      // "Entrar na chamada" ao voltar, e "Com Fulano, Ciclano" quando já
-      // há gente dentro.
-      if (/^(iniciar a chamada|entrar na chamada|entrar no canal de voz|join call|start the call)$/i.test(t))
-        return els[i];
-      if (els[i].tagName === "BUTTON" && /^com .{1,24}$/i.test(t))
-        return els[i];
-    }
-    return null;
-  }
-
-  function canalAtual() {
-    var m = location.pathname.match(/\/channel\/([A-Z0-9]+)/i);
-    return m ? m[1] : null;
-  }
-
-  // Sair é decisão explícita: não reconectamos enquanto a pessoa
-  // continuar olhando o mesmo canal.
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest && e.target.closest("button,[role='button']");
-    if (!b) return;
-    var t = (b.textContent || "").trim();
-    if (t.length < 40 && /(sair da chamada|desconectar|encerrar chamada|leave call)/i.test(t))
-      saiuDe = canalAtual();
-  }, true);
-
-  var ultimo = location.pathname;
-  setInterval(function () {
-    if (location.pathname !== ultimo) {
-      ultimo = location.pathname;
-      if (saiuDe && saiuDe !== canalAtual()) saiuDe = null;
-    }
-  }, 400);
-
-  function entrarDireto() {
-    if (saiuDe && saiuDe === canalAtual()) return;
-    var b = botaoEntrar();
-    if (b) b.click();
-  }
-
   /* --------------------------------------------------------- contador */
   var chamadas = {};
 
@@ -395,7 +351,7 @@
     "white-space:nowrap;flex-shrink:0}";
   document.head.appendChild(css);
 
-  function tick() { entrarDireto(); pintarContadores(); }
+  function tick() { pintarContadores(); }
   setInterval(tick, 1000);
   // a luz precisa de cadência bem mais rápida que o resto
   // Isolamento por função: uma exceção em qualquer delas parava o ciclo
@@ -415,12 +371,4 @@
     protegido("luzLocal", luzDeFala);
     protegido("luzOutros", luzDosOutros);
   }, 40);
-  // Amortecido: sem isso o observador dispara uma varredura de botões por
-  // mutação, e abrir um servidor gera centenas delas de uma vez. Foi esse
-  // padrão que travou a interface na tentativa anterior.
-  var pendente = null;
-  new MutationObserver(function () {
-    if (pendente) return;
-    pendente = setTimeout(function () { pendente = null; entrarDireto(); }, 150);
-  }).observe(document.documentElement, { childList: true, subtree: true });
 })();

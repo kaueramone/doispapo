@@ -1,0 +1,55 @@
+diff --git a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardActions.tsx b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardActions.tsx
+index af91a55..b9d0605 100644
+--- a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardActions.tsx
++++ b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardActions.tsx
+@@ -10,7 +10,17 @@ import { useState } from "@revolt/state";
+ import { Button, IconButton } from "@revolt/ui/components/design";
+ import { Symbol } from "@revolt/ui/components/utils/Symbol";
+ 
+-export function VoiceCallCardActions(props: { size: "xs" | "sm" }) {
++export function VoiceCallCardActions(props: {
++  size: "xs" | "sm";
++  /**
++   * Render for the sidebar dock: no pill, no jump-to-channel button.
++   *
++   * The dock sits directly under the channel it belongs to and names it on
++   * the line above, so a button meaning "take me there" would point at what
++   * is already on screen.
++   */
++  dock?: boolean;
++}) {
+   const voice = useVoice();
+   const state = useState();
+   const navigate = useNavigate();
+@@ -19,8 +29,8 @@ export function VoiceCallCardActions(props: { size: "xs" | "sm" }) {
+   const enableVideo = CONFIGURATION.ENABLE_VIDEO;
+ 
+   return (
+-    <Actions>
+-      <Show when={props.size === "xs"}>
++    <Actions dock={props.dock}>
++      <Show when={props.size === "xs" && !props.dock}>
+         <IconButton
+           variant="standard"
+           size={props.size}
+@@ -158,4 +168,20 @@ const Actions = styled("div", {
+     borderRadius: "var(--borderRadius-full)",
+     background: "var(--md-sys-color-surface-container)",
+   },
++  variants: {
++    dock: {
++      true: {
++        // The dock already provides the surface and the padding; a second
++        // rounded slab inside it reads as a floating card that failed to
++        // float. The row also has to fill the sidebar so the buttons space
++        // out evenly instead of huddling in the middle.
++        width: "100%",
++        padding: 0,
++        gap: "var(--gap-sm)",
++        justifyContent: "space-between",
++        background: "transparent",
++        borderRadius: 0,
++      },
++    },
++  },
+ });

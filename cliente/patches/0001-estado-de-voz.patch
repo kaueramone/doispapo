@@ -1,0 +1,76 @@
+diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
+index d03d90e..57f1055 100644
+--- a/packages/client/components/rtc/state.tsx
++++ b/packages/client/components/rtc/state.tsx
+@@ -577,7 +577,7 @@ class Voice {
+   toggleFocus(t?: TrackReferenceOrPlaceholder) {
+     const id = t ? this.trackId(t) : undefined;
+     this.#setFocus(
+-      this.focusId() === id || this.vidTracks().length < 2 ? undefined : id,
++      this.focusId() === id || this.visualTracks().length < 2 ? undefined : id,
+     );
+   }
+ 
+@@ -588,7 +588,7 @@ class Voice {
+   focusTrack() {
+     const id = this.focusId();
+     return id
+-      ? this.vidTracks().find((t) => this.trackId(t) === id)
++      ? this.visualTracks().find((t) => this.trackId(t) === id)
+       : undefined;
+   }
+ 
+@@ -600,13 +600,47 @@ class Voice {
+     return this.room()?.getParticipantByIdentity(userId);
+   }
+ 
++  /**
++   * Whether anyone in the call is actually publishing something to look at.
++   *
++   * `vidTracks` is built with `withPlaceholder: true` for the camera source,
++   * so it holds one entry per participant even when nobody has a camera on.
++   * Its length is a participant count, not a video count — only entries that
++   * carry a publication are a real stream.
++   */
++  visualTracks() {
++    return this.vidTracks().filter((t) => t.publication);
++  }
++
++  hasVisual() {
++    return this.visualTracks().length > 0;
++  }
++
++  /**
++   * The call card is now for faces and screens only. With nothing being
++   * published there is nothing to frame, and the card would just cover the
++   * top of the message history — every control it used to carry lives in the
++   * sidebar dock, which is visible whether or not this card is.
++   */
+   showCard(channel: Channel) {
+-    return (
+-      channel.isVoice &&
+-      (this.channel()?.id === channel.id ||
+-        channel.type === "TextChannel" ||
+-        !!channel.voiceParticipants.size)
+-    );
++    return this.channel()?.id === channel.id && this.hasVisual();
++  }
++
++  /**
++   * Round trip time to the media server, in milliseconds.
++   *
++   * Read from the signalling client, which keeps it updated from its own
++   * ping/pong exchange — there is no public accessor for it, hence the
++   * guarded reach into the engine. If the shape ever changes, this returns
++   * undefined and the dock falls back to reporting quality without a number,
++   * rather than throwing inside a render.
++   */
++  ping(): number | undefined {
++    const rtt = (
++      this.room() as unknown as { engine?: { client?: { rtt?: number } } }
++    )?.engine?.client?.rtt;
++
++    return typeof rtt === "number" && rtt > 0 ? rtt : undefined;
+   }
+ 
+   get listenPermission() {

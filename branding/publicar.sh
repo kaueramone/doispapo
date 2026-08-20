@@ -19,14 +19,27 @@ FONTE=/root/doispapo/branding
 
 cd "$BR"
 
+# Referencia de reproducao. Nao e mais a entrada do rebrand: serve para o
+# construir.sh conferir que um build SEM patch sai identico a imagem
+# publicada - a garantia de que a troca de pipeline nao mudou nada por
+# conta propria.
 if [ ! -d dist-orig ]; then
   echo "==> extraindo build original do container"
   docker cp stoat-web-1:/app/dist ./dist-orig
 fi
 
+# Ate a 0.32 a entrada era o dist-orig: a imagem pronta do registry, com
+# nossas alteracoes aplicadas por regex sobre o bundle minificado. Isso
+# servia para remendo cirurgico e nao serve para layout - mover
+# componente de lugar por expressao regular nao sobrevive a nenhum
+# upgrade. Agora o cliente e compilado do fonte, com os patches em
+# cliente/patches, e o rebrand continua fazendo o que sempre fez por cima.
+echo "==> compilando o cliente a partir do fonte"
+/root/doispapo/cliente/construir.sh
+
 echo "==> montando o build novo (fora do ar)"
 rm -rf dist-nova
-python3 "$FONTE/rebrand.py" dist-orig dist-nova
+python3 "$FONTE/rebrand.py" dist-fonte dist-nova
 
 echo
 echo "==> conferindo o build antes de publicar"

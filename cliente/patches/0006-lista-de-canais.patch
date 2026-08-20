@@ -1,0 +1,41 @@
+diff --git a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
+index fa1ef5a..d5c9f0c 100644
+--- a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
++++ b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
+@@ -34,6 +34,7 @@ import {
+   typography,
+ } from "@revolt/ui";
+ import { VoiceChannelPreview } from "@revolt/ui/components/features/voice/VoiceChannelPreview";
++import { VoiceDock } from "@revolt/ui/components/features/voice/VoiceDock";
+ import { createDragHandle } from "@revolt/ui/components/utils/Draggable";
+ import { Symbol } from "@revolt/ui/components/utils/Symbol";
+ 
+@@ -252,6 +253,7 @@ export const ServerSidebar = (props: Props) => {
+           )}
+         </Draggable>
+       </div>
++      <VoiceDock />
+     </SidebarBase>
+   );
+ };
+@@ -494,6 +496,20 @@ function Entry(
+     <Column gap="sm">
+       <MenuButton
+         href={`/server/${props.channel.serverId}/channel/${props.channel.id}`}
++        /*
++          Double click on a voice channel connects; single click just opens it
++          so you can read along without joining. Connecting while already
++          connected somewhere else is a straight swap — `connect` disconnects
++          first — so moving between rooms is one gesture, not leave-then-join.
++
++          Already in this room, double click does nothing: leaving is a
++          deliberate act and belongs to the button in the dock.
++        */
++        onDblClick={
++          props.channel.isVoice && !inCall()
++            ? () => voice.connect(props.channel)
++            : undefined
++        }
+         use:floating={props.menuGenerator(props.channel)}
+         size="normal"
+         alert={alertState()}

@@ -1,0 +1,21 @@
+diff --git a/packages/client/src/interface/navigation/channels/HomeSidebar.tsx b/packages/client/src/interface/navigation/channels/HomeSidebar.tsx
+index a7b7f03..146db70 100644
+--- a/packages/client/src/interface/navigation/channels/HomeSidebar.tsx
++++ b/packages/client/src/interface/navigation/channels/HomeSidebar.tsx
+@@ -26,6 +26,8 @@ import { Symbol } from "@revolt/ui/components/utils/Symbol";
+ import MdClose from "@material-design-icons/svg/outlined/close.svg?component-solid";
+ 
+ import { useDevice } from "@revolt/common";
++import { VoiceDock } from "@revolt/ui/components/features/voice/VoiceDock";
++
+ import { SidebarBase } from "./common";
+ 
+ interface Props {
+@@ -188,6 +190,7 @@ export const HomeSidebar = (props: Props) => {
+           </Deferred>
+         </List>
+       </div>
++      <VoiceDock />
+     </SidebarBase>
+   );
+ };

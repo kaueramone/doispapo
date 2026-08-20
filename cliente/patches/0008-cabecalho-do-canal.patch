@@ -1,0 +1,27 @@
+diff --git a/packages/client/src/interface/channels/ChannelHeader.tsx b/packages/client/src/interface/channels/ChannelHeader.tsx
+index 6525f97..3b16eb4 100644
+--- a/packages/client/src/interface/channels/ChannelHeader.tsx
++++ b/packages/client/src/interface/channels/ChannelHeader.tsx
+@@ -141,7 +141,21 @@ export function ChannelHeader(props: Props) {
+ 
+       <Spacer />
+ 
+-      <Show when={props.channel.isVoice && !voice.showCard(props.channel)}>
++      {/*
++        Offer to join whenever this is a voice channel you are not already in.
++
++        This used to key off `showCard`, which meant "is the call card on
++        screen". Now that the card only appears once someone publishes video,
++        that test would put a "Join the voice channel" button in the header of
++        a call you are already sitting in. It also serves as the discoverable
++        way in, for anyone who has not found the double click on the sidebar.
++      */}
++      <Show
++        when={
++          props.channel.isVoice &&
++          voice.channel()?.id !== props.channel.id
++        }
++      >
+         <IconButton
+           onPress={() => voice.connect(props.channel)}
+           use:floating={{

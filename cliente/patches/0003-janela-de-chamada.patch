@@ -1,0 +1,49 @@
+diff --git a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx
+index cb34678..a1c26d3 100644
+--- a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx
++++ b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx
+@@ -22,7 +22,6 @@ import { SlideState } from "@revolt/ui/components/navigation/SlideDrawer";
+ 
+ import { VoiceCallCardActiveRoom } from "./VoiceCallCardActiveRoom";
+ import { VoiceCallCardPiP } from "./VoiceCallCardPiP";
+-import { VoiceCallCardPreview } from "./VoiceCallCardPreview";
+ 
+ type Mode = "floating" | "moving";
+ type FloatType = "tl" | "tr" | "bl" | "br";
+@@ -172,7 +171,13 @@ export function VoiceCallCardContext(props: { children: JSX.Element }) {
+           fullscreen={voice.fullscreen()}
+         >
+           <Switch>
+-            <Match when={mode() && inCall()}>
++            {/*
++              The mini card follows the same rule as the big one: it is a
++              window onto a camera or a screen. With nobody publishing there
++              is nothing for it to show, and the sidebar dock already says
++              where you are connected.
++            */}
++            <Match when={mode() && inCall() && voice.hasVisual()}>
+               <VoiceCallCardPiP />
+             </Match>
+             <Match when={channel()}>
+@@ -274,16 +279,14 @@ function VoiceCallCard(props: {
+   showCard: boolean;
+   fullscreen: boolean;
+ }) {
++  // There is no longer a "join the call" state to fall back to: opening a
++  // voice channel connects you, and `showCard` is only true once someone is
++  // publishing video or a screen — so reaching here means the room is live.
+   return (
+     <Show when={props.showCard}>
+       <Base fullscreen={props.fullscreen}>
+-        <Card active={props.inCall} fullscreen={props.fullscreen}>
+-          <Show
+-            when={props.inCall}
+-            fallback={<VoiceCallCardPreview channel={props.channel} />}
+-          >
+-            <VoiceCallCardActiveRoom />
+-          </Show>
++        <Card active fullscreen={props.fullscreen}>
++          <VoiceCallCardActiveRoom />
+         </Card>
+       </Base>
+     </Show>

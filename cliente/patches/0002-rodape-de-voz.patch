@@ -1,0 +1,227 @@
+diff --git a/packages/client/components/ui/components/features/voice/VoiceDock.tsx b/packages/client/components/ui/components/features/voice/VoiceDock.tsx
+new file mode 100644
+index 0000000..2e812dc
+--- /dev/null
++++ b/packages/client/components/ui/components/features/voice/VoiceDock.tsx
+@@ -0,0 +1,221 @@
++import { Show, createSignal, onCleanup, onMount } from "solid-js";
++
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
++import { styled } from "styled-system/jsx";
++
++import { useVoice } from "@revolt/rtc";
++import { Symbol } from "@revolt/ui/components/utils/Symbol";
++
++import { VoiceCallCardActions } from "./callCard/VoiceCallCardActions";
++
++/** How often to re-read the round trip time, in milliseconds */
++const PING_INTERVAL = 2000;
++
++/** Round trip time above which the connection is reported as struggling */
++const PING_POOR = 200;
++
++/** Round trip time above which the connection is reported as middling */
++const PING_FAIR = 100;
++
++/**
++ * Persistent voice controls, pinned to the foot of the channel list.
++ *
++ * These controls used to live inside the floating call card, which meant they
++ * only existed while that card was on screen — and the card sat on top of the
++ * message history. Anchoring them here separates the two concerns: the card is
++ * for looking at people, this is for operating the call, and it stays put
++ * while you read any channel.
++ */
++export function VoiceDock() {
++  const voice = useVoice();
++  const { t } = useLingui();
++
++  // Built by concatenation rather than macro interpolation. A compiled
++  // catalogue stores a message with a placeholder as a list of fragments, and
++  // this deployment swaps translations by whole string — an interpolated
++  // message would be the one line in the dock stuck in English.
++  const latencyLabel = () => t`Latency`;
++
++  // Polled, not reactive: the round trip time is read straight off the
++  // signalling client, which updates it on its own ping schedule without
++  // telling anyone. Both the wording and the number are coloured from this
++  // one signal, so they can never disagree about how the call is doing.
++  const [ms, setMs] = createSignal<number | undefined>();
++
++  onMount(() => {
++    const read = () => setMs(voice.ping());
++    read();
++    const timer = setInterval(read, PING_INTERVAL);
++    onCleanup(() => clearInterval(timer));
++  });
++
++  return (
++    <Show when={voice.channel()}>
++      <Dock>
++        <Line>
++          <StatusText
++            state={voice.state()}
++            quality={quality(ms())}
++            /*
++              The reading itself only comes out on hover. A number sitting
++              there permanently is noise nobody reads until something sounds
++              wrong — the colour of the wording already carries the warning,
++              and this is where you go to confirm it.
++
++              With no reading yet, `tooltip` is undefined and the directive
++              simply never fires, rather than opening an empty bubble.
++            */
++            use:floating={{
++              tooltip: ms()
++                ? {
++                    placement: "top",
++                    content: `${latencyLabel()}: ${ms()} ms`,
++                  }
++                : undefined,
++            }}
++          >
++            <Symbol size={18}>{symbol(voice.state())}</Symbol>
++            <Label>{label(voice.state())}</Label>
++          </StatusText>
++        </Line>
++        <ChannelLine href={voice.channel()!.path}>
++          <Symbol size={16}>headset_mic</Symbol>
++          <Name>{voice.channel()!.name}</Name>
++        </ChannelLine>
++        <VoiceCallCardActions size="xs" dock />
++      </Dock>
++    </Show>
++  );
++}
++
++/** Bucket a round trip time for colouring */
++function quality(ms?: number) {
++  if (ms === undefined) return "unknown" as const;
++  if (ms >= PING_POOR) return "poor" as const;
++  if (ms >= PING_FAIR) return "fair" as const;
++  return "good" as const;
++}
++
++/** Icon for the current connection state */
++function symbol(state: string) {
++  return state === "DISCONNECTED" ? "wifi_tethering_error" : "wifi_tethering";
++}
++
++/** Wording for the current connection state */
++function label(state: string) {
++  switch (state) {
++    case "CONNECTED":
++      return <Trans>Voice connected</Trans>;
++    case "CONNECTING":
++      return <Trans>Connecting</Trans>;
++    case "RECONNECTING":
++      return <Trans>Reconnecting</Trans>;
++    case "DISCONNECTED":
++      return <Trans>Connection lost</Trans>;
++    default:
++      return null;
++  }
++}
++
++const Dock = styled("div", {
++  base: {
++    flexShrink: 0,
++
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-xs)",
++
++    padding: "var(--gap-sm) var(--gap-md) var(--gap-md)",
++
++    background: "var(--md-sys-color-surface-container)",
++    color: "var(--md-sys-color-on-surface)",
++  },
++});
++
++const Line = styled("div", {
++  base: {
++    display: "flex",
++    alignItems: "center",
++    justifyContent: "space-between",
++    gap: "var(--gap-sm)",
++  },
++});
++
++const StatusText = styled("div", {
++  base: {
++    display: "flex",
++    alignItems: "center",
++    gap: "var(--gap-sm)",
++    minWidth: 0,
++
++    fontSize: "0.8125rem",
++    fontWeight: 600,
++  },
++  variants: {
++    state: {
++      READY: { color: "var(--md-sys-color-outline)" },
++      CONNECTED: {},
++      CONNECTING: { color: "var(--md-sys-color-outline)" },
++      RECONNECTING: { color: "var(--md-sys-color-outline)" },
++      DISCONNECTED: { color: "var(--md-sys-color-error)" },
++    },
++    // Once connected, the wording takes the colour of the measured quality —
++    // "connected" in red while every packet is late would be a lie told in
++    // the one place someone looks to find out why the call sounds wrong.
++    quality: {
++      unknown: {},
++      good: {},
++      fair: {},
++      poor: {},
++    },
++  },
++  compoundVariants: [
++    {
++      state: ["CONNECTED"],
++      quality: ["unknown", "good"],
++      css: { color: "var(--md-sys-color-primary)" },
++    },
++    {
++      state: ["CONNECTED"],
++      quality: ["fair"],
++      css: { color: "var(--md-sys-color-tertiary)" },
++    },
++    {
++      state: ["CONNECTED"],
++      quality: ["poor"],
++      css: { color: "var(--md-sys-color-error)" },
++    },
++  ],
++});
++
++const Label = styled("span", {
++  base: {
++    overflow: "hidden",
++    whiteSpace: "nowrap",
++    textOverflow: "ellipsis",
++  },
++});
++
++const ChannelLine = styled("a", {
++  base: {
++    display: "flex",
++    alignItems: "center",
++    gap: "var(--gap-sm)",
++    minWidth: 0,
++
++    fontSize: "0.75rem",
++    color: "var(--md-sys-color-on-surface-variant)",
++
++    _hover: {
++      textDecoration: "underline!",
++    },
++  },
++});
++
++const Name = styled("span", {
++  base: {
++    overflow: "hidden",
++    whiteSpace: "nowrap",
++    textOverflow: "ellipsis",
++  },
++});

@@ -379,13 +379,44 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
 # (nao traduzidas). Aplicamos as traducoes proprias por msgId.
 trad_p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       "traducoes_pt_br.json")
+def _catalogo_pt_br():
+    """Descobre o chunk do catalogo pt-BR pelo mapa de import do bundle.
+
+    A versao anterior pegava o primeiro messages-*.js que contivesse
+    "[Ontem as]" e parava ali. So que pt-PT tambem diz "Ontem as". Eram
+    DOIS candidatos, e qual vinha primeiro dependia da ordem em que o
+    sistema de arquivos devolvia o glob - sorteio a cada build.
+
+    Perder esse sorteio nao quebraria nada de forma visivel: as traducoes
+    entrariam no catalogo de Portugal, o contador diria 249, o
+    verificar.py aprovaria, e a interface em pt-BR ficaria exatamente
+    como estava. Um defeito com aparencia de sucesso.
+
+    O bundle carrega a resposta certa: o mapa de import do lingui liga o
+    locale ao seu chunk. Ler dali e determinista - e quando nao da para
+    resolver, parar e melhor do que traduzir o idioma errado.
+    """
+    padrao = re.compile(r'pt-BR/messages\.ts"\s*:\s*\(\)\s*=>\s*'
+                        r'[^(]*\(\s*\(\)\s*=>\s*import\("\./(messages-[^"]+\.js)"')
+    for idx in glob.glob(os.path.join(DST, "assets", "index-*.js")):
+        m = padrao.search(open(idx, encoding="utf-8", errors="replace").read())
+        if m:
+            caminho = os.path.join(DST, "assets", m.group(1))
+            if os.path.exists(caminho):
+                return caminho
+    return None
+
+
 if os.path.exists(trad_p):
     trad = json.load(open(trad_p, encoding="utf-8"))
-    for f in glob.glob(os.path.join(DST, "assets", "messages-*.js")):
+    alvo_pt = _catalogo_pt_br()
+    if not alvo_pt:
+        raise SystemExit(
+            "erro: nao deu para identificar o catalogo pt-BR pelo mapa de\n"
+            "      import do bundle. Traduzir o catalogo errado passaria\n"
+            "      por sucesso, entao a geracao para aqui.")
+    for f in [alvo_pt]:
         s_ = open(f, encoding="utf-8", errors="replace").read()
-        # so mexe no catalogo que ja esta em portugues do Brasil
-        if "[Ontem \u00e0s]" not in s_ and "[Ontem às]" not in s_:
-            continue
         n_ = 0
         for chave, texto in trad.items():
             alvo = '"%s":[' % chave
