@@ -173,20 +173,24 @@ for f in glob.glob(os.path.join(DST, "assets", "*.js")):
 # convidava a enviar GIFs para o gifbox.me. Reaproveitamos esse espaco
 # em vez de inventar um elemento novo: menos remendo, e o texto cai
 # exatamente onde o usuario ja olha.
+# Ancorado no msgId, nunca no nome minificado do <Trans> nem no da
+# constante da URL - ver a nota da secao 1e.
+_ID = r'[A-Za-z_$][\w$]*'
 GIF_TEXTOS = [
-    ('c(b,{id:"H6eQWV"})', '"Powered by GIPHY"'),
-    ('c(b,{id:"9gXZi5"})', '"Abrir o GIPHY"'),
-    ('c(b,{id:"jSklQb"})', '"Nenhum GIF encontrado"'),
-    ('c(b,{id:"CVvh2T"})', '"Tente outra busca."'),
-    ('Y5="https://gifbox.me/upload"', 'Y5="https://giphy.com"'),
+    (re.compile(_ID + r'\(' + _ID + r',\{id:"H6eQWV"\}\)'), '"Powered by GIPHY"'),
+    (re.compile(_ID + r'\(' + _ID + r',\{id:"9gXZi5"\}\)'), '"Abrir o GIPHY"'),
+    (re.compile(_ID + r'\(' + _ID + r',\{id:"jSklQb"\}\)'), '"Nenhum GIF encontrado"'),
+    (re.compile(_ID + r'\(' + _ID + r',\{id:"CVvh2T"\}\)'), '"Tente outra busca."'),
+    (re.compile(r'(' + _ID + r')="https://gifbox\.me/upload"'),
+     r'\1="https://giphy.com"'),
 ]
 for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
     o_ = s_
-    for de, para in GIF_TEXTOS:
-        if de in s_:
-            conta("gif-atribuicao", s_.count(de))
-            s_ = s_.replace(de, para)
+    for padrao, para in GIF_TEXTOS:
+        s_, n_gif = padrao.subn(para, s_)
+        if n_gif:
+            conta("gif-atribuicao", n_gif)
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
 
@@ -348,11 +352,18 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
 # grupo Personalizacao, ao lado de Emojis - em vez de um botao flutuante.
 # Os identificadores minificados sao casados por padrao, nao literalmente,
 # para o remendo sobreviver a um rebuild do upstream.
+# NENHUM nome minificado no padrao. `c` e `b` eram os nomes que o
+# empacotador tinha sorteado para o helper de componente e para o <Trans>
+# naquele build; bastou o bundle mudar de conteudo para virarem outros
+# (`y`, no caso) e os dois remendos sumirem em silencio. O que nao muda
+# sao os literais: o id da pagina, o msgId da traducao, o formato da
+# chamada. E so isso que ancora aqui.
+IDENT = r'[A-Za-z_$][\w$]*'
 PG_LISTA = re.compile(
-    r'(entries:\[\{id:"emojis",icon:c\([A-Za-z_$][\w$]*,\{size:20\}\),'
-    r'title:c\(b,\{id:"etgedT"\}\)\})\]')
+    r'(entries:\[\{id:"emojis",icon:' + IDENT + r'\(' + IDENT + r',\{size:20\}\),'
+    r'title:' + IDENT + r'\(' + IDENT + r',\{id:"etgedT"\}\)\})\]')
 PG_RENDER = re.compile(
-    r'(case"emojis":return c\([A-Za-z_$][\w$]*,\{server:e\}\);)')
+    r'(case"emojis":return ' + IDENT + r'\(' + IDENT + r',\{server:e\}\);)')
 
 for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
