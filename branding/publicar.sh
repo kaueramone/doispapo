@@ -23,6 +23,34 @@ FONTE=/root/doispapo/branding
 IP_CHAT=$(getent hosts chat.doispapo.com | awk '{print $1; exit}')
 [ -n "$IP_CHAT" ] || { echo "!! nao resolvi chat.doispapo.com"; exit 1; }
 
+# Publicar derruba quem esta em chamada.
+#
+# O service worker novo assume e manda as abas abertas recarregarem --
+# isso e o que faz a correcao chegar sem ninguem precisar apertar nada.
+# Quem esta falando nesse instante cai no meio da frase.
+#
+# Descoberto do jeito ruim: a 0.43.0 subiu com cinco pessoas numa
+# chamada. A serie de metricas ja sabia disso; era so perguntar.
+#
+# Para publicar assim mesmo (correcao urgente vale mais que a chamada):
+#   FORCAR=1 branding/publicar.sh
+EM_CHAMADA=$(cd "$RAIZ" && docker compose exec -T painel python3 -c "
+import os, time
+from pymongo import MongoClient
+db = MongoClient(os.environ.get('MONGO_URL','mongodb://database:27017')).revolt
+d = db.dp_metricas.find_one(sort=[('em', -1)])
+# Amostra velha nao diz nada sobre agora.
+print(int((d or {}).get('sfu', {}).get('participantes') or 0)
+      if d and time.time() - d['em'] < 120 else 0)
+" 2>/dev/null | tr -dc '0-9')
+
+if [ "${EM_CHAMADA:-0}" -gt 0 ] && [ -z "${FORCAR:-}" ]; then
+  echo "!! $EM_CHAMADA pessoa(s) em chamada agora."
+  echo "   Publicar recarrega as abas abertas e derruba quem esta falando."
+  echo "   Para publicar assim mesmo:  FORCAR=1 $0"
+  exit 1
+fi
+
 cd "$BR"
 
 # Referencia de reproducao. Nao e mais a entrada do rebrand: serve para o
