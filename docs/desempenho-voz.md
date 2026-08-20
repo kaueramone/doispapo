@@ -4,6 +4,11 @@ Análise a partir de medição na instância, não de suposição. Os números
 vêm de 6 horas de registro do SFU com uso real, das estatísticas de RTP
 que ele emite por faixa, e da configuração em vigor.
 
+> **Estado em 20/08/2026.** Os itens 1, 2 e 3 da ordem sugerida (§5)
+> foram feitos: `dynacast` na 0.42.0, métricas e aba de Consumo no
+> painel, `adaptiveStream` na 0.43.0. O que está medido depois disso
+> aparece marcado como tal. Faltam H.264 e TURN.
+
 ---
 
 ## 1. O que foi medido
@@ -30,32 +35,54 @@ desmoronando.
 
 ## 2. Os dois achados que mais pesam
 
-### 2.1 `dynacast` e `adaptiveStream` estão desligados
+### 2.1 `dynacast` e `adaptiveStream` estavam desligados — **resolvido**
 
-São as duas alavancas principais do LiveKit, e ambas estão no padrão
-`false` da biblioteca — o cliente não as define.
+São as duas alavancas principais do LiveKit, e ambas estavam no padrão
+`false` da biblioteca. Hoje as duas estão ligadas.
 
-**`dynacast`** faz o SFU avisar quem transmite para parar de enviar as
-camadas que ninguém assina. Hoje, quem compartilha a tela **envia o
-tempo todo**, mesmo que ninguém esteja assistindo. Isso é especialmente
+**`dynacast`** (0.42.0) faz o SFU avisar quem transmite para parar de
+enviar as camadas que ninguém assina. Antes, quem compartilhava a tela
+**enviava o tempo todo**, mesmo sem ninguém assistindo — especialmente
 desperdiçado aqui, porque a nossa assinatura sob demanda foi feita
-justamente para ninguém receber sem pedir: economizamos a descida de
-quem assiste e continuamos pagando a subida de quem transmite.
+justamente para ninguém receber sem pedir: economizávamos a descida de
+quem assiste e seguíamos pagando a subida de quem transmite.
 
-**`adaptiveStream`** faz cada assinante receber a camada compatível com
-o tamanho real do elemento na tela. Na grade os quadros são pequenos —
-sem isso, um quadro de 300 px pode estar puxando 720p a 2,3 Mbit/s.
+**Medido em produção**, com uma tela publicada e ninguém assistindo:
 
-Estimativa para uma chamada de 6 pessoas com uma tela sendo assistida
-por 5:
+| | antes | depois |
+|---|---|---|
+| entrada da máquina | 3.399 kbit/s | **162 kbit/s** |
+| saída da máquina | 2.752 kbit/s | **77 kbit/s** |
 
-| | hoje | com as duas ligadas |
+A tela seguia publicada nos dois casos — o que sumiu foi só o que
+ninguém estava olhando.
+
+**`adaptiveStream`** (0.43.0) faz cada assinante pedir a camada
+compatível com o tamanho real do elemento na tela. Câmera publica em
+três camadas (180p, 360p e a captura) e tela em duas (metade e
+original); sem isso o cliente pedia sempre a maior, mesmo num quadro de
+300 px na grade. Com o `dynacast` do outro lado, camada que ninguém pede
+deixa de ser enviada — então a economia vale para os dois lados.
+
+Estimativa para uma chamada de 6 pessoas com uma tela assistida por 5:
+
+| | antes | com as duas ligadas |
 |---|---|---|
 | subida de quem transmite | 2,3 Mbit/s sempre | ~0 quando ninguém assiste |
 | descida por espectador | 2,3 Mbit/s | 0,6 Mbit/s em quadro pequeno |
 | saída total do servidor | ~11,5 Mbit/s | ~3 Mbit/s |
 
-São mudanças de uma linha cada, no construtor da sala.
+**O que o `adaptiveStream` cobrou em cuidado:** ele decide o que
+continua chegando observando os elementos onde a faixa foi encaixada, e
+os observadores nascem no documento principal. A janela destacada vive
+em outro documento — para o observador ela nunca está visível, e a faixa
+seria desligada com a janela aberta na frente da pessoa. O `destacar.ts`
+responde pela visibilidade dela por conta própria, via
+`observeElementInfo`. Aba escondida pausa vídeo depois de 5 s (o áudio
+nunca pausa) e voltar religa na hora.
+
+**Ainda não verificado com duas pessoas de verdade na chamada.** A
+divida de §8 continua de pé.
 
 ### 2.2 O codec é VP8, e VP8 quase não tem aceleração por hardware
 
@@ -94,24 +121,30 @@ intermediário (UDP relayed) antes de cair para TCP.
 
 ---
 
-## 4. Sem visibilidade
+## 4. Sem visibilidade — **resolvido**
 
-O SFU não expõe métricas (`prometheus_port` não está configurado), então
-não há como acompanhar nada disso ao longo do tempo. Tudo nesta análise
-saiu de log bruto, o que serve para uma investigação e não serve para
+O SFU não expunha métricas (`prometheus_port` não configurado), então não
+havia como acompanhar nada disso ao longo do tempo: tudo nesta análise
+saiu de log bruto, o que serve para investigação e não serve para
 operação.
+
+Hoje o `convites` coleta a cada minuto de três fontes separadas — os
+contadores de rede da máquina, as métricas do SFU e o peso das faixas por
+canal — e o painel mostra o resultado na aba **Consumo**, com o total
+medido de um lado e o rateio estimado por comunidade do outro, nunca
+somados. Ver §6.
 
 ---
 
 ## 5. Ordem sugerida
 
-| # | Mudança | Efeito esperado | Risco |
-|---|---|---|---|
-| 1 | Ligar `dynacast` e `adaptiveStream` | maior de todos, custo de duas linhas | baixo |
-| 2 | Expor métricas do SFU | sem isso não se mede nada | nenhum |
-| 3 | Painel de consumo (§6) | decisão de upgrade com base em dado | baixo |
-| 4 | Preferir H.264 no compartilhamento | destrava aceleração por hardware | médio |
-| 5 | Ligar TURN | corrige a cauda de perda | médio |
+| # | Mudança | Efeito esperado | Risco | Estado |
+|---|---|---|---|---|
+| 1 | Ligar `dynacast` e `adaptiveStream` | maior de todos | baixo | **feito** (0.42.0 e 0.43.0) |
+| 2 | Expor métricas do SFU | sem isso não se mede nada | nenhum | **feito** |
+| 3 | Painel de consumo (§6) | decisão de upgrade com base em dado | baixo | **feito** |
+| 4 | Preferir H.264 no compartilhamento | destrava aceleração por hardware | médio | aberto |
+| 5 | Ligar TURN | corrige a cauda de perda | médio | aberto |
 
 A ordem não é arbitrária: 1 é barato e grande, 2 e 3 são o que permite
 saber se 4 e 5 valeram a pena. Fazer 4 antes de 2 é mexer no codec sem
@@ -141,6 +174,11 @@ mente com gráfico.
 minutos de chamada por dia, pico simultâneo de faixas de vídeo, e GB por
 mês. A terceira é a conta financeira; a segunda é a que diz quando a
 máquina não aguenta mais.
+
+> Os 2,3 Mbit/s por faixa foram medidos **antes** do `dynacast` e do
+> `adaptiveStream`. A constante que alimenta o rateio do painel
+> (`KBIT_VIDEO`) ainda usa esse valor e precisa ser recalibrada com
+> alguns dias de série nova.
 
 **Conta de capacidade, com os números de hoje:** uma sessão de 3 h com 6
 pessoas e uma tela assistida por 5 gasta ~18 GB. Diariamente, ~540
