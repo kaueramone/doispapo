@@ -37,6 +37,24 @@ aplicativo. Única suposição do desenho que segue não verificada.
 
 ## Dívidas conhecidas
 
+**O compartilhamento de tela não tem cobertura automatizada nenhuma** — e é
+a parte do produto com mais lógica própria: assinatura sob demanda, prévia
+borrada, áudio em faixa separada, destaque em janela. Duas regressões
+seguidas chegaram à produção pela mesma fresta (0.39.1: captura de prévia
+em laço; e o áudio de tela, que nunca funcionou desde que a assinatura sob
+demanda existe).
+
+O portão de fumaça abre a página e confere que o aplicativo monta. Ele não
+entra em canal, não compartilha tela e não assina faixa — então nada disso
+é exercitado antes de publicar.
+
+O que falta é um teste que ligue dois participantes de verdade contra a
+instância, como `teste_som.py` e `teste_emoji.py` já fazem para os
+serviços próprios. Com dois navegadores sem interface e duas contas de
+teste dá para cobrir: entrar num canal com tela já em curso, começar a
+compartilhar com gente dentro, assistir, parar de assistir, e conferir que
+a faixa de áudio acompanha a de vídeo.
+
 **`voz.js` ainda procura nomes minificados** — `eQVZMd`, `dKGhWu`,
 `fXciza`, `hgBSwO`, `GrQgU`. Depender de nome sorteado pelo minificador já
 quebrou coisa cinco vezes: foi o motivo de passarmos a compilar do fonte,
