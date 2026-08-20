@@ -30,6 +30,9 @@ function dataBr(ts){
   return d.toLocaleDateString("pt-BR")+" "+
          d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 }
+function plural(n, um, varios){
+  return n + " " + (Math.abs(n) === 1 ? um : varios);
+}
 
 /* ------------------------------------------------------------- sessão */
 function entrar(e){
@@ -423,8 +426,9 @@ function carregarNovidades(){
                        : '<span class="tag al">rascunho</span>')+
           (n.titulo ? '<b>'+esc(n.titulo)+'</b>' : '')+
           '<span class="sp"></span>'+
-          '<small>'+dataBr(n.em)+' · '+n.curtidas+' curtidas · '+
-            n.comentarios+' comentários</small>'+
+          '<small>'+dataBr(n.em)+' · '+
+            plural(n.curtidas,"curtida","curtidas")+' · '+
+            plural(n.comentarios,"comentário","comentários")+'</small>'+
         '</div>'+
         '<p style="white-space:pre-wrap;margin:10px 0">'+esc(n.texto)+'</p>'+
         '<div class="flex" style="gap:8px">'+

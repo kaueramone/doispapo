@@ -76,6 +76,14 @@ docker compose exec -T convites python3 /teste_som.py
 
 docker compose cp deploy/emoji/teste_emoji.py emoji:/teste_emoji.py
 docker compose exec -T emoji python3 /teste_emoji.py
+
+# Comentários e Novidades atravessam dois serviços: o cliente escreve pelo
+# `convites` e o admin lê pelo `painel`. O teste sobe os dois no mesmo
+# processo para exercitar a volta -- resposta do admin chegando em "Meus
+# envios", rascunho não vazando para o cliente.
+docker compose cp deploy/convites/app.py painel:/app/cliente.py
+docker compose cp deploy/painel/teste_comentarios.py painel:/app/teste.py
+docker compose exec -T painel python3 /app/teste.py
 ```
 
 `deploy/verificar_servicos.py` procura variável usada num ramo que só é

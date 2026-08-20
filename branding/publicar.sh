@@ -17,6 +17,12 @@ RAIZ=/root/stoat
 BR=$RAIZ/branding
 FONTE=/root/doispapo/branding
 
+# Conferimos o que o servidor entrega batendo direto no endereco dele,
+# sem depender de cache de DNS. O endereco e resolvido agora: dado de
+# infraestrutura nao entra no repositorio (ver CLAUDE.md).
+IP_CHAT=$(getent hosts chat.doispapo.com | awk '{print $1; exit}')
+[ -n "$IP_CHAT" ] || { echo "!! nao resolvi chat.doispapo.com"; exit 1; }
+
 cd "$BR"
 
 # Referencia de reproducao. Nao e mais a entrada do rebrand: serve para o
@@ -116,18 +122,18 @@ docker compose restart web >/dev/null
 
 echo "==> aguardando subir"
 for _ in $(seq 1 60); do
-  curl -sf --resolve chat.doispapo.com:443:187.127.57.149 \
+  curl -sf --resolve "chat.doispapo.com:443:$IP_CHAT" \
     https://chat.doispapo.com/versao.json -o /dev/null && break
   sleep 1
 done
 
-SERVIDA=$(curl -s --resolve chat.doispapo.com:443:187.127.57.149 \
+SERVIDA=$(curl -s --resolve "chat.doispapo.com:443:$IP_CHAT" \
           https://chat.doispapo.com/versao.json | python3 -c \
           'import json,sys;print(json.load(sys.stdin)["build"])')
 
 # Confere o que o servidor REALMENTE entrega, nao o que esta em disco.
 TMP=$(mktemp)
-curl -s --resolve chat.doispapo.com:443:187.127.57.149 \
+curl -s --resolve "chat.doispapo.com:443:$IP_CHAT" \
      https://chat.doispapo.com/ -o "$TMP"
 LOCAL=$(md5sum "$BR/dist-patched/index.html" | cut -d' ' -f1)
 NOAR=$(md5sum "$TMP" | cut -d' ' -f1)

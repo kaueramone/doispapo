@@ -64,11 +64,6 @@ podem virar marcadores estáveis, junto com a seção §1g do `rebrand.py`.
 A §1h já foi: o marcador de fala e o `data-dp-uid` passaram a ser escritos
 pelo `ParticipantTile` no fonte (0.38.0).
 
-**Sem teste automatizado nos endpoints de feedback e novidades.** O
-projeto tem o padrão — `teste_som.py` e `teste_emoji.py` rodam dentro do
-container contra o serviço real — e as rotas novas do `convites` e do
-`painel` foram entregues sem o equivalente.
-
 **Mensagens de sistema continuam sendo criadas.** Desde a 0.34.0 elas não
 aparecem no chat, mas seguem no banco e ainda marcam o canal como não
 lido. Falta decidir se são apagadas de vez.

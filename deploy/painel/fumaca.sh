@@ -11,7 +11,10 @@ set -euo pipefail
 RAIZ=/root/stoat
 URL="${1:-https://painel.doispapo.com/}"
 HOSTNAME_ALVO=$(echo "$URL" | sed -E 's#^https?://([^/]+).*#\1#')
-IP_PUBLICO=187.127.57.149
+# Resolvido em tempo de execucao: endereco de infraestrutura nao
+# entra no repositorio (ver CLAUDE.md).
+IP_PUBLICO=$(getent hosts "$HOSTNAME_ALVO" | awk '{print $1; exit}')
+[ -n "$IP_PUBLICO" ] || { echo "!! nao resolvi o endereco do alvo"; exit 1; }
 AQUI="$(cd "$(dirname "$0")" && pwd)"
 
 cd "$RAIZ"

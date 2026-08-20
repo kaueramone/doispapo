@@ -20,7 +20,10 @@ RAIZ=/root/stoat
 IMAGEM=ghcr.io/stoatchat/for-web:0c31cf0
 NOME=dp-fumaca
 REDE=stoat_default
-IP_PUBLICO=187.127.57.149
+# Resolvido em tempo de execucao: endereco de infraestrutura nao
+# entra no repositorio (ver CLAUDE.md).
+IP_PUBLICO=$(getent hosts chat.doispapo.com | awk '{print $1; exit}')
+[ -n "$IP_PUBLICO" ] || { echo "!! nao resolvi o endereco do alvo"; exit 1; }
 
 [ -f "$DIST/index.html" ] || { echo "!! $DIST nao parece um build"; exit 1; }
 
