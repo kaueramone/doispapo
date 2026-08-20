@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..c807d18 100644
+index d03d90e..c57f6a5 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
 @@ -75,6 +75,38 @@ class Voice {
@@ -171,7 +171,7 @@ index d03d90e..c807d18 100644
        : undefined;
    }
  
-@@ -600,15 +673,73 @@ class Voice {
+@@ -600,15 +673,85 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
@@ -194,12 +194,24 @@ index d03d90e..c807d18 100644
 +
 +    const fora = this.destacados();
 +
-+    return this.vidTracks().filter(
-+      (t) =>
-+        t.publication &&
-+        !t.publication.isMuted &&
-+        !fora.includes(this.trackId(t)),
-+    );
++    return this.vidTracks().filter((t) => {
++      if (!t.publication) return false;
++      if (fora.includes(this.trackId(t))) return false;
++
++      // O estado de mudo só vale para CÂMERA.
++      //
++      // Desligar a câmera é um mute -- a publicação continua existindo, e
++      // sem esta checagem o quadro ficava na grade mostrando nada.
++      //
++      // Tela compartilhada é outra coisa: parar de compartilhar DESPUBLICA
++      // a faixa (livekit-client só despublica quando a fonte é tela), então
++      // a existência da publicação já é a resposta. Pior: a tela nasce
++      // publicada como mutada e só é desmutada uns segundos depois, então
++      // aplicar o mesmo filtro aqui escondia a transmissão inteira.
++      if (t.source === Track.Source.Camera) return !t.publication.isMuted;
++
++      return true;
++    });
 +  }
 +
 +  /** Se este quadro esta numa janela propria em vez de na grade */
