@@ -1,12 +1,13 @@
 diff --git a/packages/client/components/ui/components/features/voice/VoiceDock.tsx b/packages/client/components/ui/components/features/voice/VoiceDock.tsx
 new file mode 100644
-index 0000000..2e812dc
+index 0000000..a5c5118
 --- /dev/null
 +++ b/packages/client/components/ui/components/features/voice/VoiceDock.tsx
-@@ -0,0 +1,221 @@
+@@ -0,0 +1,218 @@
 +import { Show, createSignal, onCleanup, onMount } from "solid-js";
 +
 +import { Trans, useLingui } from "@lingui-solid/solid/macro";
++import { cva } from "styled-system/css";
 +import { styled } from "styled-system/jsx";
 +
 +import { useVoice } from "@revolt/rtc";
@@ -16,12 +17,6 @@ index 0000000..2e812dc
 +
 +/** How often to re-read the round trip time, in milliseconds */
 +const PING_INTERVAL = 2000;
-+
-+/** Round trip time above which the connection is reported as struggling */
-+const PING_POOR = 200;
-+
-+/** Round trip time above which the connection is reported as middling */
-+const PING_FAIR = 100;
 +
 +/**
 + * Persistent voice controls, pinned to the foot of the channel list.
@@ -44,9 +39,45 @@ index 0000000..2e812dc
 +
 +  // Polled, not reactive: the round trip time is read straight off the
 +  // signalling client, which updates it on its own ping schedule without
-+  // telling anyone. Both the wording and the number are coloured from this
-+  // one signal, so they can never disagree about how the call is doing.
++  // telling anyone.
 +  const [ms, setMs] = createSignal<number | undefined>();
++
++  /** Azul enquanto conecta, verde conectado, vermelho quando falha. */
++  const estadoVisual = () => {
++    switch (voice.state()) {
++      case "CONNECTED":
++        return "conectado" as const;
++      case "CONNECTING":
++      case "RECONNECTING":
++        return "conectando" as const;
++      case "DISCONNECTED":
++        return "falha" as const;
++      default:
++        return "parado" as const;
++    }
++  };
++
++  /**
++   * O texto que sai ao passar o mouse.
++   *
++   * Sempre ha o que dizer: com leitura, o tempo de ida e volta; sem
++   * leitura ainda, o proprio estado. Uma dica que so existe as vezes
++   * ensina a pessoa a nao passar o mouse ali.
++   */
++  const dica = () => {
++    const v = ms();
++    if (v) return `${latencyLabel()}: ${v} ms`;
++    switch (voice.state()) {
++      case "CONNECTING":
++        return t`Connecting`;
++      case "RECONNECTING":
++        return t`Reconnecting`;
++      case "DISCONNECTED":
++        return t`Connection lost`;
++      default:
++        return t`Measuring…`;
++    }
++  };
 +
 +  onMount(() => {
 +    const read = () => setMs(voice.ping());
@@ -59,30 +90,24 @@ index 0000000..2e812dc
 +    <Show when={voice.channel()}>
 +      <Dock>
 +        <Line>
-+          <StatusText
-+            state={voice.state()}
-+            quality={quality(ms())}
-+            /*
-+              The reading itself only comes out on hover. A number sitting
-+              there permanently is noise nobody reads until something sounds
-+              wrong — the colour of the wording already carries the warning,
-+              and this is where you go to confirm it.
++          {/*
++            Um <div> de verdade, e nao o styled().
 +
-+              With no reading yet, `tooltip` is undefined and the directive
-+              simply never fires, rather than opening an empty bubble.
-+            */
++            Diretiva `use:` no Solid so se liga a elemento DOM nativo. Num
++            componente ela vira uma prop inerte, a menos que o componente
++            a repasse de proposito -- e o styled() do panda nao repassa.
++            A dica estava pendurada num styled() e por isso NUNCA aparecia,
++            por mais que houvesse leitura de ping para mostrar.
++          */}
++          <div
++            class={statusClasse({ estado: estadoVisual() })}
 +            use:floating={{
-+              tooltip: ms()
-+                ? {
-+                    placement: "top",
-+                    content: `${latencyLabel()}: ${ms()} ms`,
-+                  }
-+                : undefined,
++              tooltip: { placement: "top", content: dica() },
 +            }}
 +          >
 +            <Symbol size={18}>{symbol(voice.state())}</Symbol>
 +            <Label>{label(voice.state())}</Label>
-+          </StatusText>
++          </div>
 +        </Line>
 +        <ChannelLine href={voice.channel()!.path}>
 +          <Symbol size={16}>headset_mic</Symbol>
@@ -92,14 +117,6 @@ index 0000000..2e812dc
 +      </Dock>
 +    </Show>
 +  );
-+}
-+
-+/** Bucket a round trip time for colouring */
-+function quality(ms?: number) {
-+  if (ms === undefined) return "unknown" as const;
-+  if (ms >= PING_POOR) return "poor" as const;
-+  if (ms >= PING_FAIR) return "fair" as const;
-+  return "good" as const;
 +}
 +
 +/** Icon for the current connection state */
@@ -147,51 +164,31 @@ index 0000000..2e812dc
 +  },
 +});
 +
-+const StatusText = styled("div", {
++const statusClasse = cva({
 +  base: {
 +    display: "flex",
 +    alignItems: "center",
 +    gap: "var(--gap-sm)",
 +    minWidth: 0,
++    cursor: "default",
 +
 +    fontSize: "0.8125rem",
 +    fontWeight: 600,
 +  },
 +  variants: {
-+    state: {
-+      READY: { color: "var(--md-sys-color-outline)" },
-+      CONNECTED: {},
-+      CONNECTING: { color: "var(--md-sys-color-outline)" },
-+      RECONNECTING: { color: "var(--md-sys-color-outline)" },
-+      DISCONNECTED: { color: "var(--md-sys-color-error)" },
-+    },
-+    // Once connected, the wording takes the colour of the measured quality —
-+    // "connected" in red while every packet is late would be a lie told in
-+    // the one place someone looks to find out why the call sounds wrong.
-+    quality: {
-+      unknown: {},
-+      good: {},
-+      fair: {},
-+      poor: {},
++    estado: {
++      parado: { color: "var(--md-sys-color-outline)" },
++      // Azul da marca enquanto negocia a conexao.
++      conectando: { color: "#2E8BEB" },
++      // Verde quando a chamada esta de pe.
++      conectado: { color: "#3FB950" },
++      // Vermelho e reservado a FALHA, e so a ela. Se latencia ruim
++      // tambem pintasse de vermelho, a cor deixaria de responder "deu
++      // errado?" e passaria a responder "esta ruim?" -- duas perguntas
++      // diferentes na mesma tinta.
++      falha: { color: "var(--md-sys-color-error)" },
 +    },
 +  },
-+  compoundVariants: [
-+    {
-+      state: ["CONNECTED"],
-+      quality: ["unknown", "good"],
-+      css: { color: "var(--md-sys-color-primary)" },
-+    },
-+    {
-+      state: ["CONNECTED"],
-+      quality: ["fair"],
-+      css: { color: "var(--md-sys-color-tertiary)" },
-+    },
-+    {
-+      state: ["CONNECTED"],
-+      quality: ["poor"],
-+      css: { color: "var(--md-sys-color-error)" },
-+    },
-+  ],
 +});
 +
 +const Label = styled("span", {

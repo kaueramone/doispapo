@@ -1,8 +1,8 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..a94e24c 100644
+index d03d90e..fa12e32 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
-@@ -75,6 +75,17 @@ class Voice {
+@@ -75,6 +75,28 @@ class Voice {
    fullscreen: Accessor<boolean>;
    #setFullscreen: Setter<boolean>;
  
@@ -17,10 +17,21 @@ index d03d90e..a94e24c 100644
 +  visualTick: Accessor<number>;
 +  #bumpVisual: () => void;
 +
++  /**
++   * Canal em que estamos ENTRANDO, antes de a conexao existir.
++   *
++   * Quem clica precisa se ver no canal na hora. O estado real leva o
++   * caminho inteiro -- token pela API, WebSocket e ICE ate o SFU, e
++   * depois o webhook de volta pela API -- e ate ele chegar a lista mostra
++   * o canal sem voce, como se o clique nao tivesse feito nada.
++   */
++  entrando: Accessor<string | undefined>;
++  #setEntrando: Setter<string | undefined>;
++
    focusId: Accessor<string | undefined>;
    #setFocus: Setter<string | undefined>;
  
-@@ -124,6 +135,10 @@ class Voice {
+@@ -124,6 +146,14 @@ class Voice {
      this.fullscreen = fullscreen;
      this.#setFullscreen = setFullscreen;
  
@@ -28,10 +39,30 @@ index d03d90e..a94e24c 100644
 +    this.visualTick = visualTick;
 +    this.#bumpVisual = () => setVisualTick((n) => n + 1);
 +
++    const [entrando, setEntrando] = createSignal<string>();
++    this.entrando = entrando;
++    this.#setEntrando = setEntrando;
++
      const [focus, setFocus] = createSignal<string>();
      this.focusId = focus;
      this.#setFocus = setFocus;
-@@ -199,6 +214,12 @@ class Voice {
+@@ -141,6 +171,7 @@ class Voice {
+ 
+   async connect(channel: Channel, auth?: { url: string; token: string }) {
+     this.disconnect();
++    this.#setEntrando(channel.id);
+ 
+     const room = new Room({
+       audioCaptureDefaults: {
+@@ -174,6 +205,7 @@ class Voice {
+     });
+ 
+     room.addListener("connected", () => {
++      this.#setEntrando();
+       this.#setState("CONNECTED");
+       if (this.speakingPermission)
+         room.localParticipant
+@@ -199,6 +231,12 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -44,7 +75,7 @@ index d03d90e..a94e24c 100644
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +252,7 @@ class Voice {
+@@ -231,16 +269,7 @@ class Voice {
        }
      });
  
@@ -62,7 +93,7 @@ index d03d90e..a94e24c 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +263,30 @@ class Voice {
+@@ -251,6 +280,30 @@ class Voice {
      });
    }
  
@@ -93,7 +124,15 @@ index d03d90e..a94e24c 100644
    disconnect() {
      try {
        const room = this.room();
-@@ -577,7 +613,7 @@ class Voice {
+@@ -261,6 +314,7 @@ class Voice {
+ 
+       batch(() => {
+         this.#setState("READY");
++        this.#setEntrando();
+         this.#setRoom();
+         this.#setChannel();
+         this.#setFullscreen(false);
+@@ -577,7 +631,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -102,7 +141,7 @@ index d03d90e..a94e24c 100644
      );
    }
  
-@@ -588,7 +624,7 @@ class Voice {
+@@ -588,7 +642,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -111,7 +150,7 @@ index d03d90e..a94e24c 100644
        : undefined;
    }
  
-@@ -600,15 +636,53 @@ class Voice {
+@@ -600,15 +654,53 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
