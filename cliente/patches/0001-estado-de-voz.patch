@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..e13d2ae 100644
+index d03d90e..61db632 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
 @@ -42,6 +42,15 @@ type State =
@@ -80,15 +80,35 @@ index d03d90e..e13d2ae 100644
      const [focus, setFocus] = createSignal<string>();
      this.focusId = focus;
      this.#setFocus = setFocus;
-@@ -141,6 +198,7 @@ class Voice {
+@@ -141,8 +198,27 @@ class Voice {
  
    async connect(channel: Channel, auth?: { url: string; token: string }) {
      this.disconnect();
 +    this.#setEntrando(channel.id);
  
      const room = new Room({
++      // Quem transmite para de enviar o que ninguem assina.
++      //
++      // Sem isto, quem compartilha a tela sobe ~2,3 Mbit/s o tempo todo,
++      // mesmo sem ninguem assistindo -- e aqui isso e especialmente
++      // desperdicado, porque a nossa assinatura sob demanda foi feita
++      // justamente para ninguem receber sem pedir. Economizavamos a
++      // descida de quem assiste e seguiamos pagando a subida de quem
++      // transmite.
++      //
++      // Custo: ao clicar em assistir, a camada precisa voltar a ser
++      // enviada, entao a primeira imagem pode demorar cerca de um segundo
++      // a mais.
++      //
++      // `adaptiveStream` NAO entra aqui de proposito. Ele e do lado de
++      // quem assiste e observa visibilidade e tamanho do elemento -- e a
++      // janela destacada tira o video do documento principal. Precisa de
++      // entrega e verificacao proprias.
++      dynacast: true,
        audioCaptureDefaults: {
-@@ -165,6 +223,9 @@ class Voice {
+         deviceId: this.#settings.preferredAudioInputDevice,
+         echoCancellation: this.#settings.echoCancellation,
+@@ -165,6 +241,9 @@ class Voice {
        { room, onlySubscribed: false },
      );
  
@@ -98,7 +118,7 @@ index d03d90e..e13d2ae 100644
      batch(() => {
        this.#setRoom(room);
        this.#setChannel(channel);
-@@ -174,8 +235,16 @@ class Voice {
+@@ -174,8 +253,16 @@ class Voice {
      });
  
      room.addListener("connected", () => {
@@ -116,7 +136,7 @@ index d03d90e..e13d2ae 100644
          room.localParticipant
            .setMicrophoneEnabled(this.#settings.micOn)
            .then((track) => {
-@@ -199,6 +268,25 @@ class Voice {
+@@ -199,6 +286,25 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -142,7 +162,7 @@ index d03d90e..e13d2ae 100644
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +319,7 @@ class Voice {
+@@ -231,16 +337,7 @@ class Voice {
        }
      });
  
@@ -160,7 +180,7 @@ index d03d90e..e13d2ae 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +330,103 @@ class Voice {
+@@ -251,6 +348,103 @@ class Voice {
      });
    }
  
@@ -264,7 +284,7 @@ index d03d90e..e13d2ae 100644
    disconnect() {
      try {
        const room = this.room();
-@@ -259,8 +435,16 @@ class Voice {
+@@ -259,8 +453,16 @@ class Voice {
        room.removeAllListeners();
        room.disconnect();
  
@@ -281,7 +301,7 @@ index d03d90e..e13d2ae 100644
          this.#setRoom();
          this.#setChannel();
          this.#setFullscreen(false);
-@@ -577,7 +761,7 @@ class Voice {
+@@ -577,7 +779,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -290,7 +310,7 @@ index d03d90e..e13d2ae 100644
      );
    }
  
-@@ -588,7 +772,7 @@ class Voice {
+@@ -588,7 +790,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -299,7 +319,7 @@ index d03d90e..e13d2ae 100644
        : undefined;
    }
  
-@@ -600,15 +784,85 @@ class Voice {
+@@ -600,15 +802,85 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
