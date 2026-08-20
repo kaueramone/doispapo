@@ -15,6 +15,7 @@ Instância pública em `chat.doispapo.com`, landing em `doispapo.com`.
 doispapo/
 ├── cliente/                fonte do cliente web: patches + build
 ├── docs/fila.md            o que está combinado para fazer, e o que já foi apurado
+├── docs/desempenho-voz.md  medição de qualidade e custo das chamadas
 ├── deploy/compose.yml      stack de containers
 ├── site/                   landing page (HTML estático)
 ├── branding/
