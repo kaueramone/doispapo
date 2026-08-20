@@ -1,9 +1,9 @@
 diff --git a/packages/client/components/ui/components/features/voice/destacar.ts b/packages/client/components/ui/components/features/voice/destacar.ts
 new file mode 100644
-index 0000000..62341f4
+index 0000000..609699a
 --- /dev/null
 +++ b/packages/client/components/ui/components/features/voice/destacar.ts
-@@ -0,0 +1,199 @@
+@@ -0,0 +1,285 @@
 +/**
 + * Tirar uma câmera ou tela da grade para uma janela própria.
 + *
@@ -19,6 +19,8 @@ index 0000000..62341f4
 + * lugar exato da tela dela. Fica como possível acréscimo depois — o
 + * caminho do código é quase o mesmo, muda só como a janela é obtida.
 + */
++
++import type { ElementInfo, RemoteVideoTrack } from "livekit-client";
 +
 +const ABERTAS = new Map<string, Window>();
 +
@@ -120,9 +122,84 @@ index 0000000..62341f4
 +  titulo: string;
 +  /** A faixa de mídia a exibir */
 +  stream: MediaStream;
++  /**
++   * A faixa do SDK, quando for de outra pessoa.
++   *
++   * Serve para contar ao `adaptiveStream` que este vídeo continua sendo
++   * exibido — ver `observarNaJanela`. Faixa própria não tem assinatura
++   * nem camadas, então vem indefinida.
++   */
++  faixa?: RemoteVideoTrack;
 +  /** Chamado quando a janela fecha, por qualquer motivo */
 +  aoFechar: () => void;
 +};
++
++/**
++ * Conta ao `adaptiveStream` que este vídeo continua sendo exibido.
++ *
++ * O SDK decide se uma faixa deve seguir chegando observando os elementos
++ * em que ela foi encaixada — visibilidade por `IntersectionObserver` e
++ * tamanho por `ResizeObserver`. Os dois observadores são únicos e nascem
++ * no documento principal. O nosso vídeo vive em OUTRO documento: o
++ * observador nunca o vê intersectar coisa nenhuma, o SDK conclui que
++ * ninguém está olhando e manda o servidor parar de enviar — com a janela
++ * aberta na frente da pessoa.
++ *
++ * Some ainda um segundo motivo: destacar quase sempre significa ir olhar
++ * outra coisa, então a aba principal fica escondida. Aba escondida pausa
++ * vídeo (`pauseVideoInBackground`), e isso pausaria a janela destacada
++ * junto.
++ *
++ * `observeElementInfo` é a porta que o SDK deixa aberta justamente para
++ * isto: quem sabe responder por um elemento responde. Marcamos o vídeo
++ * como `pictureInPicture` porque é literalmente o que ele é — imagem
++ * fora do documento, que continua à vista quando a aba não está — e é
++ * essa marca que o SDK respeita para não pausar em segundo plano.
++ *
++ * Enquanto a janela está minimizada ou fechada, respondemos que não está
++ * visível, e a economia volta a valer.
++ */
++function observarNaJanela(
++  janela: Window,
++  video: HTMLVideoElement,
++): ElementInfo {
++  let mudouEm: number | undefined = 0;
++
++  const aparente = () => !janela.closed && !janela.document.hidden;
++
++  const aoMudar = () => {
++    mudouEm = Date.now();
++    info.handleVisibilityChanged?.();
++  };
++  const aoRedimensionar = () => info.handleResize?.();
++
++  const info: ElementInfo = {
++    element: video,
++    width: () => video.clientWidth,
++    height: () => video.clientHeight,
++    get visible() {
++      return aparente();
++    },
++    get pictureInPicture() {
++      return aparente();
++    },
++    get visibilityChangedAt() {
++      return mudouEm;
++    },
++    observe() {
++      janela.addEventListener("resize", aoRedimensionar);
++      janela.document.addEventListener("visibilitychange", aoMudar);
++      janela.addEventListener("pagehide", aoMudar);
++    },
++    stopObserving() {
++      janela.removeEventListener("resize", aoRedimensionar);
++      janela.document.removeEventListener("visibilitychange", aoMudar);
++      janela.removeEventListener("pagehide", aoMudar);
++    },
++  };
++
++  return info;
++}
 +
 +/**
 + * Abre a janela e devolve se conseguiu.
@@ -161,10 +238,19 @@ index 0000000..62341f4
 +  video.style.objectFit = "contain";
 +  corpo.appendChild(video);
 +
++  // Precisa vir depois de o vídeo estar no documento: o SDK mede o
++  // elemento assim que passa a observá-lo.
++  const info = observarNaJanela(janela, video);
++  pedido.faixa?.observeElementInfo(info);
++
 +  ABERTAS.set(pedido.id, janela);
 +  avisar();
 +
 +  const fechar = () => {
++    // Devolver a faixa ao regime normal antes de avisar quem espera: a
++    // grade vai encaixá-la de novo, e duas contabilidades para o mesmo
++    // vídeo deixariam a janela fechada respondendo por ele.
++    pedido.faixa?.stopObservingElementInfo(info);
 +    ABERTAS.delete(pedido.id);
 +    avisar();
 +    pedido.aoFechar();

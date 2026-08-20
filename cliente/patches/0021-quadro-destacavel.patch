@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
-index 6df8439..fa84bfe 100644
+index 6df8439..f63b1b8 100644
 --- a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 +++ b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 @@ -1,4 +1,4 @@
@@ -8,7 +8,12 @@ index 6df8439..fa84bfe 100644
  import {
    TrackReference,
    useEnsureParticipant,
-@@ -12,7 +12,12 @@ import { Track } from "livekit-client";
+@@ -8,11 +8,16 @@ import {
+   VideoTrack,
+ } from "solid-livekit-components";
+ 
+-import { Track } from "livekit-client";
++import { RemoteVideoTrack, Track } from "livekit-client";
  import { cva } from "styled-system/css";
  import { styled } from "styled-system/jsx";
  
@@ -34,7 +39,7 @@ index 6df8439..fa84bfe 100644
  import { VoiceStatefulUserIcons } from "../VoiceStatefulUserIcons";
  
  type TileProps = {
-@@ -33,12 +44,81 @@ type TileProps = {
+@@ -33,12 +44,86 @@ type TileProps = {
  export function ParticipantTile(props: TileProps) {
    const voice = useVoice();
    const state = useState();
@@ -79,6 +84,11 @@ index 6df8439..fa84bfe 100644
 +      id,
 +      titulo: user().username ?? "",
 +      stream: midia,
++      // Sem a faixa a janela abre e escurece sozinha em poucos segundos:
++      // fora da grade nao existe elemento que o adaptiveStream enxergue,
++      // e ele conclui que ninguem esta assistindo.
++      faixa:
++        pub.track instanceof RemoteVideoTrack ? pub.track : undefined,
 +      aoFechar: () => {
 +        voice.marcarDestacado(id, false);
 +        dpTelaAssistir?.(pub.trackSid, false);
@@ -116,7 +126,7 @@ index 6df8439..fa84bfe 100644
    const [videoDims, setVideoDims] = createSignal<{
      height: number;
      width: number;
-@@ -86,13 +166,34 @@ export function ParticipantTile(props: TileProps) {
+@@ -86,13 +171,34 @@ export function ParticipantTile(props: TileProps) {
    return (
      <Show when={!isScreenShare() || !isRemoteScreenShareMuted()}>
        <div
@@ -153,7 +163,7 @@ index 6df8439..fa84bfe 100644
          }
          onClick={() => voice.toggleFocus(track)}
          use:floating={{
-@@ -107,6 +208,23 @@ export function ParticipantTile(props: TileProps) {
+@@ -107,6 +213,23 @@ export function ParticipantTile(props: TileProps) {
                member={user().member}
                inVoice={!isScreenShare()}
                isScreenshare={isScreenShare()}

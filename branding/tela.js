@@ -114,6 +114,11 @@
     if (previas[s] || capturando[s]) return false;
     if ((tentativas[s] || 0) >= MAX_TENTATIVAS) return false;
     if (proxima[s] && Date.now() < proxima[s]) return false;
+    /* Com a aba escondida nao adianta tentar: desde que o adaptiveStream
+       existe, o servidor para de mandar video nesse estado e o elemento
+       nunca ganha um quadro. Sem esta linha as tres tentativas seriam
+       gastas a toa e a previa nao voltaria mais nesta sessao. */
+    if (document.hidden) return false;
     return true;
   }
 
@@ -390,6 +395,12 @@
         varrer(sala);
         setTimeout(function () { varrer(sala); }, 1500);
         setTimeout(function () { varrer(sala); }, 5000);
+      });
+
+      /* Voltar para a aba e um bom momento para tentar de novo: e o
+         instante em que o video volta a chegar. */
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) varrer(sala);
       });
 
       // O quadro do app pode ser recriado a qualquer momento; repintar é

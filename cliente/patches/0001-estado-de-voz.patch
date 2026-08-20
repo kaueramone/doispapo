@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..61db632 100644
+index d03d90e..00d1372 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
 @@ -42,6 +42,15 @@ type State =
@@ -80,7 +80,7 @@ index d03d90e..61db632 100644
      const [focus, setFocus] = createSignal<string>();
      this.focusId = focus;
      this.#setFocus = setFocus;
-@@ -141,8 +198,27 @@ class Voice {
+@@ -141,8 +198,51 @@ class Voice {
  
    async connect(channel: Channel, auth?: { url: string; token: string }) {
      this.disconnect();
@@ -100,15 +100,39 @@ index d03d90e..61db632 100644
 +      // enviada, entao a primeira imagem pode demorar cerca de um segundo
 +      // a mais.
 +      //
-+      // `adaptiveStream` NAO entra aqui de proposito. Ele e do lado de
-+      // quem assiste e observa visibilidade e tamanho do elemento -- e a
-+      // janela destacada tira o video do documento principal. Precisa de
-+      // entrega e verificacao proprias.
 +      dynacast: true,
++
++      // O outro lado da mesma economia: quem assiste pede a camada do
++      // TAMANHO em que esta assistindo, em vez de sempre a maior.
++      //
++      // Camera publica em tres camadas (180p, 360p e a captura, 720p) e
++      // tela em duas (metade e original, 1080p). Sem isto o cliente pede
++      // sempre a maior das duas, mesmo num quadro de 300 px na grade.
++      // Com dynacast do outro lado, camada que ninguem pede deixa de ser
++      // enviada -- entao a economia vale para quem transmite tambem.
++      //
++      // `pauseVideoInBackground` fica no padrao (ligado): com a aba
++      // escondida, o video para e o audio segue. Aqui isso e o
++      // comportamento certo, porque metade das chamadas acontece com a
++      // pessoa jogando em outra janela.
++      //
++      // A armadilha esta na janela destacada. A visibilidade e decidida
++      // por um IntersectionObserver do documento principal, e o elemento
++      // destacado vive em OUTRO documento: para o observador ele nunca
++      // esta visivel, e a faixa seria desligada com a janela aberta na
++      // frente da pessoa. Quem resolve isso e o `destacar.ts`, que
++      // registra a visibilidade da janela dele por conta propria.
++      //
++      // Esconder a aba so pausa depois de 5 segundos, e voltar religa na
++      // hora -- alternar rapido nao apaga nada.
++      //
++      // Desligar sem esperar por um build novo, se alguem relatar video
++      // que some: localStorage.setItem("dp_adaptativo_off", "1")
++      adaptiveStream: !localStorage.getItem("dp_adaptativo_off"),
        audioCaptureDefaults: {
          deviceId: this.#settings.preferredAudioInputDevice,
          echoCancellation: this.#settings.echoCancellation,
-@@ -165,6 +241,9 @@ class Voice {
+@@ -165,6 +265,9 @@ class Voice {
        { room, onlySubscribed: false },
      );
  
@@ -118,7 +142,7 @@ index d03d90e..61db632 100644
      batch(() => {
        this.#setRoom(room);
        this.#setChannel(channel);
-@@ -174,8 +253,16 @@ class Voice {
+@@ -174,8 +277,16 @@ class Voice {
      });
  
      room.addListener("connected", () => {
@@ -136,7 +160,7 @@ index d03d90e..61db632 100644
          room.localParticipant
            .setMicrophoneEnabled(this.#settings.micOn)
            .then((track) => {
-@@ -199,6 +286,25 @@ class Voice {
+@@ -199,6 +310,25 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -162,7 +186,7 @@ index d03d90e..61db632 100644
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +337,7 @@ class Voice {
+@@ -231,16 +361,7 @@ class Voice {
        }
      });
  
@@ -180,7 +204,7 @@ index d03d90e..61db632 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +348,103 @@ class Voice {
+@@ -251,6 +372,103 @@ class Voice {
      });
    }
  
@@ -284,7 +308,7 @@ index d03d90e..61db632 100644
    disconnect() {
      try {
        const room = this.room();
-@@ -259,8 +453,16 @@ class Voice {
+@@ -259,8 +477,16 @@ class Voice {
        room.removeAllListeners();
        room.disconnect();
  
@@ -301,7 +325,7 @@ index d03d90e..61db632 100644
          this.#setRoom();
          this.#setChannel();
          this.#setFullscreen(false);
-@@ -577,7 +779,7 @@ class Voice {
+@@ -577,7 +803,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -310,7 +334,7 @@ index d03d90e..61db632 100644
      );
    }
  
-@@ -588,7 +790,7 @@ class Voice {
+@@ -588,7 +814,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -319,7 +343,7 @@ index d03d90e..61db632 100644
        : undefined;
    }
  
-@@ -600,15 +802,85 @@ class Voice {
+@@ -600,15 +826,85 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
