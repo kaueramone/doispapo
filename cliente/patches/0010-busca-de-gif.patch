@@ -1,0 +1,87 @@
+diff --git a/packages/client/components/ui/components/features/messaging/composition/picker/GifPicker.tsx b/packages/client/components/ui/components/features/messaging/composition/picker/GifPicker.tsx
+index 5ef4358..407b3e2 100644
+--- a/packages/client/components/ui/components/features/messaging/composition/picker/GifPicker.tsx
++++ b/packages/client/components/ui/components/features/messaging/composition/picker/GifPicker.tsx
+@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/solid-query";
+ import { styled } from "styled-system/jsx";
+ 
+ import { useClient } from "@revolt/client";
++import { debounce } from "@revolt/common/lib/debounce";
+ import env from "@revolt/common/lib/env";
+ import { useState } from "@revolt/state";
+ import {
+@@ -58,11 +59,39 @@ export function GifPicker() {
+ 
+   const fliterLowercase = () => filter().toLowerCase();
+ 
++  /**
++   * Search as you type.
++   *
++   * The field used to listen on `onChange`, which in Solid is the native
++   * change event: for a text input it only fires on blur or Enter. Blurring
++   * the field closes the picker, so in practice typing a search term did
++   * nothing at all and the categories just sat there.
++   *
++   * Debounced because every keystroke would otherwise be a request to the
++   * GIF provider.
++   */
++  // O texto do campo e o termo da busca sao coisas diferentes: o campo
++  // precisa acompanhar a digitacao na hora, ou o valor controlado fica
++  // atras do que foi digitado e o cursor pula. A busca e que espera.
++  const [texto, setTexto] = createSignal("");
++
++  const buscar = debounce((valor: string) => setFilter(valor), 300);
++
++  function digitou(valor: string) {
++    setTexto(valor);
++    buscar(valor);
++  }
++
++  function escolher(valor: string) {
++    setTexto(valor);
++    setFilter(valor);
++  }
++
+   return (
+     <Stack>
+       <GifboxExplainer />
+       <SearchArea>
+-        <Show when={filter()}>
++        <Show when={texto()}>
+           <span
+             onMouseDown={(e) => {
+               e.preventDefault();
+@@ -73,7 +102,7 @@ export function GifPicker() {
+             <IconButton
+               variant="standard"
+               aria-label="Back to categories"
+-              onPress={() => setFilter("")}
++              onPress={() => escolher("")}
+             >
+               <Symbol>arrow_back</Symbol>
+             </IconButton>
+@@ -83,19 +112,21 @@ export function GifPicker() {
+           autoFocus
+           variant="outlined"
+           placeholder="Search for GIFs..."
+-          value={filter()}
++          value={texto()}
+           onMouseDown={(e) => {
+             e.preventDefault();
+             e.stopPropagation();
+             e.stopImmediatePropagation();
+           }}
+-          onChange={(e) => setFilter(e.currentTarget.value)}
++          onInput={(e) =>
++            digitou((e.currentTarget as HTMLInputElement).value)
++          }
+         />
+       </SearchArea>
+       <Suspense fallback={<Loader />}>
+         <Switch
+           fallback={
+-            <FilterContext.Provider value={setFilter}>
++            <FilterContext.Provider value={escolher}>
+               <Categories />
+             </FilterContext.Provider>
+           }

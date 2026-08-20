@@ -33,6 +33,7 @@ declare -A SERIE=(
   [0007-lista-de-conversas]=packages/client/src/interface/navigation/channels/HomeSidebar.tsx
   [0008-cabecalho-do-canal]=packages/client/src/interface/channels/ChannelHeader.tsx
   [0009-chat-sem-avisos-do-sistema]=packages/client/components/app/interface/channels/text/Messages.tsx
+  [0010-busca-de-gif]=packages/client/components/ui/components/features/messaging/composition/picker/GifPicker.tsx
 )
 
 for nome in $(printf '%s\n' "${!SERIE[@]}" | sort); do
