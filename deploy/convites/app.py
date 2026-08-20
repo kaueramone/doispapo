@@ -13,7 +13,7 @@ Ponte entre os dois tipos de convite do produto:
 Quando alguém sem conta abre um convite de servidor, consultamos quem o
 criou e, havendo cota, emitimos um convite de conta em nome dessa pessoa.
 """
-import base64, hashlib, hmac, json, os, re, secrets, threading, time
+import base64, hashlib, hmac, json, os, queue, re, secrets, threading, time
 import urllib.request, urllib.parse, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pymongo import MongoClient
@@ -84,6 +84,145 @@ def emitir(uid, origem=None):
 
 # ------------------------------------------------- LiveKit: estado real
 LIVEKIT_URL = os.environ.get("LIVEKIT_URL", "http://livekit:7880")
+
+# ---------------------------------------------------------------- repasse
+# O LiveKit entrega webhooks EM ORDEM, com uma fila por URL. Quando o
+# voice-ingress respondia 500 (acontece na corrida entre sair de um canal
+# e os eventos de faixa daquela sala chegarem depois), o LiveKit tentava
+# 5 vezes ao longo de 15s -- e tudo que estava atras esperava. O
+# participant_joined do canal NOVO ficava parado nesses 15s, entao os
+# cards da lista e o seu proprio deslocamento entre canais so apareciam
+# muito depois do audio ja estar conectado.
+#
+# Aqui a entrega e desacoplada: respondemos ao LiveKit na hora e
+# repassamos por conta propria. A fila e FIFO com UM trabalhador de
+# proposito -- a ordem importa, um track_published chegando antes do
+# participant_joined geraria justamente o 500 que queremos evitar.
+#
+# Sem retentativa: um 500 do voice-ingress aqui significa que o estado
+# ja nao existe mais do lado dele. Repetir nao ressuscita nada, so
+# reintroduz a espera que motivou este codigo.
+INGRESS_URL = os.environ.get("VOICE_INGRESS_URL",
+                             "http://voice-ingress:8500/worldwide")
+INGRESS_TIMEOUT = 5
+INGRESS_FILA_MAX = 500
+
+_ingress_fila = None
+
+
+LK_KEY = os.environ.get("LIVEKIT_KEY", "")
+LK_SECRET = os.environ.get("LIVEKIT_SECRET", "")
+
+# metadata da sala, por nome de sala. Alimentado pelos eventos que a
+# trazem; consultado pelos que nao trazem.
+_meta_salas = {}
+
+
+def _b64u(b):
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+
+def _assina(corpo):
+    """Refaz a assinatura que o voice-ingress confere sobre o corpo.
+
+    O LiveKit assina um JWT cujo claim `sha256` e o resumo do corpo. Se
+    mudarmos um byte do corpo, a assinatura antiga deixa de valer -- por
+    isso reassinamos com a mesma chave, que ja temos por sermos nos que
+    consultamos a API do LiveKit.
+    """
+    agora = int(time.time())
+    cab = _b64u(json.dumps({"alg": "HS256", "typ": "JWT"},
+                           separators=(",", ":")).encode())
+    carga = _b64u(json.dumps(
+        {"iss": LK_KEY, "nbf": agora - 5, "exp": agora + 300,
+         "sha256": base64.b64encode(hashlib.sha256(corpo).digest()).decode()},
+        separators=(",", ":")).encode())
+    sig = _b64u(hmac.new(LK_SECRET.encode(), f"{cab}.{carga}".encode(),
+                         hashlib.sha256).digest())
+    return f"{cab}.{carga}.{sig}"
+
+
+def _completa_metadata(corpo, dados):
+    """Devolve (corpo, cabecalho_auth) com room.metadata garantida.
+
+    O LiveKit omite `room.metadata` nos eventos de faixa (track_published,
+    track_unpublished, track_muted, track_unmuted) -- manda so sid e name.
+    O voice-ingress exige a metadata em TODOS os ramos para saber o
+    servidor, entao respondia 500 em cada um deles. Eram 172 das 187
+    falhas em 24h: nao era corrida, era falta de campo.
+
+    O efeito visivel: a API nunca registrava quem esta com camera, tela
+    ou microfone mudo -- os icones de estado na lista ficavam parados.
+
+    A metadata da sala nao muda durante a vida dela, e os eventos de
+    entrada e saida a trazem. Guardamos de la e completamos aqui.
+    """
+    sala = (dados.get("room") or {}).get("name")
+    if not sala:
+        return corpo, None
+
+    meta = (dados.get("room") or {}).get("metadata")
+    if meta:
+        if _meta_salas.get(sala) != meta:
+            _meta_salas[sala] = meta
+            db.chamadas.update_one({"_id": sala}, {"$set": {"metadata": meta}},
+                                   upsert=True)
+        return corpo, None
+
+    lembrada = _meta_salas.get(sala)
+    if lembrada is None:
+        doc = db.chamadas.find_one({"_id": sala}, {"metadata": 1})
+        lembrada = (doc or {}).get("metadata")
+        if lembrada:
+            _meta_salas[sala] = lembrada
+    if not lembrada or not LK_SECRET:
+        return corpo, None
+
+    dados["room"]["metadata"] = lembrada
+    novo_corpo = json.dumps(dados, separators=(",", ":")).encode()
+    return novo_corpo, _assina(novo_corpo)
+
+
+def _ingress_trabalhador():
+    while True:
+        corpo, cabecalhos, evento, dados = _ingress_fila.get()
+        try:
+            try:
+                corpo, auth = _completa_metadata(corpo, dados)
+                if auth:
+                    cabecalhos = dict(cabecalhos, Authorization=auth)
+            except Exception as e:
+                print(f"ingress: nao consegui completar {evento} ({e})",
+                      flush=True)
+
+            req = urllib.request.Request(INGRESS_URL, data=corpo,
+                                         headers=cabecalhos, method="POST")
+            with urllib.request.urlopen(req, timeout=INGRESS_TIMEOUT) as r:
+                r.read()
+        except Exception as e:
+            # Registrar e seguir. Este e o unico lugar onde a falha fica
+            # visivel agora que o LiveKit nao insiste mais nela.
+            print(f"ingress: {evento} recusado pelo voice-ingress ({e})",
+                  flush=True)
+        finally:
+            _ingress_fila.task_done()
+
+
+def inicia_repasse():
+    global _ingress_fila
+    _ingress_fila = queue.Queue(maxsize=INGRESS_FILA_MAX)
+    threading.Thread(target=_ingress_trabalhador, daemon=True).start()
+
+
+def enfileira_ingress(corpo, cabecalhos, evento, dados):
+    """Enfileira sem nunca bloquear a resposta ao LiveKit."""
+    try:
+        _ingress_fila.put_nowait((corpo, cabecalhos, evento, dados))
+        return True
+    except queue.Full:
+        # Descartar o mais novo mantem a ordem do que ja esta na fila.
+        print(f"ingress: fila cheia, {evento} descartado", flush=True)
+        return False
 LIVEKIT_KEY = os.environ.get("LIVEKIT_KEY", "")
 LIVEKIT_SECRET = os.environ.get("LIVEKIT_SECRET", "")
 _cache_faixas = {"em": 0, "dados": {}}
@@ -342,6 +481,22 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    def corpo_bruto(self, limite=65536):
+        """Os bytes do corpo, exatamente como chegaram.
+
+        O voice-ingress confere a assinatura JWT SOBRE O CORPO. Decodificar
+        e reserializar muda espacos e ordem de chaves, a assinatura deixa de
+        bater e todo evento repassado viraria 401. Por isso o repasse leva
+        os bytes originais, e o JSON e lido a partir deles.
+        """
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+            if n <= 0 or n > limite:
+                return b""
+            return self.rfile.read(n)
+        except Exception:
+            return b""
+
     # ---------------------------------------------------------------- GET
     def do_GET(self):
         rota = self.caminho()
@@ -465,8 +620,22 @@ class Handler(BaseHTTPRequestHandler):
         # Webhook do LiveKit: registra início e fim das chamadas.
         # Não é exposto pelo Caddy — o LiveKit chama pela rede interna.
         if rota == "/livekit":
-            c = self.corpo_json()
+            bruto = self.corpo_bruto()
+            try:
+                c = json.loads(bruto or b"{}")
+            except Exception:
+                c = {}
             evento = c.get("event")
+
+            # Primeiro o repasse, depois a nossa contabilidade: o estado de
+            # voz da API e o que desenha os cards da lista, e nao pode ficar
+            # atras de uma escrita nossa no Mongo.
+            cabecalhos = {"Content-Type": self.headers.get(
+                "Content-Type", "application/webhook+json")}
+            if self.headers.get("Authorization"):
+                cabecalhos["Authorization"] = self.headers["Authorization"]
+            enfileira_ingress(bruto, cabecalhos, evento or "?", c)
+
             sala = (c.get("room") or {}).get("name")
             if not sala:
                 return self.responde(200, {"ok": True})
@@ -660,4 +829,5 @@ if __name__ == "__main__":
     db.faixas.create_index("sala")
     db.account_invites.create_index("origem")
     print(f"servico de convites em :{PORTA} (limite {LIMITE})", flush=True)
+    inicia_repasse()
     ThreadingHTTPServer(("0.0.0.0", PORTA), Handler).serve_forever()

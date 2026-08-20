@@ -1,8 +1,57 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..57f1055 100644
+index d03d90e..fe7c670 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
-@@ -577,7 +577,7 @@ class Voice {
+@@ -231,16 +231,7 @@ class Voice {
+       }
+     });
+ 
+-    // Gather latency
+-    const selected = await Promise.any(
+-      this.getClient().configuration!.features.livekit.nodes.map(
+-        async (node) => {
+-          return fetch(node.public_url.replace("wss", "https")).then(() => {
+-            return node.name;
+-          });
+-        },
+-      ),
+-    );
++    const selected = await this.pickNode();
+ 
+     if (!auth) {
+       auth = await channel.joinCall(selected);
+@@ -251,6 +242,30 @@ class Voice {
+     });
+   }
+ 
++  /**
++   * Choose which media node to join through.
++   *
++   * The nodes are raced by fetching each one and taking whoever answers
++   * first. That is worth a round trip when there are several to choose
++   * between — and worth nothing at all when there is one, which is the
++   * usual self-hosted shape. It was being paid on every connect, in front
++   * of the token request, and the token the API mints only lives ten
++   * seconds: every wasted trip here is margin spent before the clock even
++   * starts. It is also the single slowest step when switching channels,
++   * because switching pays the whole connect path again.
++   */
++  async pickNode() {
++    const nodes = this.getClient().configuration!.features.livekit.nodes;
++
++    if (nodes.length <= 1) return nodes[0].name;
++
++    return await Promise.any(
++      nodes.map(async (node) =>
++        fetch(node.public_url.replace("wss", "https")).then(() => node.name),
++      ),
++    );
++  }
++
+   disconnect() {
+     try {
+       const room = this.room();
+@@ -577,7 +592,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -11,7 +60,7 @@ index d03d90e..57f1055 100644
      );
    }
  
-@@ -588,7 +588,7 @@ class Voice {
+@@ -588,7 +603,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -20,7 +69,7 @@ index d03d90e..57f1055 100644
        : undefined;
    }
  
-@@ -600,13 +600,47 @@ class Voice {
+@@ -600,13 +615,47 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  

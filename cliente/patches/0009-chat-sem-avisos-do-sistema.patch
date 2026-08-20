@@ -1,0 +1,24 @@
+diff --git a/packages/client/components/app/interface/channels/text/Messages.tsx b/packages/client/components/app/interface/channels/text/Messages.tsx
+index 0404f60..6efad20 100644
+--- a/packages/client/components/app/interface/channels/text/Messages.tsx
++++ b/packages/client/components/app/interface/channels/text/Messages.tsx
+@@ -753,7 +753,18 @@ export function Messages(props: Props) {
+       }
+     };
+ 
+-    const arr = messages();
++    // Only what people actually wrote.
++    //
++    // The system entries — a call was started, someone was added to the
++    // group, a channel was renamed — are bookkeeping the server narrates
++    // into the conversation. In a voice channel the call notices arrive
++    // every time anyone joins an empty room, which buries the written
++    // history under a log of comings and goings.
++    //
++    // Filtered before the tail pass on purpose: dropping them afterwards
++    // would leave the grouping decided against messages that are no
++    // longer there, breaking avatars and spacing around each gap.
++    const arr = messages().filter((message) => !message.systemMessage);
+     arr.forEach((message, index) => {
+       const next = arr[index + 1];
+       let tail = true;
