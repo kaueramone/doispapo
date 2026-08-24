@@ -1,0 +1,50 @@
+diff --git a/packages/client/components/auth/src/flows/FlowCreate.tsx b/packages/client/components/auth/src/flows/FlowCreate.tsx
+index 27e6bf5..e1c8665 100644
+--- a/packages/client/components/auth/src/flows/FlowCreate.tsx
++++ b/packages/client/components/auth/src/flows/FlowCreate.tsx
+@@ -3,7 +3,7 @@ import { Trans } from "@lingui-solid/solid/macro";
+ import { useApi, useClient, useClientLifecycle } from "@revolt/client";
+ import { CONFIGURATION } from "@revolt/common";
+ import { useModals } from "@revolt/modal";
+-import { useNavigate, useParams } from "@revolt/routing";
++import { useLocation, useNavigate, useParams } from "@revolt/routing";
+ import { Button, Row, iconSize } from "@revolt/ui";
+ 
+ import MdArrowBack from "@material-design-icons/svg/filled/arrow_back.svg?component-solid";
+@@ -20,7 +20,26 @@ export default function FlowCreate() {
+   const api = useApi();
+   const getClient = useClient();
+   const navigate = useNavigate();
+-  const { code } = useParams();
++  const params = useParams();
++  const location = useLocation();
++
++  /**
++   * O codigo do convite, venha ele de onde vier.
++   *
++   * A rota do upstream e `/login/create/:code`, mas o nosso painel sempre
++   * gerou o link como `/login/create?invite=CODIGO`. Como o componente lia
++   * so `useParams()`, a query era ignorada em silencio e o campo "Codigo do
++   * Convite" aparecia VAZIO -- a pessoa recebia um convite que, na pratica,
++   * nao convidava.
++   *
++   * Aceitar as tres formas e o que faz os links ja distribuidos valerem:
++   * mudar so o painel deixaria de fora todo convite que ja saiu por ai.
++   */
++  const code = () =>
++    params.code ||
++    (location.query.invite as string) ||
++    (location.query.code as string) ||
++    undefined;
+   const modals = useModals();
+   const { login } = useClientLifecycle();
+ 
+@@ -73,7 +92,7 @@ export default function FlowCreate() {
+       <Form onSubmit={create} captcha={CONFIGURATION.HCAPTCHA_SITEKEY}>
+         <Fields fields={["email", "new-password"]} />
+         <Show when={isInviteOnly()}>
+-          <Fields fields={[{ field: "invite", value: code }]} />
++          <Fields fields={[{ field: "invite", value: code() }]} />
+         </Show>
+         <Row justify>
+           <a href="..">

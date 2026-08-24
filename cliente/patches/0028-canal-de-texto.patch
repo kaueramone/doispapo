@@ -1,0 +1,248 @@
+diff --git a/packages/client/src/interface/channels/text/TextChannel.tsx b/packages/client/src/interface/channels/text/TextChannel.tsx
+index a707be5..be32286 100644
+--- a/packages/client/src/interface/channels/text/TextChannel.tsx
++++ b/packages/client/src/interface/channels/text/TextChannel.tsx
+@@ -26,7 +26,9 @@ import {
+   TypingIndicator,
+   main,
+ } from "@revolt/ui";
++import { useVoice } from "@revolt/rtc";
+ import { VoiceChannelCallCardMount } from "@revolt/ui/components/features/voice/callCard/VoiceCallCard";
++import { VoiceCallCardPreview } from "@revolt/ui/components/features/voice/callCard/VoiceCallCardPreview";
+ 
+ import { ChannelHeader } from "../ChannelHeader";
+ import { ChannelPageProps } from "../ChannelPage";
+@@ -47,6 +49,16 @@ export type SidebarState =
+   | {
+       state: "pins";
+     }
++  | {
++      /**
++       * Historico do canal de voz, no painel da direita.
++       *
++       * Num canal de voz a area principal e o palco da chamada; o chat
++       * deixa de ser o centro e passa a ser algo que voce abre quando
++       * precisa, pelo icone no cabecalho.
++       */
++      state: "chat";
++    }
+   | {
+       state: "default";
+     };
+@@ -90,8 +102,71 @@ export function TextChannel(props: ChannelPageProps) {
+    */
+   const highlightMessageId = () => params().messageId;
+ 
+-  const canConnect = () =>
+-    props.channel.isVoice && props.channel.havePermission("Connect");
++  /**
++   * Olhando o canal de voz de fora.
++   *
++   * Abrir um canal de voz nao conecta -- clique simples abre, duplo
++   * clique entra. Quem chega pelo clique simples via o historico e mais
++   * nada: nenhum sinal de que ha gente na sala, nenhum caminho obvio
++   * para entrar sem descobrir o duplo clique.
++   *
++   * `entrando` entra na conta para a linha sumir no instante do clique,
++   * e nao varios segundos depois -- o tempo do token, do WebSocket e do
++   * webhook voltando pela API.
++   */
++  const voice = useVoice();
++
++  /**
++   * Canal de voz: a area principal e o palco da chamada.
++   *
++   * `canConnect()` exige permissao de conectar; isto aqui e sobre o
++   * FORMATO da pagina, que nao muda por permissao -- quem nao pode entrar
++   * ainda ve um canal de voz, e ver o historico no lugar do palco seria
++   * uma pagina diferente para a mesma coisa.
++   */
++  const ehVoz = () => props.channel.isVoice;
++
++  /** A chamada em que estou e a deste canal */
++  const estouNesteCanal = () => voice.channel()?.id === props.channel.id;
++
++  /**
++   * O historico -- a lista de mensagens e a caixa de escrever.
++   *
++   * Uma funcao, e nao um trecho repetido, porque ele agora tem dois
++   * enderecos possiveis: a area principal (canal de texto) e o painel da
++   * direita (canal de voz). Cada chamada monta a sua instancia, e so uma
++   * existe por vez.
++   */
++  const historico = () => (
++    <>
++      <Messages
++        channel={props.channel}
++        lastReadId={lastId}
++        pendingMessages={(pendingProps) => (
++          <DraftMessages
++            channel={props.channel}
++            tail={pendingProps.tail}
++            sentIds={pendingProps.ids}
++          />
++        )}
++        typingIndicator={
++          <TypingIndicator
++            users={props.channel.typing}
++            ownId={client().user!.id}
++          />
++        }
++        highlightedMessageId={highlightMessageId}
++        clearHighlightedMessage={() => navigate(".")}
++        jumpToBottomRef={(ref) => (jumpToBottomRef = ref)}
++        atEnd={[atEnd, setEnd]}
++      />
++
++      <MessageComposition
++        channel={props.channel}
++        onMessageSend={() => jumpToBottomRef?.()}
++      />
++    </>
++  );
+ 
+   // Get a reference to the message box's load latest function
+   let jumpToBottomRef: ((nearby?: string) => void) | undefined;
+@@ -201,7 +276,7 @@ export function TextChannel(props: ChannelPageProps) {
+       <Content>
+         <main class={main()}>
+           <Show
+-            when={canConnect()}
++            when={ehVoz()}
+             fallback={
+               <BelowFloatingHeader>
+                 <div>
+@@ -214,44 +289,58 @@ export function TextChannel(props: ChannelPageProps) {
+               </BelowFloatingHeader>
+             }
+           >
+-            <VoiceChannelCallCardMount channel={props.channel} />
++            {/*
++              Conectado a ESTE canal, o palco vem pelo cartao flutuante --
++              e o mesmo elemento que vai a tela cheia e que vira miniatura
++              quando voce navega para outro canal, entao precisa continuar
++              sendo um so, no portal.
++
++              Olhando de fora, nao: aqui o palco e o convite para entrar, e
++              montar direto deixa o portal livre para a chamada em que voce
++              realmente esta -- que segue flutuando no canto, como deve.
++            */}
++            <Show
++              when={estouNesteCanal()}
++              fallback={
++                <PalcoDeEntrada>
++                  <VoiceCallCardPreview channel={props.channel} />
++                </PalcoDeEntrada>
++              }
++            >
++              <VoiceChannelCallCardMount channel={props.channel} />
++            </Show>
+           </Show>
+ 
+-          <Messages
+-            channel={props.channel}
+-            lastReadId={lastId}
+-            pendingMessages={(pendingProps) => (
+-              <DraftMessages
+-                channel={props.channel}
+-                tail={pendingProps.tail}
+-                sentIds={pendingProps.ids}
+-              />
+-            )}
+-            typingIndicator={
+-              <TypingIndicator
+-                users={props.channel.typing}
+-                ownId={client().user!.id}
+-              />
+-            }
+-            highlightedMessageId={highlightMessageId}
+-            clearHighlightedMessage={() => navigate(".")}
+-            jumpToBottomRef={(ref) => (jumpToBottomRef = ref)}
+-            atEnd={[atEnd, setEnd]}
+-          />
+-
+-          <MessageComposition
+-            channel={props.channel}
+-            onMessageSend={() => jumpToBottomRef?.()}
+-          />
++          {/*
++            Num canal de voz o palco toma a area principal e o historico
++            vai para o painel da direita -- e o mesmo `historico()`,
++            montado noutro lugar.
++          */}
++          <Show when={!ehVoz()}>{historico()}</Show>
+         </main>
++
++        <Show when={ehVoz() && sidebarState().state === "chat"}>
++          <PainelDeChat>{historico()}</PainelDeChat>
++        </Show>
++        {/*
++          A gaveta da direita e uma so. Com o chat aberto num canal de voz,
++          ela ja esta ocupada -- sem esta condicao o `!== "default"` do
++          final valeria tambem para o estado "chat", e a lista de membros
++          apareceria numa terceira coluna, espremendo o palco.
++
++          O botao de membros continua funcionando: com o chat aberto ele
++          cai no ramo que devolve o estado para "default", entao trocar de
++          uma gaveta para a outra e um clique.
++        */}
+         <Show
+           when={
+-            (state.layout.getSectionState(
++            sidebarState().state !== "chat" &&
++            ((state.layout.getSectionState(
+               LAYOUT_SECTIONS.MEMBER_SIDEBAR,
+               true,
+             ) &&
+               canIHasSidebar(props.channel)) ||
+-            sidebarState().state !== "default"
++              sidebarState().state !== "default")
+           }
+         >
+           <div
+@@ -317,6 +406,45 @@ export function TextChannel(props: ChannelPageProps) {
+   );
+ }
+ 
++/**
++ * Moldura do palco de entrada.
++ *
++ * Repete as medidas do cartao do portal -- respiro de `--gap-md`, raio
++ * grande, o cinza um degrau acima da barra lateral -- para entrar e sair
++ * da chamada nao mexer o layout um pixel.
++ */
++const PalcoDeEntrada = styled("div", {
++  base: {
++    flexGrow: 1,
++    minHeight: 0,
++    margin: "var(--gap-md)",
++
++    display: "flex",
++    borderRadius: "var(--borderRadius-lg)",
++    background: "var(--md-sys-color-surface-container)",
++  },
++});
++
++/**
++ * Painel de historico do canal de voz.
++ *
++ * Mesma largura das outras gavetas da direita (busca, fixadas), para o
++ * conteudo principal encolher sempre do mesmo tanto. Coluna, com a lista
++ * crescendo e a caixa de escrever no pe -- igual ao canal de texto, so
++ * que estreito.
++ */
++const PainelDeChat = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    minHeight: 0,
++
++    width: "360px",
++    flexShrink: 0,
++    paddingInlineEnd: "var(--gap-md)",
++  },
++});
++
+ /**
+  * Main content row layout
+  */

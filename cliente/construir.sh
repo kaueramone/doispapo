@@ -49,6 +49,47 @@ done
 shopt -u nullglob
 echo "==> $aplicados patch(es) aplicado(s)"
 
+# Sons proprios, por COPIA e nao por patch.
+#
+# Sao arquivos binarios: `git diff` os reduz a "Binary files differ", que o
+# `git apply --3way` da linha acima nao consegue aplicar. E como o
+# `git reset --hard` restaura os originais rastreados a cada build, deixar
+# o arquivo trocado na arvore tambem nao para de pe. Copiar aqui, depois
+# do reset e antes da compilacao, e o que sobrevive as duas coisas.
+# Derivado de $PATCHES, que ja foi resolvido em absoluto la em cima,
+# ANTES do `cd "$FONTE"`. Calcular `dirname "$0"` aqui embaixo daria um
+# caminho relativo ao fonte -- foi exatamente assim que este passo rodou
+# calado da primeira vez, sem copiar som nenhum e sem reclamar.
+SONS="$(dirname "$PATCHES")/../branding/sons"
+DESTINO_SONS="$FONTE/packages/client/scripts/assets_fallback/sounds"
+if [ -n "$SONS" ] && [ -d "$DESTINO_SONS" ]; then
+  n=0
+  for som in "$SONS"/*.ogg; do
+    [ -e "$som" ] || continue
+    nome="$(basename "$som")"
+    # So substitui o que ja existe: um nome novo aqui nao viraria som
+    # nenhum no aplicativo, e passaria despercebido.
+    if [ -f "$DESTINO_SONS/$nome" ]; then
+      # Abaixo de 4 KB o Vite EMBUTE o arquivo como data URI no bundle em
+      # vez de emiti-lo separado -- e o portao de publicacao reprova, com
+      # razao: som embutido nao da para personalizar depois. Comprimir bem
+      # demais, portanto, quebra. Conferir aqui e mais barato que
+      # descobrir cinco minutos de build adiante.
+      bytes=$(stat -c%s "$som")
+      if [ "$bytes" -lt 4200 ]; then
+        echo "!!  som pequeno demais ($bytes bytes < 4200): $nome"
+        echo "    o Vite embutiria como data URI. Recodifique com mais taxa."
+        exit 1
+      fi
+      cp "$som" "$DESTINO_SONS/$nome"
+      n=$((n + 1))
+    else
+      echo "!!  som ignorado, nao existe no upstream: $nome"
+    fi
+  done
+  echo "==> $n som(ns) proprio(s) no lugar"
+fi
+
 # O --3way encosta no indice. Deixar assim faz `git diff` comparar com os
 # patches ja aplicados em vez de com o upstream - e quem for gerar um
 # patch depois de construir recebe so a ultima edicao, achando que tem a

@@ -1,0 +1,168 @@
+/* ---------------------------------------------------------------------
+   Dois Papo — tela de Amigos: filtros na horizontal.
+
+   Os filtros (Disponivel / Todos / Pendente / Bloqueado) sao um
+   <mdui-navigation-rail>. O navigation rail do Material e um componente
+   VERTICAL por definicao: posiciona-se absoluto, empilha os itens em
+   coluna e trava cada um em 56px de largura. Usado aqui como se fosse
+   uma barra de abas, o resultado e uma coluna flutuando por cima da
+   lista de amigos, com "Bloqueado(a)" estourando os 56px e aparecendo
+   cortado como "lloqueado(a)".
+
+   A correcao de raiz seria trocar o componente por <mdui-tabs> no
+   codigo do cliente. Enquanto isso nao acontece, da para endireitar
+   por fora: o MDUI expoe as partes internas via ::part(), entao
+   alcancamos o container dos itens sem depender de classe nenhuma.
+
+   Conferido antes de aplicar: o bundle inteiro tem 2 ocorrencias de
+   mdui-navigation-rail, todas nesta tela. As configuracoes usam
+   mdui-list, nao o rail — nenhuma outra tela e afetada.
+--------------------------------------------------------------------- */
+
+/* o rail deixa de flutuar e volta para o fluxo, como uma barra */
+mdui-navigation-rail {
+  position: static !important;
+  width: auto !important;
+  height: auto !important;
+  z-index: auto !important;
+  background: transparent !important;
+}
+
+/* a fila de itens passa de coluna para linha */
+mdui-navigation-rail::part(items) {
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 0 !important;
+  height: auto !important;
+}
+
+/* cada filtro vira uma pilula de 32px, icone e rotulo lado a lado */
+mdui-navigation-rail-item {
+  width: auto !important;
+  height: 32px !important;
+}
+
+mdui-navigation-rail-item::part(container) {
+  flex-direction: row !important;
+  justify-content: flex-start !important;
+  width: auto !important;
+  height: 32px !important;
+  padding: 0 12px !important;
+  border-radius: 16px !important;
+  gap: 6px !important;
+  background: transparent !important;
+}
+
+/* sem isto o rotulo continua tentando caber em 56px e sai cortado */
+mdui-navigation-rail-item::part(label) {
+  white-space: nowrap !important;
+  font-size: 14px !important;
+  margin: 0 !important;
+}
+
+/* o indicador do Material e uma pilula so atras do icone; aqui o
+   destaque de estado passa a ser o fundo do proprio filtro */
+mdui-navigation-rail-item::part(indicator) {
+  width: 100% !important;
+  height: 32px !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+mdui-navigation-rail-item[active]::part(container) {
+  background: #323238 !important;
+}
+
+mdui-navigation-rail-item:not([active]):hover::part(container) {
+  background: #232327 !important;
+}
+
+/* ---------------------------------------------------------------------
+   Barra de busca + botao "Adicionar amigo", montada por amigos.js.
+   O botao original do app fica escondido pelo script, nao por aqui: se
+   o script nao rodar, o "+" precisa continuar aparecendo.
+--------------------------------------------------------------------- */
+#dp-amigos-barra {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 12px;
+}
+
+#dp-amigos-barra input[type="search"] {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: #16161A;
+  color: #E3E1E9;
+  font: 14px/1 Inter, system-ui, sans-serif;
+  outline: none;
+}
+
+#dp-amigos-barra input[type="search"]::placeholder { color: #8B8B9E; }
+
+#dp-amigos-barra input[type="search"]:focus-visible {
+  box-shadow: 0 0 0 2px #5865F2;
+}
+
+#dp-amigos-add {
+  flex: 0 0 auto;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  background: #5865F2;
+  color: #fff;
+  font: 500 14px/1 Inter, system-ui, sans-serif;
+  white-space: nowrap;
+}
+
+#dp-amigos-add:hover { background: #4752C4; }
+#dp-amigos-add:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+#dp-amigos-vazio {
+  padding: 18px 2px;
+  color: #8B8B9E;
+  font: 14px/1.5 Inter, system-ui, sans-serif;
+}
+
+/* ---------------------------------------------------------------------
+   Linha de amigo: nome, status por extenso e divisoria.
+
+   Escopo em [data-dp-amigos], atributo que o amigos.js poe nas listas
+   DESTA tela. Sem isso as regras alcancariam os mdui-list das
+   configuracoes, que usam o mesmo componente.
+--------------------------------------------------------------------- */
+mdui-list[data-dp-amigos] mdui-list-item::part(container) {
+  min-height: 62px !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+}
+
+mdui-list[data-dp-amigos] mdui-list-item::part(headline) {
+  font-size: 16px !important;
+  font-weight: 600 !important;
+}
+
+mdui-list[data-dp-amigos] mdui-list-item::part(description) {
+  font-size: 14px !important;
+  opacity: .7 !important;
+  margin-top: 1px !important;
+}
+
+mdui-list[data-dp-amigos] mdui-list-item svg[slot="icon"] {
+  width: 40px !important;
+  height: 40px !important;
+}
+
+/* cada linha vem embrulhada no proprio <div>; a divisoria vai entre
+   irmaos, e por isso a primeira linha nao ganha borda */
+mdui-list[data-dp-amigos] > div > div + div {
+  border-top: 1px solid #26262B;
+}

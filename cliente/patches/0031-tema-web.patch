@@ -1,0 +1,13 @@
+diff --git a/packages/client/components/ui/themes/stoatWebTheme.ts b/packages/client/components/ui/themes/stoatWebTheme.ts
+index fa98bb7..d63359f 100644
+--- a/packages/client/components/ui/themes/stoatWebTheme.ts
++++ b/packages/client/components/ui/themes/stoatWebTheme.ts
+@@ -93,7 +93,7 @@ const themeConstants = {
+     xxl: "64px",
+   },
+   layout: {
+-    "width-channel-sidebar": "248px",
++    "width-channel-sidebar": "288px",
+     "width-user-context-menu-truncate": "300px",
+     "height-message-box": "32vh",
+   },

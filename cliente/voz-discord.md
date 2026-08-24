@@ -84,3 +84,155 @@ estava. Um defeito com aparência de sucesso.
 Agora o chunk é resolvido pelo mapa de import do próprio bundle
 (`pt-BR/messages.ts` → `messages-*.js`), e a geração para se não
 conseguir resolver.
+
+---
+
+## Proposta em aberto — presença da chamada sem vídeo
+
+Escrita em 22/08, depois de rever o modelo com a série já em produção.
+**Nada aqui foi implementado.** É material para decidir, não registro do
+que vale.
+
+### O que a revisão confirmou
+
+Com os patches no ar, a sidebar já entrega o essencial do Discord: quem
+está em cada canal sem precisar entrar, selo AO VIVO em quem transmite,
+tempo de sessão, e os controles no rodapé. A distância para o Discord é
+menor do que a auditoria visual sugeria — aquela foi medida no build
+antigo, sem estes patches.
+
+Sobra uma diferença real, e é estreita: **uma chamada só de áudio não
+tem presença nenhuma na área principal**. Três pessoas conversando sem
+câmera deixam o histórico exatamente como se nada estivesse acontecendo.
+A informação existe, mas só na sidebar, pequena.
+
+### Proposta 1 — faixa compacta quando conectado sem vídeo
+
+Estender o gatilho de "há vídeo na sala" para "estou conectado a este
+canal", com duas alturas em vez de uma:
+
+| Estado | Hoje | Proposta |
+|---|---|---|
+| Fora da chamada | chat inteiro | chat inteiro |
+| Conectado, sem vídeo | chat inteiro | faixa de ~120px + chat |
+| Conectado, com vídeo | janela + chat | janela + chat |
+
+O princípio do documento continua valendo: nada monta sobre o histórico
+sem motivo. O que muda é que **estar numa chamada passa a contar como
+motivo** — e o custo são 120px, não a tela.
+
+Detalhe que facilita: o `vidTracks` que este documento descarta por não
+medir vídeo — construído com `withPlaceholder: true`, uma entrada por
+participante — é exatamente a fonte que uma faixa de presença quer. O
+dado que foi filtrado fora da grade é o dado certo para a faixa. O
+`visualTracks()` continua mandando na janela; a faixa leria o outro.
+
+Onde encosta: a regra de exibição em `0003-janela-de-chamada` e a grade
+em `0005-grade-da-chamada`.
+
+### Proposta 2 — linha de entrada quando há gente e você está fora
+
+Uma linha fina no topo do chat, só quando o canal tem participantes e
+você não está conectado:
+
+    3 pessoas em voz · Entrar
+
+Resolve o mesmo problema de descoberta que este documento já reconhece
+ao manter o botão do cabeçalho como porta de entrada para quem não acha
+o duplo clique — mas no lugar para onde a pessoa está olhando, e sem
+tirar altura de nada quando o canal está vazio.
+
+Lê `channel.voiceParticipants`, a mesma fonte que o
+`VoiceChannelPreview` usa fora da sala. Patch novo, pequeno.
+
+### O que foi considerado e descartado
+
+**O palco em tela cheia do Discord**, com a conversa num painel lateral.
+Custa a altura do chat de forma permanente, cria estados novos para
+manter, e o que ele entrega — quem está, quem fala, quem transmite — a
+sidebar já entrega. Seria trocar uma solução mais enxuta por uma mais
+cara pelo mesmo resultado.
+
+Chegou a ser escrito um `VoiceChannel.tsx` nessa linha, com roteamento
+por `channel.isVoice` e atrás de experimento. Foi desfeito ao ler este
+documento: contrariava a decisão registrada aqui, e o `gerar-patches.sh`
+o teria absorvido para dentro da série na geração seguinte.
+
+Também não mexeria em: duplo clique para conectar, controles no rodapé,
+e chat com altura inteira quando não há nada acontecendo. As três são
+decisões boas — e a última é melhor que o Discord, cujo chat de canal de
+voz vive espremido num painel lateral.
+
+### Achado de passagem
+
+O `<Match>` comentado em `ChannelPage.tsx` (linhas 60–64) casa
+`type === "VoiceChannel"`. Esse tipo não existe em "voice chats v2": o
+canal de voz é canal de texto com objeto `voice`, lido por
+`channel.isVoice`. Aquele bloco não está apenas desativado — nunca
+casaria. Vale apagar ou corrigir o comentário, para não sugerir a quem
+ler que basta descomentar.
+
+---
+
+# Emenda de 23/08/2026 — o canal de voz virou palco
+
+**Esta emenda substitui a regra central acima.** O que mudou não foi um
+detalhe: mudou o que é a página de um canal de voz.
+
+## A regra que caiu
+
+> Janela cinza só com câmera ou tela, e só enquanto houver alguma. Sem vídeo na
+> sala, nada é montado sobre o histórico.
+
+Ela partia de uma premissa que deixou de valer: a de que **o histórico é o
+centro da página, sempre**. A janela de chamada era uma intrusa sobre ele, e
+por isso precisava se justificar a cada momento.
+
+## A regra que vale
+
+**Canal de voz e canal de texto são páginas diferentes.**
+
+| | Área principal | Histórico |
+|---|---|---|
+| Canal de texto | o histórico | é a própria área principal |
+| Canal de voz | **o palco da chamada** | gaveta da direita, pelo ícone de chat no cabeçalho |
+
+O palco tem três estados, todos ocupando a área inteira:
+
+1. **De fora** — o cartão de entrada, com quem já está lá dentro. É o
+   `VoiceCallCardPreview` do upstream, que esta série tinha aposentado (ver "O
+   que saiu"); voltou ao papel para o qual foi escrito.
+2. **Dentro, sem vídeo** — os participantes em ladrilhos de 260×180, avatar de
+   88px. Mesmo peso visual que teriam com a câmera ligada.
+3. **Dentro, com vídeo** — a grade de quadros, como antes.
+
+O `showCard` deixou de exigir `hasVisual()`: agora significa apenas "estou
+conectado a este canal". Quem decide o que aparece é o próprio palco.
+
+## O que isso aposentou
+
+- **A faixa de presença** (`0026`) não morreu: virou o estado 2 do palco. O
+  componente ganhou uma variante e a faixa fina de 112px deixou de ser usada.
+- **A linha de entrada** (`0027`/`0028`) saiu. Ela existia para dar um caminho
+  de entrada sem cobrir o histórico — problema que o palco resolve por
+  construção, sendo ele mesmo a porta.
+
+## Duas coisas que o código impôs
+
+**O palco de quem está de fora não passa pelo portal.** O `Float` é um
+elemento só, e ele tem outro trabalho: virar miniatura quando você navega para
+longe da chamada em que está. Se o palco de um canal que você apenas *olha*
+usasse esse mesmo elemento, ver o canal B enquanto conversa no A tomaria o
+portal e a chamada A perderia a miniatura. Então o cartão de entrada é montado
+direto na página, e o portal fica reservado a "a chamada em que eu estou".
+
+**O marcador virou a área.** Ele nasceu como um `<div>` vazio no topo do
+histórico, só para dizer ao cartão flutuante onde se ancorar. Agora cresce para
+ocupar a área principal, e o palco recebe dele a posição *e* a altura — que o
+efeito passou a aplicar inline, porque a altura era fixa em `40vh` no CSS. É
+isso que faz o palco encolher sozinho quando a gaveta de chat abre.
+
+**As gavetas da direita são exclusivas.** Chat e lista de membros disputam o
+mesmo espaço; sem isso, abrir o chat deixava as duas abertas e o palco espremido
+numa terceira coluna. O botão de membros continua trocando de uma para a outra
+num clique.

@@ -230,6 +230,184 @@ def _excedeu(colecao, uid, teto):
     return colecao.count_documents({"uid": uid, "em": {"$gte": desde}}) >= teto
 
 
+# ================================================== conquistas
+# O que cada pessoa ja fez, e o que ainda falta.
+#
+# Tres das quatro medidas sao retroativas, porque o dado ja existia:
+# comunidades saem de `server_members`, mensagens de `messages` e amigos
+# das `relations` do proprio usuario. Tempo de voz NAO era guardado por
+# pessoa em lugar nenhum -- a colecao `chamadas` registra a sala, nunca
+# quem estava nela -- entao ele comeca a contar a partir de agora.
+#
+# O degrau mora na regra: acrescentar uma conquista e acrescentar uma
+# linha nesta lista.
+CONQUISTAS = [
+    {"chave": "voz_50h", "titulo": "Cinquenta horas de conversa",
+     "descricao": "Somar 50 horas em canais de voz", "meta": 50 * 3600,
+     "unidade": "horas", "icone": "headset_mic"},
+    {"chave": "comunidades_5", "titulo": "Circulando",
+     "descricao": "Participar de 5 comunidades", "meta": 5,
+     "unidade": "comunidades", "icone": "groups"},
+    {"chave": "mensagens_100", "titulo": "Cem mensagens",
+     "descricao": "Escrever 100 mensagens", "meta": 100,
+     "unidade": "mensagens", "icone": "forum"},
+    {"chave": "amigos_10", "titulo": "Dez amigos",
+     "descricao": "Ter 10 amizades aceitas", "meta": 10,
+     "unidade": "amigos", "icone": "diversity_3"},
+    {"chave": "primeira_live", "titulo": "No ar",
+     "descricao": "Compartilhar a tela pela primeira vez", "meta": 1,
+     "unidade": "transmissoes", "icone": "screen_share"},
+]
+
+# Sessao de voz aberta por mais tempo do que isto nao e sessao: e resto de
+# um `participant_left` que nunca chegou -- servico reiniciado, webhook
+# perdido. Somar isso daria a alguem 50 horas por ter esquecido a aba
+# aberta durante uma queda.
+TETO_SESSAO_VOZ = 12 * 3600
+
+
+def _contar_voz(evento, sala, uid, agora):
+    """Acumula tempo de voz por pessoa, a partir dos webhooks do LiveKit."""
+    if not uid or not sala:
+        return
+    try:
+        chave = {"uid": uid, "sala": sala}
+        if evento == "participant_joined":
+            db.dp_voz_sessoes.update_one(
+                chave, {"$set": {"inicio": agora}}, upsert=True)
+            return
+
+        sessao = db.dp_voz_sessoes.find_one_and_delete(chave)
+        if not sessao:
+            return
+        delta = agora - float(sessao.get("inicio") or agora)
+        if delta <= 0 or delta > TETO_SESSAO_VOZ:
+            return
+        db.dp_voz_total.update_one(
+            {"_id": uid}, {"$inc": {"segundos": delta}}, upsert=True)
+    except Exception:
+        # Contagem de conquista nunca pode derrubar o webhook: o que esta
+        # em jogo do outro lado e a entrada de alguem numa chamada.
+        pass
+
+
+# ================================================== mover de canal
+# A API do Stoat nao implementa mover ninguem: a unica rota de voz e
+# `join_call`. A permissao `MoveMembers` existe na definicao do cliente e
+# nao e usada em lugar nenhum.
+#
+# Entao o movimento e feito por fora, e a autoridade fica AQUI -- nunca no
+# navegador de quem pede. Escrevemos um atributo no participante alvo pela
+# API do LiveKit (temos a chave de administrador da sala); o cliente dele
+# le esse atributo e se conecta no destino sozinho.
+BIT_MOVER = 1 << 35
+
+# Quanto esperamos o cliente obedecer antes de tirar a pessoa da sala.
+# Sem isso, "mover" viraria um pedido: um cliente que ignore a ordem
+# deixaria o administrador sem poder nenhum. Com isso, ou a pessoa vai
+# para o destino, ou sai de onde estava -- o comando vale de um jeito ou
+# de outro.
+PRAZO_OBEDECER = 8
+
+
+def pode_mover(uid, servidor):
+    """Se este usuario tem MoveMembers neste servidor.
+
+    Le os cargos direto do banco em vez de acreditar no cliente. Ignora
+    sobreposicoes por canal de proposito: e uma checagem conservadora --
+    quem tem a permissao no servidor pode mover; quem nao tem, nao move,
+    mesmo que algum canal especifico lhe desse o direito.
+    """
+    srv = db.servers.find_one(
+        {"_id": servidor},
+        {"owner": 1, "roles": 1, "default_permissions": 1})
+    if not srv:
+        return False
+    if srv.get("owner") == uid:
+        return True
+
+    membro = db.server_members.find_one(
+        {"_id": {"server": servidor, "user": uid}}, {"roles": 1})
+    if not membro:
+        return False
+
+    perm = int(srv.get("default_permissions") or 0)
+    cargos = srv.get("roles") or {}
+    meus = [cargos[r] for r in (membro.get("roles") or []) if r in cargos]
+    # Do menos importante para o mais importante, que e como o allow/deny
+    # de cada cargo se sobrepoe.
+    meus.sort(key=lambda c: int(c.get("rank") or 0), reverse=True)
+    for c in meus:
+        p = c.get("permissions") or {}
+        perm = (perm | int(p.get("a") or 0)) & ~int(p.get("d") or 0)
+
+    return bool(perm & BIT_MOVER)
+
+
+def _cobrar_obediencia(origem, alvo):
+    """Tira da sala antiga quem nao atendeu a ordem de mudar de canal."""
+    try:
+        ps = _chamar("ListParticipants", {"room": origem}, origem)
+        ainda = any(p.get("identity") == alvo
+                    for p in (ps.get("participants") or []))
+        if ainda:
+            _chamar("RemoveParticipant",
+                    {"room": origem, "identity": alvo}, origem)
+    except Exception:
+        # A sala pode ter acabado, ou a pessoa ja ter saido por conta
+        # propria. Nos dois casos nao ha nada a cobrar.
+        pass
+
+
+def _medidas(uid):
+    """Os numeros de uma pessoa. Barato: a base inteira tem centenas de docs."""
+    voz = db.dp_voz_total.find_one({"_id": uid}) or {}
+    u = db.users.find_one({"_id": uid}, {"relations": 1}) or {}
+    amigos = sum(1 for r in (u.get("relations") or [])
+                 if r.get("status") == "Friend")
+    return {
+        "voz_50h": float(voz.get("segundos") or 0),
+        "comunidades_5": db.server_members.count_documents({"_id.user": uid}),
+        "mensagens_100": db.messages.count_documents({"author": uid}),
+        "amigos_10": amigos,
+        "primeira_live": int(voz.get("transmissoes") or 0),
+    }
+
+
+def conquistas_de(uid, so_ganhas=False):
+    """Estado das conquistas, gravando as que acabaram de ser atingidas.
+
+    A data de conquista e gravada uma vez e nunca recalculada: se alguem
+    sair de uma comunidade depois, a conquista continua ganha. Perder o
+    que ja foi conquistado por causa de uma mudanca posterior seria uma
+    punicao que ninguem pediu.
+    """
+    medidas = _medidas(uid)
+    ganhas = {d["chave"]: d.get("em") for d in db.dp_conquistas.find({"uid": uid})}
+
+    saida = []
+    for c in CONQUISTAS:
+        valor = medidas.get(c["chave"], 0)
+        if c["chave"] not in ganhas and valor >= c["meta"]:
+            em = time.time()
+            db.dp_conquistas.update_one(
+                {"uid": uid, "chave": c["chave"]},
+                {"$setOnInsert": {"em": em}}, upsert=True)
+            ganhas[c["chave"]] = em
+
+        tem = c["chave"] in ganhas
+        if so_ganhas and not tem:
+            continue
+        item = {"chave": c["chave"], "titulo": c["titulo"],
+                "icone": c["icone"], "conquistada": tem,
+                "em": ganhas.get(c["chave"])}
+        if not so_ganhas:
+            item.update({"descricao": c["descricao"], "meta": c["meta"],
+                         "valor": valor, "unidade": c["unidade"]})
+        saida.append(item)
+    return saida
+
+
 def _perfis(uids):
     """Nome e avatar por id, numa consulta so."""
     fora = {}
@@ -769,6 +947,28 @@ class Handler(BaseHTTPRequestHandler):
             return self.responde(200, {"faixas": itens, "origem": "eventos"})
 
         # Chamadas em andamento, para o contador de duração.
+        if rota == "/condicoes":
+            agora = int(time.time())
+            itens = []
+            for d in db.dp_condicoes.find():
+                idade = agora - int(d.get("em") or 0)
+                # Mais de dois minutos parado nao e medicao, e lembranca.
+                if idade > 120:
+                    continue
+                itens.append({"usuario": d["_id"], "ha_s": idade,
+                              "sala": d.get("sala"), "fps": d.get("fps"),
+                              "altura": d.get("altura"),
+                              "limite": d.get("limite"),
+                              "msQuadro": d.get("msQuadro"),
+                              "pausado": d.get("pausado"),
+                              "capturaFps": d.get("capturaFps"),
+                              "segCpu": d.get("segCpu"),
+                              "segBanda": d.get("segBanda"),
+                              "motor": d.get("motor"),
+                              "codec": d.get("codec"),
+                              "app": d.get("app")})
+            return self.responde(200, {"transmissores": itens})
+
         if rota == "/chamadas":
             itens = {
                 d["_id"]: {"inicio": d.get("inicio"),
@@ -810,6 +1010,25 @@ class Handler(BaseHTTPRequestHandler):
                 for d in db.dp_feedback.find({"uid": uid}).sort("em", -1).limit(100)
             ]
             return self.responde(200, {"itens": itens})
+
+        # ------------------------------------------------ conquistas
+        # Duas leituras diferentes de proposito: a sua propria mostra o
+        # progresso de tudo, inclusive do que falta; a de outra pessoa
+        # mostra so o que ela ja tem. Progresso alheio e informacao que
+        # ninguem pediu para expor -- "faltam 3 amigos para o fulano" nao
+        # e assunto de terceiros.
+        if rota == "/conquistas":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            return self.responde(200, {"itens": conquistas_de(uid)})
+
+        m = re.fullmatch(r"/conquistas/([0-9A-Z]{26})", rota)
+        if m:
+            if not usuario_da_sessao(self.headers.get("X-Session-Token")):
+                return self.responde(401, {"erro": "sessao_invalida"})
+            return self.responde(
+                200, {"itens": conquistas_de(m.group(1), so_ganhas=True)})
 
         # ------------------------------------------------- novidades
         if rota == "/novidades":
@@ -924,12 +1143,169 @@ class Handler(BaseHTTPRequestHandler):
                         db.faixas.update_one({"_id": faixa}, {"$set": {
                             "participante": quem, "sala": sala,
                             "fonte": tipo, "em": agora}}, upsert=True)
+                        # Transmitir a tela e o que o produto existe para
+                        # fazer: vale registrar quem ja fez pelo menos uma.
+                        if "screen" in tipo.lower():
+                            db.dp_voz_total.update_one(
+                                {"_id": quem},
+                                {"$inc": {"transmissoes": 1}}, upsert=True)
                     else:
                         db.faixas.delete_one({"_id": faixa})
             elif evento in ("participant_joined", "participant_left"):
                 n = (c.get("room") or {}).get("numParticipants", 0)
                 db.chamadas.update_one({"_id": sala},
                     {"$set": {"participantes": n}}, upsert=True)
+                _contar_voz(evento, sala,
+                            (c.get("participant") or {}).get("identity"),
+                            agora)
+            return self.responde(200, {"ok": True})
+
+        # ------------------------------------ quem esta assistindo o que
+        # O cliente NAO consegue publicar isso sozinho: o token que a API
+        # emite vem com `canUpdateOwnMetadata: false`, entao o
+        # `setAttributes` do navegador e recusado pelo LiveKit. Quem tem a
+        # chave de administrador da sala somos nos -- entao o navegador
+        # avisa aqui, e daqui o atributo e escrito em nome da pessoa.
+        #
+        # A propagacao continua sendo a nativa: escrito o atributo, o
+        # LiveKit avisa a sala inteira, e quem entrar depois ja recebe o
+        # valor atual.
+        if rota == "/assistindo":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            c = self.corpo_json(limite=4096)
+            sala = (c.get("sala") or "").strip()
+            faixas = c.get("faixas") or []
+            if not sala or not isinstance(faixas, list):
+                return self.responde(400, {"erro": "campos_obrigatorios"})
+            # Ids de faixa do LiveKit, e no maximo os de uma tela cheia de
+            # quadros. O limite existe para o atributo nao virar um campo
+            # de texto livre escrito pelo navegador.
+            limpas = [f for f in faixas
+                      if isinstance(f, str) and re.fullmatch(r"TR_[A-Za-z0-9]{1,32}", f)][:24]
+            try:
+                _chamar("UpdateParticipant",
+                        {"room": sala, "identity": uid,
+                         "attributes": {"dp_assistindo": ",".join(limpas)}},
+                        sala)
+            except Exception:
+                # Nao e erro do usuario, e nao ha o que ele faca: quem nao
+                # esta mais na sala simplesmente nao tem atributo para
+                # atualizar.
+                return self.responde(200, {"ok": False})
+            return self.responde(200, {"ok": True})
+
+        # ------------------------------ como esta indo quem transmite
+        # `qualityLimitationReason` e `totalEncodeTime` sao estatisticas
+        # do codificador de quem transmite. Nao existem no servidor, nao
+        # existem para quem assiste, e nenhuma metrica do LiveKit as
+        # alcanca -- o LiveKit ve pacotes chegando, nao ve o navegador
+        # decidindo largar quadros porque o processador nao deu conta.
+        #
+        # Sem isto aqui, diagnosticar "esta travando" depende de pedir
+        # para a pessoa abrir o webrtc-internals e ler em voz alta.
+        if rota == "/condicoes":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            c = self.corpo_json(limite=1024)
+
+            def numero(v, teto):
+                try:
+                    v = float(v)
+                except (TypeError, ValueError):
+                    return None
+                return v if 0 <= v <= teto else None
+
+            def texto(v, tamanho):
+                # Nome de codec e de motor de codificacao. Fecha o
+                # conjunto de caracteres: e texto vindo do navegador.
+                if not isinstance(v, str):
+                    return None
+                v = v.strip()[:tamanho]
+                return v if re.fullmatch(r"[A-Za-z0-9 ._/+-]*", v) else None
+
+            limite = c.get("limite")
+            if limite not in ("cpu", "banda", "outro"):
+                limite = None
+
+            db.dp_condicoes.update_one(
+                {"_id": uid},
+                {"$set": {"em": int(time.time()),
+                          "sala": (c.get("sala") or "")[:32],
+                          "fps": numero(c.get("fps"), 120),
+                          "altura": numero(c.get("altura"), 4320),
+                          "limite": limite,
+                          "msQuadro": numero(c.get("msQuadro"), 10000),
+                          "pausado": bool(c.get("pausado")),
+                          "capturaFps": numero(c.get("capturaFps"), 240),
+                          "segCpu": numero(c.get("segCpu"), 86400),
+                          "segBanda": numero(c.get("segBanda"), 86400),
+                          "motor": texto(c.get("motor"), 48),
+                          "codec": texto(c.get("codec"), 16),
+                          "app": bool(c.get("app"))}},
+                upsert=True)
+            return self.responde(200, {"ok": True})
+
+        # --------------------------------------- mover alguem de canal
+        if rota == "/mover":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            c = self.corpo_json(limite=2048)
+            alvo = (c.get("usuario") or "").strip()
+            destino = (c.get("canal") or "").strip()
+            if not re.fullmatch(r"[0-9A-Z]{26}", alvo or "") or \
+               not re.fullmatch(r"[0-9A-Z]{26}", destino or ""):
+                return self.responde(400, {"erro": "campos_obrigatorios"})
+
+            canal = db.channels.find_one({"_id": destino},
+                                         {"voice": 1, "server": 1})
+            # `"voice" in canal`, e NAO `canal.get("voice")`.
+            #
+            # No banco a marca de canal de voz e um documento vazio:
+            # `voice: {}`. Em Python o dicionario vazio e falso, entao o
+            # teste por valor recusava TODO canal de voz com
+            # "canal_nao_e_de_voz" -- a rota inteira era inalcancavel, e o
+            # defeito ficou escondido atras de um arrasto que tambem nao
+            # funcionava. O que existe aqui e a chave, nao o conteudo.
+            if not canal or "voice" not in canal:
+                return self.responde(400, {"erro": "canal_nao_e_de_voz"})
+
+            if not pode_mover(uid, canal.get("server")):
+                return self.responde(403, {"erro": "sem_permissao"})
+
+            # Onde a pessoa esta agora. As sessoes de voz sao alimentadas
+            # pelos webhooks do LiveKit, entao esta e a verdade do SFU --
+            # nao um palpite do navegador de quem pediu.
+            # Mais recente primeiro: se um resto de sessao sobreviver a
+            # uma queda, e a entrada atual que manda.
+            sessao = db.dp_voz_sessoes.find_one({"uid": alvo},
+                                                sort=[("inicio", -1)])
+            if not sessao:
+                return self.responde(409, {"erro": "nao_esta_em_voz"})
+            origem = sessao.get("sala")
+            if origem == destino:
+                return self.responde(200, {"ok": True, "ja_estava": True})
+
+            # A ordem viaja como atributo do participante: o cliente dele
+            # ja escuta mudanca de atributo por causa do "quem esta
+            # assistindo", entao nao ha canal novo a inventar. O carimbo
+            # evita que uma reconexao releia a ordem antiga e mova a
+            # pessoa de novo.
+            try:
+                _chamar("UpdateParticipant",
+                        {"room": origem, "identity": alvo,
+                         "attributes": {
+                             "dp_mover": "%s:%d" % (destino, int(time.time()))
+                         }},
+                        origem)
+            except Exception:
+                return self.responde(502, {"erro": "sfu_indisponivel"})
+
+            threading.Timer(PRAZO_OBEDECER, _cobrar_obediencia,
+                            (origem, alvo)).start()
             return self.responde(200, {"ok": True})
 
         # ------------------------------------------- enviar feedback

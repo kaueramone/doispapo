@@ -10,8 +10,14 @@ id_*
 !.env.example
 
 # Config gerada (contém chaves do LiveKit)
-livekit.yml
-livekit.yml.old
+#
+# Com asterisco, e nao so os dois nomes exatos: as copias de trabalho que
+# o dia a dia cria -- livekit.yml.atual, .novo, .antes-relay -- carregam a
+# MESMA chave e o mesmo segredo, e escapavam pela regra antiga. Foram
+# parar na area de stage uma vez; nunca chegaram a um commit, e e para
+# continuar assim.
+livekit.yml*
+rede/livekit.yml*
 Revolt.toml
 Revolt.toml.old
 Revolt.toml.bak*
@@ -41,3 +47,11 @@ Thumbs.db
 assets/video/
 turnstile.env
 livekit-api.env
+
+# Lixo que nao pertence ao repositorio
+__pycache__/
+*.bak
+*.bak-*
+
+# Artefatos de compilacao do Rust: 2 GB de objetos que se refazem sozinhos.
+desktop/src-tauri/target/

@@ -1,0 +1,401 @@
+diff --git a/packages/client/components/auth/src/AuthPage.tsx b/packages/client/components/auth/src/AuthPage.tsx
+index 8001b6d..3d57b01 100644
+--- a/packages/client/components/auth/src/AuthPage.tsx
++++ b/packages/client/components/auth/src/AuthPage.tsx
+@@ -7,119 +7,249 @@ import { styled } from "styled-system/jsx";
+ import { Titlebar } from "@revolt/app/interface/desktop/Titlebar";
+ import { useState } from "@revolt/state";
+ import { IconButton, iconSize } from "@revolt/ui";
++import { Marca } from "@revolt/ui/components/utils/MarcaCarregando";
+ 
+ import MdDarkMode from "@material-design-icons/svg/filled/dark_mode.svg?component-solid";
+ 
+-import background from "./background.jpg";
+ import { FlowBase } from "./flows/Flow";
+-import bluesky from "./flows/bluesky.svg";
+ 
+ /**
+- * Authentication page layout
++ * A porta de entrada.
++ *
++ * Era a tela do upstream: fundo chapado, cartao solto no meio e um rodape
++ * apontando para o GitHub, o Bluesky e as paginas de termos DELES. Quem
++ * chegava por um convite nosso via a marca de outro projeto antes de ver a
++ * nossa -- e o portao de publicacao ja vinha avisando disso a cada build
++ * ("1 link do upstream ainda no bundle").
++ *
++ * Agora ela apresenta o produto: o gradiente da marca, o simbolo, e uma
++ * frase dizendo do que se trata. O formulario continua exatamente o mesmo;
++ * o que mudou foi o que existe em volta dele.
+  */
++
++/** Azul e roxo da marca, em rgb cru para poder variar a opacidade. */
++const AZUL_RGB = "23, 158, 240";
++const ROXO_RGB = "130, 73, 219";
++
++const Root = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    height: "100%",
++    paddingBottom: "env(keyboard-inset-height)",
++
++    color: "var(--md-sys-color-on-surface)",
++    background: "var(--md-sys-color-surface)",
++    position: "relative",
++    isolation: "isolate",
++
++    /*
++      Dois claroes do gradiente da marca, um em cada canto.
++
++      Em rgba sobre a superficie do tema, e nao um fundo solido: assim a
++      mesma regra serve ao tema claro e ao escuro, sem duas paletas para
++      manter em sincronia. A opacidade e baixa de proposito -- e ambiente,
++      nao decoracao, e o formulario continua sendo o que se enxerga
++      primeiro.
++    */
++    _before: {
++      content: '""',
++      position: "absolute",
++      inset: 0,
++      zIndex: -1,
++      pointerEvents: "none",
++      background: `
++        radial-gradient(60rem 40rem at 12% -8%, rgba(${AZUL_RGB}, 0.20), transparent 60%),
++        radial-gradient(55rem 38rem at 92% 108%, rgba(${ROXO_RGB}, 0.22), transparent 62%)
++      `,
++    },
++  },
++});
++
+ const Base = styled("div", {
+   base: {
+     width: "100%",
+     height: "100%",
+-    padding: "40px 35px",
++    padding: "32px 35px",
+ 
+     userSelect: "none",
+-    overflowY: "scroll",
++    overflowY: "auto",
+ 
+     display: "flex",
+     flexDirection: "column",
+     justifyContent: "space-between",
++    gap: "var(--gap-lg)",
+ 
+     mdDown: {
+-      padding: "30px 20px",
++      padding: "20px 20px",
+     },
+   },
+ });
+ 
+-const Root = styled("div", {
++/**
++ * Marca e formulario lado a lado, quando ha largura para isso.
++ *
++ * Empilhado no celular -- e la a apresentacao encolhe para o simbolo e o
++ * nome, porque numa tela de telefone o que a pessoa quer e o campo de
++ * email, nao um manifesto.
++ */
++const Miolo = styled("div", {
+   base: {
++    flex: 1,
++    minHeight: 0,
+     display: "flex",
++    alignItems: "center",
++    justifyContent: "center",
++    gap: "clamp(2rem, 8vw, 6rem)",
+     flexDirection: "column",
+-    height: "100%",
+-    paddingBottom: "env(keyboard-inset-height)",
+ 
+-    color: "var(--md-sys-color-on-surface)",
+-    background: "var(--md-sys-color-surface)",
+-    // background: `var(--url)`,
+-    // backgroundPosition: "center",
+-    // backgroundRepeat: "no-repeat",
+-    // backgroundSize: "cover",
++    lg: {
++      flexDirection: "row",
++      alignItems: "center",
++    },
++  },
++});
++
++const Apresentacao = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-md)",
++    alignItems: "center",
++    textAlign: "center",
++    maxWidth: "22rem",
++
++    lg: {
++      alignItems: "flex-start",
++      textAlign: "start",
++      maxWidth: "26rem",
++    },
++  },
++});
++
++const Nome = styled("h1", {
++  base: {
++    margin: 0,
++    fontSize: "clamp(2rem, 6vw, 3.25rem)",
++    lineHeight: 1.05,
++    fontWeight: 700,
++    letterSpacing: "-0.02em",
++
++    // O nome recebe o mesmo gradiente do simbolo, para os dois lerem como
++    // uma coisa so em vez de um desenho colorido ao lado de um texto.
++    backgroundImage: `linear-gradient(115deg, rgb(${AZUL_RGB}), rgb(${ROXO_RGB}))`,
++    backgroundClip: "text",
++    color: "transparent",
++    width: "fit-content",
++  },
++});
++
++const Frase = styled("p", {
++  base: {
++    margin: 0,
++    fontSize: "1.05rem",
++    lineHeight: 1.5,
++    color: "var(--md-sys-color-on-surface-variant)",
++    textWrap: "balance",
++  },
++});
++
++/** Some no celular: o simbolo grande ja diz de quem e a casa. */
++const SoNoAmplo = styled("div", {
++  base: {
++    display: "none",
++    lg: { display: "block" },
++  },
++});
++
++const Selos = styled("ul", {
++  base: {
++    listStyle: "none",
++    margin: 0,
++    padding: 0,
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-sm)",
++    fontSize: "0.95rem",
++    color: "var(--md-sys-color-on-surface-variant)",
++
++    "& li": {
++      display: "flex",
++      alignItems: "center",
++      gap: "0.6rem",
++    },
++    // O ponto colorido no lugar do marcador: um enfeite que nao precisa de
++    // icone importado nem de mais um arquivo no pacote.
++    "& li::before": {
++      content: '""',
++      width: "6px",
++      height: "6px",
++      flexShrink: 0,
++      borderRadius: "50%",
++      background: `linear-gradient(135deg, rgb(${AZUL_RGB}), rgb(${ROXO_RGB}))`,
++    },
+   },
+ });
+ 
+ /**
+- * Top and bottom navigation bars
++ * O cartao do formulario, com um fio de gradiente na borda.
++ *
++ * A borda vem de dois `background` empilhados com `padding-box` e
++ * `border-box`: e o jeito de ter borda em gradiente sem pseudo-elemento e
++ * sem mexer no que ja existe dentro do cartao.
+  */
++const Cartao = styled("div", {
++  base: {
++    borderRadius: "34px",
++    padding: "1px",
++    background: `linear-gradient(160deg, rgba(${AZUL_RGB}, 0.55), rgba(${ROXO_RGB}, 0.35) 45%, transparent 75%)`,
++    boxShadow: "0 24px 60px -28px rgba(0, 0, 0, 0.55)",
++
++    _phone: {
++      background: "none",
++      padding: 0,
++      boxShadow: "none",
++    },
++  },
++});
++
+ const Nav = styled("div", {
+   base: {
+-    height: "32px",
++    minHeight: "32px",
+     display: "flex",
+     alignItems: "center",
+     flexDirection: "row",
+     justifyContent: "space-between",
++    gap: "var(--gap-md)",
++    flexWrap: "wrap",
+ 
+     textDecoration: "none",
+   },
+ });
+ 
+-/**
+- * Navigation items
+- */
+ const NavItems = styled("div", {
+   base: {
+-    gap: "10px",
++    gap: "14px",
+     display: "flex",
+     alignItems: "center",
++    flexWrap: "wrap",
++    justifyContent: "center",
+ 
+     fontSize: "0.9em",
+-  },
+-  variants: {
+-    variant: {
+-      default: {
+-        "& > *": {
+-          textAlign: "center",
+-        },
+-      },
+-      stack: {
+-        md: {
+-          flexDirection: "column",
+-        },
+-      },
++    color: "var(--md-sys-color-on-surface-variant)",
++
++    "& a": {
++      textDecoration: "none",
++      color: "inherit",
++      _hover: { color: "var(--md-sys-color-on-surface)" },
+     },
+   },
+-  defaultVariants: {
+-    variant: "default",
+-  },
+ });
+ 
+-/**
+- * Link with an icon inside
+- */
+ const LinkWithIcon = styled("a", {
+   base: { height: "24px" },
+ });
+ 
+-/**
+- * Middot-like bullet
+- */
+-const Bullet = styled("div", {
+-  base: {
+-    height: "5px",
+-    width: "5px",
+-    background: "grey",
+-    borderRadius: "50%",
+-
+-    md: {
+-      display: "none",
+-    },
+-  },
+-});
+-
+ /**
+  * Authentication page
+  */
+@@ -129,10 +259,7 @@ export function AuthPage(props: { children: JSX.Element }) {
+   return (
+     <Root>
+       <Titlebar />
+-      <Base
+-        style={{ "--url": `url('${background}')` }}
+-        css={{ scrollbar: "hidden" }}
+-      >
++      <Base css={{ scrollbar: "hidden" }}>
+         <Nav>
+           <div />
+           <IconButton
+@@ -146,35 +273,50 @@ export function AuthPage(props: { children: JSX.Element }) {
+             <MdDarkMode {...iconSize("24px")} />
+           </IconButton>
+         </Nav>
+-        <FlowBase>{props.children}</FlowBase>
++
++        <Miolo>
++          <Apresentacao>
++            <Marca size={92} />
++            <Nome>Dois Papo</Nome>
++            <Frase>
++              <Trans>Conversa de verdade, sem ruído.</Trans>
++            </Frase>
++            <SoNoAmplo>
++              <Selos>
++                <li>
++                  <Trans>Voz e vídeo sem fila de espera</Trans>
++                </li>
++                <li>
++                  <Trans>Tela compartilhada em 1080p</Trans>
++                </li>
++                <li>
++                  <Trans>Comunidades pequenas, do seu jeito</Trans>
++                </li>
++              </Selos>
++            </SoNoAmplo>
++          </Apresentacao>
++
++          <Cartao>
++            <FlowBase>{props.children}</FlowBase>
++          </Cartao>
++        </Miolo>
++
+         <Nav>
+-          <NavItems variant="stack">
+-            <NavItems>
+-              <LinkWithIcon href="https://github.com/stoatchat" target="_blank">
+-                <BiLogosGithub size={24} />
+-              </LinkWithIcon>
+-              <LinkWithIcon
+-                href="https://bsky.app/profile/stoat.chat"
+-                target="_blank"
+-              >
+-                <img
+-                  src={bluesky}
+-                  style={{ height: "22px", "padding-top": "3px" }}
+-                />
+-              </LinkWithIcon>
+-            </NavItems>
+-            <Bullet />
+-            <NavItems>
+-              <a href="https://stoat.chat/about" target="_blank">
+-                <Trans>About</Trans>
+-              </a>
+-              <a href="https://stoat.chat/terms" target="_blank">
+-                <Trans>Terms of Service</Trans>
+-              </a>
+-              <a href="https://stoat.chat/privacy" target="_blank">
+-                <Trans>Privacy Policy</Trans>
+-              </a>
+-            </NavItems>
++          <div />
++          <NavItems>
++            <a href="https://doispapo.com" target="_blank">
++              doispapo.com
++            </a>
++            <a href="https://doispapo.com/apoie" target="_blank">
++              <Trans>Apoie</Trans>
++            </a>
++            <LinkWithIcon
++              href="https://github.com/kaueramone/doispapo"
++              target="_blank"
++              aria-label="GitHub"
++            >
++              <BiLogosGithub size={22} />
++            </LinkWithIcon>
+           </NavItems>
+         </Nav>
+       </Base>

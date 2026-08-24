@@ -1,8 +1,8 @@
 diff --git a/packages/client/components/app/interface/settings/UserSettings.tsx b/packages/client/components/app/interface/settings/UserSettings.tsx
-index 9011271..85a242e 100644
+index 9011271..bf20ee3 100644
 --- a/packages/client/components/app/interface/settings/UserSettings.tsx
 +++ b/packages/client/components/app/interface/settings/UserSettings.tsx
-@@ -8,7 +8,6 @@ import { useClient, useClientLifecycle } from "@revolt/client";
+@@ -8,12 +8,12 @@ import { useClient, useClientLifecycle } from "@revolt/client";
  import { CONFIGURATION } from "@revolt/common";
  import { useUser } from "@revolt/markdown/users";
  import { useModals } from "@revolt/modal";
@@ -10,24 +10,33 @@ index 9011271..85a242e 100644
  import { ColouredText, Column, Text, iconSize } from "@revolt/ui";
  import { Symbol } from "@revolt/ui/components/utils/Symbol";
  
-@@ -36,6 +35,7 @@ import AdvancedSettings from "./user/Advanced";
+ import MdAccountCircle from "@material-design-icons/svg/outlined/account_circle.svg?component-solid";
+ import MdCampaign from "@material-design-icons/svg/outlined/campaign.svg?component-solid";
++import MdTrophy from "@material-design-icons/svg/outlined/emoji_events.svg?component-solid";
+ import MdCoffee from "@material-design-icons/svg/outlined/coffee.svg?component-solid";
+ import MdLanguage from "@material-design-icons/svg/outlined/language.svg?component-solid";
+ import MdLogout from "@material-design-icons/svg/outlined/logout.svg?component-solid";
+@@ -36,6 +36,8 @@ import AdvancedSettings from "./user/Advanced";
  import { AppearanceMenu } from "./user/appearance";
  import { MyBots, ViewBot } from "./user/bots";
  import { Feedback } from "./user/Feedback";
++import Conquistas from "./user/Conquistas";
 +import Novidades from "./user/Novidades";
  import { LanguageSettings } from "./user/Language";
  import Native from "./user/Native";
  import Notifications from "./user/notifications/Notifications";
-@@ -92,6 +92,8 @@ const Config: SettingsConfiguration<{ server: Server }> = {
+@@ -92,6 +94,10 @@ const Config: SettingsConfiguration<{ server: Server }> = {
          return <LanguageSettings />;
        case "feedback":
          return <Feedback />;
 +      case "novidades":
 +        return <Novidades />;
++      case "conquistas":
++        return <Conquistas />;
        case "subscribe":
          return <EditSubscription />;
        case "native":
-@@ -112,7 +114,7 @@ const Config: SettingsConfiguration<{ server: Server }> = {
+@@ -112,7 +118,7 @@ const Config: SettingsConfiguration<{ server: Server }> = {
     * @returns List
     */
    list(_, onClose) {
@@ -36,7 +45,7 @@ index 9011271..85a242e 100644
      const { logout } = useClientLifecycle();
      const client = useClient();
  
-@@ -324,11 +326,10 @@ const Config: SettingsConfiguration<{ server: Server }> = {
+@@ -324,14 +330,18 @@ const Config: SettingsConfiguration<{ server: Server }> = {
          {
            entries: [
              {
@@ -52,3 +61,11 @@ index 9011271..85a242e 100644
                icon: <MdCampaign {...iconSize(20)} />,
                title: <Trans>What's New</Trans>,
              },
++            {
++              id: "conquistas",
++              icon: <MdTrophy {...iconSize(20)} />,
++              title: "Conquistas",
++            },
+             {
+               href: "https://github.com/stoatchat",
+               icon: <MdMemory {...iconSize(20)} />,

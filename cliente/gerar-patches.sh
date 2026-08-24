@@ -15,7 +15,11 @@
 set -euo pipefail
 
 FONTE="${FONTE:-/root/dp-web}"
-PATCHES="$(cd "$(dirname "$0")" && pwd)/patches"
+# Calculado ANTES do cd. Com `dirname "$0"` relativo, tudo que dependesse
+# dele depois do `cd "$FONTE"` ia procurar dentro do fonte e nao achar --
+# foi assim que o conferidor de simbolos deixou de rodar calado.
+AQUI="$(cd "$(dirname "$0")" && pwd)"
+PATCHES="$AQUI/patches"
 
 cd "$FONTE"
 
@@ -49,6 +53,22 @@ declare -A SERIE=(
   [0023-audio-de-tela-audivel]=packages/client/components/state/stores/Voice.ts
   [0024-selo-ao-vivo]=packages/client/components/ui/components/features/voice/VoiceStatefulUserIcons.tsx
   [0025-canal-ausente]=packages/client/components/rtc/index.ts
+  [0026-faixa-de-presenca]=packages/client/components/ui/components/features/voice/FaixaDePresenca.tsx
+  [0027-linha-de-entrada]=packages/client/components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx
+  [0028-canal-de-texto]=packages/client/src/interface/channels/text/TextChannel.tsx
+  [0029-traducoes-pt-br]=packages/client/components/i18n/catalogs/pt-BR/messages.po
+  [0030-item-de-menu]=packages/client/components/ui/components/design/MenuButton.tsx
+  [0031-tema-web]=packages/client/components/ui/themes/stoatWebTheme.ts
+  [0032-marca-carregando]=packages/client/components/ui/components/utils/MarcaCarregando.tsx
+  [0033-tela-de-carregamento]=packages/client/src/LoadingScreen.tsx
+  [0034-entrada-do-app]=packages/client/src/Interface.tsx
+  [0035-barra-de-titulo]=packages/client/components/app/interface/desktop/Titlebar.tsx
+  [0036-conquistas]=packages/client/components/app/interface/settings/user/Conquistas.tsx
+  [0037-arrastar-usuario]=packages/client/components/ui/components/features/voice/arrastar-usuario.ts
+  [0039-porta-de-entrada]=packages/client/components/auth/src/AuthPage.tsx
+  [0040-cartao-do-fluxo]=packages/client/components/auth/src/flows/Flow.tsx
+  [0041-criar-conta]=packages/client/components/auth/src/flows/FlowCreate.tsx
+  [0038-palco-movel]=packages/client/components/ui/components/features/voice/callCard/VoiceCallCardActiveRoom.tsx
 )
 
 for nome in $(printf '%s\n' "${!SERIE[@]}" | sort); do
@@ -60,8 +80,21 @@ done
 # Um arquivo alterado que nao esteja na serie sairia do build sem deixar
 # rastro no repositorio - some no proximo construir.sh, que reseta a
 # arvore. Melhor avisar agora.
+# Componente usado em JSX sem existir no arquivo passa pelo empacotador
+# calado e so estoura quando aquela tela renderiza -- um `<MdTrophy />`
+# sem import derrubou as configuracoes inteiras. Aqui e barato conferir.
+FONTE="$FONTE" python3 "$AQUI/conferir-simbolos.py" "${SERIE[@]}"
+
 esperados=$(printf '%s\n' "${SERIE[@]}" | sort)
-alterados=$(git diff HEAD --name-only | sort)
+
+# Os sons entram por COPIA no construir.sh, nao por patch -- sao binarios, e
+# `git diff` os reduz a "Binary files differ", que o `git apply` nao aplica.
+# Aparecem aqui como alterados a cada build; sem esta excecao, o aviso de
+# "fora da serie" dispara sempre, e um aviso que sempre dispara e um aviso
+# que ninguem le mais.
+alterados=$(git diff HEAD --name-only \
+            | grep -v '^packages/client/scripts/assets_fallback/sounds/' \
+            | sort)
 sobrando=$(comm -13 <(echo "$esperados") <(echo "$alterados"))
 if [ -n "$sobrando" ]; then
   echo

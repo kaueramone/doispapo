@@ -1,0 +1,71 @@
+diff --git a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx
+index 948589b..d692b40 100644
+--- a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx
++++ b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx
+@@ -11,7 +11,16 @@ import { Row } from "@revolt/ui/components/layout";
+ import { Symbol } from "@revolt/ui/components/utils/Symbol";
+ 
+ /**
+- * Call card (preview)
++ * Cartao de entrada do canal de voz.
++ *
++ * E o palco de quem ainda esta de fora: quem ja esta na sala, e o convite
++ * para entrar. O upstream escreveu este componente exatamente para isso;
++ * a serie de patches da janela flutuante o tinha deixado sem uso, e ele
++ * volta agora que o canal de voz tem uma area principal propria.
++ *
++ * A area inteira e o alvo do clique -- por isso o `role`/`tabIndex` aqui e
++ * nao um <button> dentro: um botao receberia o clique duas vezes, uma
++ * direta e outra por borbulhamento, e conectaria em duplicidade.
+  */
+ export function VoiceCallCardPreview(props: { channel: Channel }) {
+   const voice = useVoice();
+@@ -28,13 +37,27 @@ export function VoiceCallCardPreview(props: { channel: Channel }) {
+     return names.length ? t`With ${names.join(", ")}` : t`Start the call`;
+   }
+ 
++  function entrar() {
++    voice.connect(props.channel);
++  }
++
+   return (
+-    <Preview onClick={() => voice.connect(props.channel)}>
++    <Preview
++      onClick={entrar}
++      role="button"
++      tabIndex={0}
++      onKeyDown={(e: KeyboardEvent) => {
++        if (e.key === "Enter" || e.key === " ") {
++          e.preventDefault();
++          entrar();
++        }
++      }}
++    >
+       <Ripple />
+       <Row>
+-        <For each={users()} fallback={<Symbol size={24}>voice_chat</Symbol>}>
++        <For each={users()} fallback={<Symbol size={48}>voice_chat</Symbol>}>
+           {(user) => (
+-            <Avatar size={24} src={user?.avatar} fallback={user?.username} />
++            <Avatar size={64} src={user?.avatar} fallback={user?.username} />
+           )}
+         </For>
+       </Row>
+@@ -57,13 +80,16 @@ const Preview = styled("div", {
+     borderRadius: "var(--borderRadius-lg)",
+ 
+     height: "100%",
++    width: "100%",
+     justifyContent: "center",
++    alignItems: "center",
+ 
+     display: "flex",
+     flexDirection: "column",
+-    gap: "var(--gap-sm)",
++    gap: "var(--gap-md)",
+     padding: "var(--gap-lg)",
+ 
++    cursor: "pointer",
+     color: "var(--md-sys-color-on-surface)",
+   },
+ });

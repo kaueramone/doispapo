@@ -1,0 +1,44 @@
+/* ---------------------------------------------------------------------
+   Dois Papo — camada de densidade.
+
+   O cliente e montado sobre o MDUI (Material Design 3). O Material
+   arredonda todo controle ate virar pilula e trabalha com alturas de 40
+   a 56px; o Discord usa fichas de 4px de raio e linhas de 32px. Quem
+   chega do Discord sente a diferenca antes de saber nomea-la: numa
+   coluna de 600px cabiam 11 canais onde o Discord mostra 18.
+
+   O app nao tem tokens proprios — sao 217 variaveis do MDUI e nenhuma
+   nossa — e a geometria esta cravada nos styled-components, cujas
+   classes sao hashes que mudam a cada build. Por isso nada aqui pode
+   depender de nome de classe: os seletores se apoiam no que e estavel,
+   o href da rota e os papeis de acessibilidade.
+--------------------------------------------------------------------- */
+
+/* Linha de sidebar: canal de servidor, conversa direta e navegacao.
+   Vale para as tres porque todas sao o mesmo componente de rota. */
+a[href^="/app"],
+a[href^="/friends"],
+a[href*="/channel/"] {
+  height: 32px !important;
+  min-height: 32px !important;
+  border-radius: 4px !important;
+  margin-top: 0 !important;
+  margin-bottom: 2px !important;
+}
+
+/* O icone de servidor no rail tambem e um link de canal — e ele que
+   leva ao ultimo canal visitado. Nao e uma linha de lista, entao
+   precisa voltar ao tamanho original; sem isto o rail encolhe junto. */
+div[role="listitem"][aria-label] a[href*="/channel/"] {
+  height: auto !important;
+  min-height: 0 !important;
+  border-radius: 0 !important;
+  margin: 0 !important;
+}
+
+/* Quadrado arredondado no rail. O circulo e assinatura do Material; o
+   squircle e do Discord, e e o que o olho usa para reconhecer a coluna
+   de servidores. */
+div[role="listitem"][aria-label] img {
+  border-radius: 16px !important;
+}

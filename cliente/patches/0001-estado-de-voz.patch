@@ -1,8 +1,16 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..00d1372 100644
+index d03d90e..4b6ab4d 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
-@@ -42,6 +42,15 @@ type State =
+@@ -17,6 +17,7 @@ import {
+   Room,
+   ScreenSharePresets,
+   Track,
++  VideoEncoding,
+   VideoResolution,
+ } from "livekit-client";
+ import { DenoiseTrackProcessor } from "livekit-rnnoise-processor";
+@@ -42,11 +43,29 @@ type State =
    | "CONNECTED"
    | "RECONNECTING";
  
@@ -18,7 +26,22 @@ index d03d90e..00d1372 100644
  type ScreenShareQuality = {
    name: ScreenShareQualityName;
    resolution: VideoResolution;
-@@ -75,6 +84,42 @@ class Voice {
+   fullName: string;
+-  contentHint: string;
++  contentHint: "detail" | "motion" | "text";
++  /**
++   * O que pedimos ao CODIFICADOR, que e coisa diferente do que pedimos a
++   * captura. `resolution` manda no que o navegador captura da tela; isto
++   * aqui manda no que ele transmite. Sem passar este valor, a livekit usa
++   * o padrao dela -- 2,5 Mbps a QUINZE quadros -- e nao importa que a
++   * captura esteja a trinta: sai a quinze. Era exatamente isso que estava
++   * acontecendo com quem transmitia a 720p.
++   */
++  encoding: VideoEncoding;
+ };
+ 
+ class Voice {
+@@ -75,6 +94,53 @@ class Voice {
    fullscreen: Accessor<boolean>;
    #setFullscreen: Setter<boolean>;
  
@@ -32,6 +55,17 @@ index d03d90e..00d1372 100644
 +   */
 +  visualTick: Accessor<number>;
 +  #bumpVisual: () => void;
++
++  /**
++   * Bump a cada mudanca de atributo de participante.
++   *
++   * Os atributos sao como cada pessoa conta a sala o que esta fazendo --
++   * hoje, qual tela esta assistindo. Nao existe accessor reativo para eles
++   * no cliente do LiveKit; o evento existe, entao guardamos um contador e
++   * quem le atributos passa por aqui para reagir.
++   */
++  atributosTick: Accessor<number>;
++  #bumpAtributos: () => void;
 +
 +  /**
 +   * Canal em que estamos ENTRANDO, antes de a conexao existir.
@@ -61,13 +95,29 @@ index d03d90e..00d1372 100644
    focusId: Accessor<string | undefined>;
    #setFocus: Setter<string | undefined>;
  
-@@ -124,6 +169,18 @@ class Voice {
+@@ -95,6 +161,11 @@ class Voice {
+     this.#settings = voiceSettings;
+     this.sound = sound;
+ 
++    // Fora do fluxo de conexao de proposito: um administrador move gente
++    // entre salas sem precisar estar em nenhuma delas. Registrado uma vez,
++    // com o estado de voz, e nao a cada entrada em chamada.
++    this.#ouvirMover();
++
+     const [channel, setChannel] = createSignal<Channel>();
+     this.channel = channel;
+     this.#setChannel = setChannel;
+@@ -124,6 +195,22 @@ class Voice {
      this.fullscreen = fullscreen;
      this.#setFullscreen = setFullscreen;
  
 +    const [visualTick, setVisualTick] = createSignal(0);
 +    this.visualTick = visualTick;
 +    this.#bumpVisual = () => setVisualTick((n) => n + 1);
++
++    const [atributosTick, setAtributosTick] = createSignal(0);
++    this.atributosTick = atributosTick;
++    this.#bumpAtributos = () => setAtributosTick((n) => n + 1);
 +
 +    const [entrando, setEntrando] = createSignal<string>();
 +    this.entrando = entrando;
@@ -80,7 +130,7 @@ index d03d90e..00d1372 100644
      const [focus, setFocus] = createSignal<string>();
      this.focusId = focus;
      this.#setFocus = setFocus;
-@@ -141,8 +198,51 @@ class Voice {
+@@ -141,8 +228,70 @@ class Voice {
  
    async connect(channel: Channel, auth?: { url: string; token: string }) {
      this.disconnect();
@@ -111,10 +161,27 @@ index d03d90e..00d1372 100644
 +      // Com dynacast do outro lado, camada que ninguem pede deixa de ser
 +      // enviada -- entao a economia vale para quem transmite tambem.
 +      //
-+      // `pauseVideoInBackground` fica no padrao (ligado): com a aba
-+      // escondida, o video para e o audio segue. Aqui isso e o
-+      // comportamento certo, porque metade das chamadas acontece com a
-+      // pessoa jogando em outra janela.
++      // `pauseVideoInBackground` DESLIGADO -- e este comentario ja
++      // afirmou o contrario, com o argumento de que metade das chamadas
++      // acontece com a pessoa jogando em outra janela. O argumento estava
++      // de cabeca para baixo.
++      //
++      // O que acontecia: com a aba escondida, a assinatura da tela era
++      // pausada. Se todo mundo estava jogando -- que e o normal aqui --
++      // ninguem assinava a camada de cima, e o `dynacast` mandava quem
++      // transmite PARAR de enviar aquela camada. Bastava uma pessoa
++      // voltar para a aba para a camada ser religada, exigindo um quadro
++      // completo do codificador; e o custo desse quadro aparecia como
++      // travamento para todos ao mesmo tempo.
++      //
++      // Nos registros do LiveKit isso deixou rastro: 198 pedidos de
++      // quadro-chave e sequencias de `layerLockPlis` de ate 15, com perda
++      // de pacote perto de zero e ida-e-volta de 15 ms. Ou seja: a rede
++      // estava impecavel e a imagem travava assim mesmo.
++      //
++      // Manter a faixa viva custa banda de quem esta com a aba escondida.
++      // E o preco de nao derrubar a transmissao de todo mundo cada vez
++      // que alguem alterna de janela -- e e o que o Discord faz.
 +      //
 +      // A armadilha esta na janela destacada. A visibilidade e decidida
 +      // por um IntersectionObserver do documento principal, e o elemento
@@ -128,11 +195,13 @@ index d03d90e..00d1372 100644
 +      //
 +      // Desligar sem esperar por um build novo, se alguem relatar video
 +      // que some: localStorage.setItem("dp_adaptativo_off", "1")
-+      adaptiveStream: !localStorage.getItem("dp_adaptativo_off"),
++      adaptiveStream: localStorage.getItem("dp_adaptativo_off")
++        ? false
++        : { pauseVideoInBackground: false },
        audioCaptureDefaults: {
          deviceId: this.#settings.preferredAudioInputDevice,
          echoCancellation: this.#settings.echoCancellation,
-@@ -165,6 +265,9 @@ class Voice {
+@@ -165,6 +314,9 @@ class Voice {
        { room, onlySubscribed: false },
      );
  
@@ -142,7 +211,7 @@ index d03d90e..00d1372 100644
      batch(() => {
        this.#setRoom(room);
        this.#setChannel(channel);
-@@ -174,8 +277,16 @@ class Voice {
+@@ -174,8 +326,16 @@ class Voice {
      });
  
      room.addListener("connected", () => {
@@ -160,7 +229,7 @@ index d03d90e..00d1372 100644
          room.localParticipant
            .setMicrophoneEnabled(this.#settings.micOn)
            .then((track) => {
-@@ -199,6 +310,25 @@ class Voice {
+@@ -199,6 +359,40 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -175,6 +244,21 @@ index d03d90e..00d1372 100644
 +    room.addListener("trackPublished", this.#bumpVisual);
 +    room.addListener("trackUnpublished", this.#bumpVisual);
 +
++    // Atributos carregam duas coisas hoje: quem esta assistindo a que
++    // tela, e a ordem de mudar de canal vinda de um administrador.
++    room.addListener(
++      "participantAttributesChanged",
++      (mudou: Record<string, string>, participante: { identity?: string }) => {
++        this.#bumpAtributos();
++        this.#talvezMover(room, mudou, participante);
++      },
++    );
++
++    // A ponte com a camada de tela: ela decide o que voce assiste, nos
++    // temos a sessao autenticada para registrar isso no servidor.
++    this.#ouvirAssistindo();
++    this.#ouvirCondicoes();
++
 +    // Falar e o sinal mais direto de presenca. O evento ja existe e chega
 +    // pelo SFU, entao nao precisamos medir audio por conta propria aqui.
 +    room.addListener("activeSpeakersChanged", (falantes) => {
@@ -186,7 +270,7 @@ index d03d90e..00d1372 100644
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +361,7 @@ class Voice {
+@@ -231,16 +425,7 @@ class Voice {
        }
      });
  
@@ -204,7 +288,7 @@ index d03d90e..00d1372 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +372,103 @@ class Voice {
+@@ -251,6 +436,103 @@ class Voice {
      });
    }
  
@@ -308,10 +392,17 @@ index d03d90e..00d1372 100644
    disconnect() {
      try {
        const room = this.room();
-@@ -259,8 +477,16 @@ class Voice {
+@@ -259,8 +541,23 @@ class Voice {
        room.removeAllListeners();
        room.disconnect();
  
++      // A ponte do "quem esta assistindo" nao vive na sala: e um ouvinte
++      // de janela, e sem soltar aqui cada nova conexao empilharia mais um.
++      this.#pararDeOuvir?.();
++      this.#pararDeOuvir = undefined;
++      this.#pararDeOuvirCondicoes?.();
++      this.#pararDeOuvirCondicoes = undefined;
++
 +      // Janela destacada sem chamada por tras mostraria um quadro parado
 +      // para sempre. Quem fecha e o modulo de destaque, avisado aqui.
 +      window.dispatchEvent(new CustomEvent("dp-voz-encerrada"));
@@ -325,7 +416,169 @@ index d03d90e..00d1372 100644
          this.#setRoom();
          this.#setChannel();
          this.#setFullscreen(false);
-@@ -577,7 +803,7 @@ class Voice {
+@@ -357,6 +654,9 @@ class Voice {
+         resolution: ScreenSharePresets.h720fps30.resolution,
+         fullName: `720p 30FPS`,
+         contentHint: "motion",
++        // 3 Mbps e teto, nao meta: quem tem banda usa, quem nao tem cai
++        // sozinho pelo controle de congestao. O que importa aqui e o 30.
++        encoding: { maxBitrate: 3_000_000, maxFramerate: 30, priority: "high" },
+       },
+     };
+ 
+@@ -377,6 +677,11 @@ class Voice {
+             resolution: ScreenSharePresets.h1080fps30.resolution,
+             fullName: `1080p 30FPS`,
+             contentHint: "motion",
++            encoding: {
++              maxBitrate: 6_000_000,
++              maxFramerate: 30,
++              priority: "high",
++            },
+           };
+           const originalResolution = ScreenSharePresets.original.resolution;
+           originalResolution.frameRate = 5;
+@@ -404,6 +709,13 @@ class Voice {
+             resolution: originalResolution,
+             fullName: `Source 5FPS`,
+             contentHint: "text",
++            // Modo leitura: poucos quadros, muita nitidez. Aqui a
++            // preferencia se inverte de proposito.
++            encoding: {
++              maxBitrate: 2_000_000,
++              maxFramerate: 5,
++              priority: "medium",
++            },
+           };
+         }
+       }
+@@ -411,6 +723,53 @@ class Voice {
+     return qualities;
+   }
+ 
++  /**
++   * Reajusta o CODIFICADOR de uma faixa de tela ja publicada.
++   *
++   * Trocar a qualidade no meio da transmissao so mexia na captura
++   * (`applyConstraints`). O codificador continuava com os limites do
++   * momento em que a faixa foi publicada, entao subir de 720p30 para
++   * 1080p30 nao subia coisa nenhuma. Aqui escrevemos direto nos
++   * parametros do remetente.
++   *
++   * Com simulcast ha varias camadas; preservamos a proporcao entre elas
++   * e so movemos o teto.
++   */
++  async #ajustarCodificador(
++    faixa: { sender?: RTCRtpSender } | undefined,
++    encoding: VideoEncoding,
++  ) {
++    const sender = faixa?.sender;
++    if (!sender) return;
++
++    try {
++      const params = sender.getParameters();
++      if (!params.encodings?.length) return;
++
++      const tetoAtual = Math.max(
++        ...params.encodings.map((e) => e.maxBitrate ?? 0),
++        1,
++      );
++
++      for (const camada of params.encodings) {
++        camada.maxFramerate = encoding.maxFramerate;
++        if (camada.maxBitrate) {
++          camada.maxBitrate = Math.round(
++            (camada.maxBitrate / tetoAtual) * encoding.maxBitrate,
++          );
++        } else {
++          camada.maxBitrate = encoding.maxBitrate;
++        }
++      }
++
++      await sender.setParameters(params);
++    } catch (e) {
++      // Navegador que nao deixa mexer nos parametros nao e motivo para
++      // derrubar a transmissao: fica com o que ja estava.
++      console.warn("nao consegui reajustar o codificador da tela", e);
++    }
++  }
++
+   async toggleScreenshare() {
+     const room = this.room();
+     if (!room) throw "invalid state";
+@@ -452,22 +811,53 @@ class Voice {
+         });
+       }
+ 
++      // Uma unica leitura da qualidade escolhida, usada tanto na captura
++      // quanto no codificador. Antes a captura lia daqui e o codificador
++      // nao lia de lugar nenhum -- ficava no padrao da biblioteca.
++      const qualidade =
++        qualities[this.#settings.screenShareQuality || "low"] ?? qualities.low!;
++
+       try {
+         const localTrack = await room.localParticipant.setScreenShareEnabled(
+           true,
+           {
+-            resolution:
+-              this.getEnabledScreenShareQualities()[
+-                this.#settings.screenShareQuality || "low"
+-              ]?.resolution,
++            resolution: qualidade.resolution,
++            // Diz ao navegador que a tela e movimento, nao texto parado.
++            // Sem isto o Chrome assume "detail" e, quando aperta, prefere
++            // segurar a nitidez e derrubar os quadros -- o oposto do que
++            // se quer numa tela de jogo.
++            contentHint: qualidade.contentHint,
+             audio: {
+               autoGainControl: false,
+               echoCancellation: false,
+               noiseSuppression: false,
+               voiceIsolation: false,
+               restrictOwnAudio: true,
++              // Pede ao navegador que a caixa "compartilhar audio" venha
++              // MARCADA na janela de escolha da tela. Sem isto ela nasce
++              // vazia, o navegador nao entrega faixa de audio nenhuma, e
++              // o nosso aviso vira "audio desativado pelo navegador" --
++              // que e verdade, mas parece defeito nosso. Quem nao quiser
++              // som desmarca ali mesmo.
++              systemAudio: "include",
+             },
+           },
++          {
++            // Tela travando em poucos quadros por segundo, do outro lado
++            // do Atlantico: com a rota longa, o controle de congestao
++            // reduz o que consegue enviar, e a preferencia padrao do
++            // navegador sacrifica QUADROS para manter a resolucao. Numa
++            // tela de jogo isso e o pior dos dois mundos -- 1080p a cinco
++            // quadros. Aqui pedimos o contrario: segura o movimento e
++            // deixa a nitidez ceder quando faltar banda.
++            degradationPreference: "maintain-framerate",
++            // ATENCAO: para compartilhamento de tela a livekit ignora
++            // `videoEncoding` e le SOMENTE `screenShareEncoding` (veja
++            // computeVideoEncodings na livekit-client). Foi assim que a
++            // configuracao anterior passou em branco e todo mundo
++            // transmitiu no padrao de fabrica: 15 quadros.
++            screenShareEncoding: qualidade.encoding,
++          },
+         );
+ 
+         const screenAudioTrack = room.localParticipant.getTrackPublication(
+@@ -510,6 +900,13 @@ class Voice {
+               });
+               localTrack.videoTrack.mediaStreamTrack.contentHint =
+                 quality.contentHint;
++
++              // Sem esta linha a troca de qualidade so mexia na captura.
++              await this.#ajustarCodificador(
++                localTrack.videoTrack,
++                quality.encoding,
++              );
++
+               if (!audio && screenAudioTrack?.track) {
+                 room.localParticipant.unpublishTrack(screenAudioTrack.track);
+               }
+@@ -577,7 +974,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -334,7 +587,7 @@ index d03d90e..00d1372 100644
      );
    }
  
-@@ -588,7 +814,7 @@ class Voice {
+@@ -588,7 +985,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -343,7 +596,7 @@ index d03d90e..00d1372 100644
        : undefined;
    }
  
-@@ -600,15 +826,85 @@ class Voice {
+@@ -600,15 +997,279 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
@@ -405,14 +658,208 @@ index d03d90e..00d1372 100644
 +    return this.visualTracks().length > 0;
 +  }
 +
++  /** Chave do atributo em que cada pessoa anuncia as telas que assiste */
++  static ATRIBUTO_ASSISTINDO = "dp_assistindo";
++
++  /** Chave do atributo em que o servidor manda alguem mudar de canal */
++  static ATRIBUTO_MOVER = "dp_mover";
++
++  #pararDeOuvir?: () => void;
++  #pararDeOuvirCondicoes?: () => void;
++  #pararDeOuvirMover?: () => void;
++
++  #ultimaOrdem?: string;
++
 +  /**
-+   * The call card is now for faces and screens only. With nothing being
-+   * published there is nothing to frame, and the card would just cover the
-+   * top of the message history — every control it used to carry lives in the
-+   * sidebar dock, which is visible whether or not this card is.
++   * Atende a ordem de um administrador para mudar de canal.
++   *
++   * A API do servidor nao sabe mover ninguem, entao quem executa o
++   * movimento e o proprio cliente de quem esta sendo movido. A ordem vem
++   * como atributo escrito pelo nosso servico, que e quem confere o cargo
++   * de quem pediu -- este lado nao decide nada, so obedece.
++   *
++   * Vem com carimbo de tempo porque uma reconexao reentrega os atributos
++   * atuais: sem ele, reconectar depois de ter sido movido leria a mesma
++   * ordem de novo e mudaria a pessoa de canal outra vez.
++   */
++  #talvezMover(
++    room: Room,
++    mudou: Record<string, string>,
++    participante: { identity?: string },
++  ) {
++    try {
++      if (participante?.identity !== room.localParticipant?.identity) return;
++
++      const ordem = mudou?.[Voice.ATRIBUTO_MOVER];
++      if (!ordem || ordem === this.#ultimaOrdem) return;
++      this.#ultimaOrdem = ordem;
++
++      const destino = this.getClient().channels.get(ordem.split(":")[0]);
++      if (destino) this.connect(destino);
++    } catch (e) {
++      this.onErr(e);
++    }
++  }
++
++  /**
++   * Registra no servidor as telas que estou assistindo.
++   *
++   * O navegador nao consegue escrever os proprios atributos: o token que a
++   * API emite vem com `canUpdateOwnMetadata: false`. Quem tem a chave de
++   * administrador da sala e o nosso servico, entao mandamos para ele e ele
++   * escreve -- dai o LiveKit propaga para a sala como sempre faria.
++   */
++  #ouvirAssistindo() {
++    this.#pararDeOuvir?.();
++
++    const aoMudar = (e: Event) => {
++      const d = (e as CustomEvent).detail as {
++        sala?: string;
++        faixas?: string[];
++      };
++      if (!d?.sala) return;
++
++      const cliente = this.getClient();
++      const [nome, valor] = cliente.authenticationHeader;
++      fetch("/api-convites/assistindo", {
++        method: "POST",
++        headers: { [nome]: valor, "Content-Type": "application/json" },
++        body: JSON.stringify({ sala: d.sala, faixas: d.faixas ?? [] }),
++      }).catch(() => {
++        /* sem isto, ninguem ve quem assiste -- nada mais para. */
++      });
++    };
++
++    window.addEventListener("dp-assistindo", aoMudar);
++    this.#pararDeOuvir = () =>
++      window.removeEventListener("dp-assistindo", aoMudar);
++  }
++
++  /**
++   * Encaminha ao servidor como esta indo a transmissao de quem compartilha.
++   *
++   * `qualityLimitationReason` e `totalEncodeTime` sao estatisticas LOCAIS
++   * do codificador: nao existem no servidor, nao existem para quem assiste,
++   * e nenhum painel do LiveKit as enxerga. Sem trazer esse dado para ca,
++   * "por que trava?" so tem duas respostas possiveis -- pedir para a
++   * pessoa abrir o webrtc-internals, ou chutar.
++   *
++   * Vai por evento, como o `dp-assistindo`: o quadro nao conhece o cliente
++   * autenticado, e o estado de voz nao conhece o quadro.
++   */
++  #ouvirCondicoes() {
++    this.#pararDeOuvirCondicoes?.();
++
++    const aoMedir = (e: Event) => {
++      const d = (e as CustomEvent).detail as {
++        fps?: number;
++        altura?: number;
++        limite?: string;
++        msQuadro?: number;
++        motor?: string;
++        codec?: string;
++        app?: boolean;
++      };
++      const sala = this.channel()?.id;
++      if (!sala || !d) return;
++
++      const cliente = this.getClient();
++      const [nome, valor] = cliente.authenticationHeader;
++      fetch("/api-convites/condicoes", {
++        method: "POST",
++        headers: { [nome]: valor, "Content-Type": "application/json" },
++        body: JSON.stringify({ sala, ...d }),
++      }).catch(() => {
++        /* medicao nao e funcionalidade: falhou, perdeu-se, segue. */
++      });
++    };
++
++    window.addEventListener("dp-condicoes", aoMedir);
++    this.#pararDeOuvirCondicoes = () =>
++      window.removeEventListener("dp-condicoes", aoMedir);
++  }
++
++  /**
++   * Pede ao servidor que mova alguem de canal de voz.
++   *
++   * O gesto acontece na lista de canais, longe daqui, e termina num
++   * evento de janela -- porque quem arrasta e um componente de interface
++   * que nao conhece o cliente autenticado. O mesmo caminho do
++   * `dp-assistindo` e do `dp-condicoes`.
++   *
++   * Quem confere o cargo e o servico: ele le as permissoes do banco,
++   * descobre em que canal a pessoa esta e manda o cliente dela mudar.
++   * Recusa aqui seria decoracao -- o navegador de quem pede nao e fonte
++   * de autoridade sobre o que ele mesmo pode fazer.
++   */
++  #ouvirMover() {
++    this.#pararDeOuvirMover?.();
++
++    const aoSoltar = (e: Event) => {
++      const d = (e as CustomEvent).detail as {
++        usuario?: string;
++        canal?: string;
++      };
++      if (!d?.usuario || !d?.canal) return;
++
++      const cliente = this.getClient();
++      const [nome, valor] = cliente.authenticationHeader;
++      fetch("/api-convites/mover", {
++        method: "POST",
++        headers: { [nome]: valor, "Content-Type": "application/json" },
++        body: JSON.stringify({ usuario: d.usuario, canal: d.canal }),
++      }).catch(() => {
++        /* recusado ou fora do ar: a pessoa simplesmente nao se move */
++      });
++    };
++
++    window.addEventListener("dp-mover-usuario", aoSoltar);
++    this.#pararDeOuvirMover = () =>
++      window.removeEventListener("dp-mover-usuario", aoSoltar);
++  }
++
++  /**
++   * Quem esta assistindo a esta tela, por id de usuario.
++   *
++   * A tela compartilhada so e assinada por quem clica em "assistir" -- e
++   * quem clica sabia disso sozinho, mas mais ninguem. Cada cliente publica
++   * num atributo as faixas que escolheu ver, e este metodo le o que a sala
++   * inteira publicou.
++   *
++   * Inclui voce mesmo de proposito: todo mundo vendo a mesma lista evita a
++   * duvida de "eu apareco para eles?".
++   */
++  quemAssiste(trackSid?: string): string[] {
++    this.atributosTick();
++
++    const room = this.room();
++    if (!room || !trackSid) return [];
++
++    const chave = Voice.ATRIBUTO_ASSISTINDO;
++    const assiste = (attrs?: Record<string, string>) =>
++      (attrs?.[chave] ?? "").split(",").includes(trackSid);
++
++    const ids: string[] = [];
++    if (assiste(room.localParticipant?.attributes))
++      ids.push(room.localParticipant.identity);
++    for (const p of room.remoteParticipants.values())
++      if (assiste(p.attributes)) ids.push(p.identity);
++
++    return ids;
++  }
++
++  /**
++   * Estou conectado a ESTE canal.
++   *
++   * Antes isto tambem exigia `hasVisual()`, porque a janela da chamada era
++   * um retangulo por cima do historico e so se justificava com algo para
++   * mostrar. Num canal de voz o historico saiu da area principal: o palco
++   * ocupa a pagina inteira e existe do momento em que voce entra, com ou
++   * sem video. Quem decide o que aparece dentro dele e o proprio palco --
++   * a grade quando ha video, os participantes quando nao ha.
 +   */
 +  showCard(channel: Channel) {
-+    return this.channel()?.id === channel.id && this.hasVisual();
++    return this.channel()?.id === channel.id;
 +  }
 +
 +  /**

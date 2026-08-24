@@ -1266,7 +1266,8 @@ for _arq, _id in (("guarda.js", "dp-js-guarda"),
                   ("voz.js", "dp-js-voz"),
                   ("discord.js", "dp-js-discord"),
                   ("som-servidor.js", "dp-js-som"),
-                  ("tela.js", "dp-js-tela")):
+                  ("tela.js", "dp-js-tela"),
+                  ("amigos.js", "dp-js-amigos")):
     _cam = os.path.join(_base, _arq)
     if not os.path.exists(_cam) or _id in h:
         continue
@@ -1274,6 +1275,36 @@ for _arq, _id in (("guarda.js", "dp-js-guarda"),
     _scripts += f'<script id="{_id}">\n{_js}\n</script>\n'
     conta("audio", 1)
 INJECAO = _scripts + INJECAO
+
+# Camadas de CSS proprio: aproximam a geometria da interface do Discord.
+# Entram DEPOIS do <style> da marca para vencer o empate de
+# especificidade com o CSS que o styled-components injeta em tempo de
+# execucao — a ordem no documento e o unico criterio que sobra.
+#
+# E entram ANTES de <script id="dp-js-marca">: o guarda.js usa esse id
+# como prova de que a pagina chegou inteira, e a prova so vale enquanto
+# ele for o ULTIMO bloco da injecao. Concatenar no fim da string
+# empurraria o marcador para o meio, e um HTML truncado depois dele
+# passaria pelo guarda com as camadas faltando.
+#
+# Mesma convencao de ids dos scripts: espaco reservado "dp-css-".
+_css_extra = ""
+for _arq, _id in (("densidade.css", "dp-css-densidade"),
+                  ("amigos.css",    "dp-css-amigos")):
+    _cam = os.path.join(_base, _arq)
+    if not os.path.exists(_cam) or _id in h:
+        continue
+    _css_extra += (f'<style id="{_id}">\n'
+                   + open(_cam, encoding="utf-8").read()
+                   + '\n</style>\n')
+
+if _css_extra:
+    _marcador = '<script id="dp-js-marca">'
+    if _marcador not in INJECAO:
+        raise SystemExit("rebrand: marcador dp-js-marca sumiu da injecao — "
+                         "as camadas de CSS nao tem onde entrar sem quebrar "
+                         "a verificacao de integridade do guarda.js")
+    INJECAO = INJECAO.replace(_marcador, _css_extra + _marcador, 1)
 
 if "dp-css-marca" not in h:
     h = h.replace("</body>", INJECAO + "\n</body>")

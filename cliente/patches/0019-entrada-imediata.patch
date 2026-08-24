@@ -1,10 +1,13 @@
 diff --git a/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx b/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx
-index 3e9495c..c719a7a 100644
+index 3e9495c..127bf82 100644
 --- a/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx
 +++ b/packages/client/components/ui/components/features/voice/VoiceChannelPreview.tsx
-@@ -14,7 +14,8 @@ import { styled } from "styled-system/jsx";
+@@ -13,11 +13,15 @@ import { cva } from "styled-system/css";
+ import { styled } from "styled-system/jsx";
  
  import { UserContextMenu } from "@revolt/app";
++
++import { iniciarArrasto } from "./arrastar-usuario";
  import { useUser } from "@revolt/markdown/users";
 -import { InRoom } from "@revolt/rtc";
 +import { useClient } from "@revolt/client";
@@ -12,10 +15,79 @@ index 3e9495c..c719a7a 100644
  
  import { Avatar, Ripple, typography } from "../../design";
  import { Row } from "../../layout";
-@@ -57,9 +58,39 @@ function VariantLive() {
++import { MarcaCarregando } from "../../utils/MarcaCarregando";
+ 
+ import { VoiceStatefulUserIcons } from "./VoiceStatefulUserIcons";
+ 
+@@ -27,28 +31,57 @@ import { VoiceStatefulUserIcons } from "./VoiceStatefulUserIcons";
+  * Designed for the server sidebar to be below channels
+  */
+ export function VoiceChannelPreview(props: { channel: Channel }) {
++  /**
++   * Quem pode arrastar alguem para outro canal.
++   *
++   * Isto decide apenas se o arrasto EXISTE na tela. Quem decide se ele
++   * vale e o servico, que le os cargos do banco -- aqui e so para nao
++   * oferecer um gesto que vai ser recusado.
++   */
++  const podeMover = () => props.channel.havePermission("MoveMembers");
++
+   return (
+     <InRoom
+       channelId={props.channel.id}
+-      fallback={<VariantPreview channel={props.channel} />}
++      fallback={
++        <VariantPreview channel={props.channel} podeMover={podeMover()} />
++      }
+     >
+-      <VariantLive />
++      <VariantLive podeMover={podeMover()} />
+     </InRoom>
+   );
+ }
+ 
+ /**
+  * Use API as the source of truth
++ *
++ * Exportado como `PresencaAoVivo`: a faixa de presenca precisa
++ * exatamente disto -- quem esta na sala segundo o proprio SFU. Repetir o
++ * TrackLoop la dentro criaria duas fontes para a mesma verdade.
+  */
+-function VariantLive() {
++export { VariantLive as PresencaAoVivo };
++
++function VariantLive(props: {
++  faixa?: boolean;
++  palco?: boolean;
++  podeMover?: boolean;
++}) {
+   const tracks = useTracks(
+     [{ source: Track.Source.Camera, withPlaceholder: true }],
+     { onlySubscribed: false },
+   );
+ 
+   return (
+-    <Base>
+-      <TrackLoop tracks={tracks}>{() => <ParticipantLive />}</TrackLoop>
++    <Base faixa={props.faixa} palco={props.palco}>
++      <TrackLoop tracks={tracks}>
++        {() => (
++          <ParticipantLive
++            faixa={props.faixa}
++            palco={props.palco}
++            podeMover={props.podeMover}
++          />
++        )}
++      </TrackLoop>
+     </Base>
+   );
+ }
+@@ -56,12 +89,47 @@ function VariantLive() {
+ /**
   * Use LiveKit as the source of truth
   */
- function VariantPreview(props: { channel: Channel }) {
+-function VariantPreview(props: { channel: Channel }) {
++function VariantPreview(props: { channel: Channel; podeMover?: boolean }) {
 +  const voice = useVoice();
 +  const client = useClient();
 +
@@ -51,12 +123,26 @@ index 3e9495c..c719a7a 100644
 +          />
 +        </Show>
          <For each={[...props.channel.voiceParticipants.values()]}>
-           {(participant) => <ParticipantPreview participant={participant} />}
+-          {(participant) => <ParticipantPreview participant={participant} />}
++          {(participant) => (
++            <ParticipantPreview
++              participant={participant}
++              podeMover={props.podeMover}
++            />
++          )}
          </For>
-@@ -72,8 +103,34 @@ function VariantPreview(props: { channel: Channel }) {
+       </Base>
+     </Show>
+@@ -71,9 +139,39 @@ function VariantPreview(props: { channel: Channel }) {
+ /**
   * Live variant of participant
   */
- function ParticipantLive() {
+-function ParticipantLive() {
++function ParticipantLive(props: {
++  faixa?: boolean;
++  palco?: boolean;
++  podeMover?: boolean;
++}) {
 +  const voice = useVoice();
    const participant = useEnsureParticipant();
  
@@ -88,7 +174,7 @@ index 3e9495c..c719a7a 100644
    const isMuted = useIsMuted({
      participant,
      source: Track.Source.Microphone,
-@@ -87,8 +144,8 @@ function ParticipantLive() {
+@@ -87,8 +185,11 @@ function ParticipantLive() {
        speaking={isSpeaking()}
        muted={isMuted()}
        deafened={false}
@@ -96,6 +182,271 @@ index 3e9495c..c719a7a 100644
 -      screenshare={false}
 +      camera={publicandoCamera()}
 +      screenshare={publicandoTela()}
++      faixa={props.faixa}
++      palco={props.palco}
++      podeMover={props.podeMover}
        isLive
      />
    );
+@@ -97,7 +198,10 @@ function ParticipantLive() {
+ /**
+  * Preview variant of participant
+  */
+-function ParticipantPreview(props: { participant: VoiceParticipant }) {
++function ParticipantPreview(props: {
++  participant: VoiceParticipant;
++  podeMover?: boolean;
++}) {
+   return (
+     <CommonUser
+       userId={props.participant.userId}
+@@ -106,6 +210,7 @@ function ParticipantPreview(props: { participant: VoiceParticipant }) {
+       deafened={!props.participant.isReceiving()}
+       camera={props.participant.isCamera()}
+       screenshare={props.participant.isScreensharing()}
++      podeMover={props.podeMover}
+     />
+   );
+ }
+@@ -120,6 +225,12 @@ function CommonUser(props: {
+   deafened: boolean;
+   camera: boolean;
+   screenshare: boolean;
++  /** Ladrilho da faixa de presenca: avatar grande, nome embaixo. */
++  faixa?: boolean;
++  /** O mesmo ladrilho, no tamanho do palco da chamada. */
++  palco?: boolean;
++  /** Quem ve esta lista pode arrastar pessoas para outro canal */
++  podeMover?: boolean;
+   isLive?: boolean;
+ }) {
+   const [iconProps, rest] = splitProps(props, [
+@@ -131,9 +242,80 @@ function CommonUser(props: {
+ 
+   const user = useUser(() => rest.userId);
+ 
++  /**
++   * O perfil ainda nao chegou.
++   *
++   * `useUser` devolve "Unknown User" enquanto o usuario nao esta no cache do
++   * cliente -- e o que produzia o "UU" no lugar da foto ao entrar num canal.
++   * Nao e um erro nem um usuario apagado: e um carregamento, e como tal e que
++   * deve aparecer.
++   */
++  const carregando = () => !user().user;
++
+   return (
+     <div
+-      class={previewUser({ speaking: rest.speaking })}
++      class={previewUser({
++        speaking: rest.speaking,
++        faixa: rest.faixa,
++        palco: rest.palco,
++        arrastavel: rest.podeMover && !rest.faixa && !rest.palco,
++      })}
++      /*
++        Segurar uma pessoa nao pode arrastar o canal.
++
++        A biblioteca de arrastar escuta `mousedown` e `touchstart` no item
++        da lista -- o canal -- e a pessoa e desenhada dentro dele, entao o
++        evento subia e virava reordenacao de canais. Quem segura o nome de
++        alguem esta mirando naquela pessoa, nao na posicao da sala.
++
++        Parar aqui devolve o arrasto de canal para o canal e a categoria,
++        que continuam se reordenando normalmente. O clique e o menu de
++        contexto nao passam por estes eventos e seguem funcionando.
++      */
++      /*
++        `on:mousedown`, e NAO `onMouseDown`. A diferenca e a razao de o
++        recurso nunca ter funcionado.
++
++        O Solid DELEGA `mousedown`, `touchstart` e `pointerdown`: um unico
++        ouvinte no `document` recebe o evento e reencena a propagacao por
++        conta propria. Como o `document` e o ultimo da subida, o ouvinte
++        NATIVO que a biblioteca de reordenacao pendurou no canal ja rodou
++        muito antes -- e um `stopPropagation` dentro de um `onMouseDown`
++        chega tarde demais para impedi-lo. Foram tres correcoes escritas
++        nesse formato, e nenhuma podia ter funcionado.
++
++        `on:` pendura um ouvinte de verdade NESTE elemento, que roda na
++        subida real, antes do ouvinte do canal.
++
++        O `preventDefault` mata a selecao de texto: sem ele, segurar o
++        mouse sobre alguem pinta de azul a lista inteira -- todos os
++        nomes e o canal -- em vez de pegar uma pessoa so.
++      */
++      on:mousedown={(e: MouseEvent) => {
++        if (!rest.podeMover || rest.faixa || rest.palco) return;
++        e.stopPropagation();
++        e.preventDefault();
++      }}
++      on:touchstart={(e: TouchEvent) => {
++        if (!rest.podeMover || rest.faixa || rest.palco) return;
++        e.stopPropagation();
++      }}
++      /*
++        Arrastar uma pessoa para outro canal, para quem tem o cargo.
++
++        Por evento de PONTEIRO, nao pelo arrasta-e-solta do navegador: a
++        lista de canais e uma zona de reordenacao que desliga o `dragstart`
++        de tudo que vive dentro dela. Ver `arrastar-usuario.ts`.
++
++        O `pointerdown` acontece antes do `mousedown`, entao os dois
++        `stopPropagation` acima continuam necessarios -- sao eles que
++        impedem a biblioteca de entender isto como reordenar o canal.
++      */
++      on:pointerdown={(e: PointerEvent) => {
++        if (!rest.podeMover || rest.faixa || rest.palco) return;
++        e.stopPropagation();
++        iniciarArrasto(rest.userId, user().username, e);
++      }}
+       use:floating={{
+         userCard: {
+           user: user().user!,
+@@ -149,11 +331,20 @@ function CommonUser(props: {
+       }}
+     >
+       <Ripple />
+-      <Avatar size={24} src={user().avatar} fallback={user().username} />{" "}
+-      <PreviewUsername>{user().username}</PreviewUsername>
+-      <Row gap="sm">
+-        <VoiceStatefulUserIcons {...iconProps} userId={rest.userId} />
+-      </Row>
++      <Show
++        when={!carregando()}
++        fallback={<MarcaCarregando size={rest.palco ? 88 : rest.faixa ? 48 : 24} />}
++      >
++        <Avatar
++          size={rest.palco ? 88 : rest.faixa ? 48 : 24}
++          src={user().avatar}
++          fallback={user().username}
++        />{" "}
++        <PreviewUsername>{user().username}</PreviewUsername>
++        <Row gap="sm">
++          <VoiceStatefulUserIcons {...iconProps} userId={rest.userId} />
++        </Row>
++      </Show>
+     </div>
+   );
+ }
+@@ -172,6 +363,61 @@ const Base = styled("div", {
+ 
+     borderRadius: "var(--borderRadius-md)",
+   },
++  variants: {
++    /**
++     * Na faixa de presenca a mesma lista vira uma fileira.
++     *
++     * As margens daqui sao da barra lateral -- recuo grande a esquerda
++     * para alinhar sob o nome do canal. Dentro da faixa elas so empurram
++     * tudo para o canto, entao caem.
++     */
++    faixa: {
++      true: {
++        flexDirection: "row",
++        alignItems: "center",
++        gap: "var(--gap-md)",
++        margin: 0,
++        color: "var(--md-sys-color-on-surface)",
++      },
++    },
++    /**
++     * Linha que pode ser arrastada para outro canal.
++     *
++     * O avatar vem do sistema de design com `draggable={false}` fixo, e um
++     * filho nao-arrastavel impede o navegador de iniciar o arrasto do pai
++     * -- ou seja, segurar justamente a foto, que e o alvo mais obvio, nao
++     * fazia nada. Tirar o ponteiro das imagens entrega o gesto ao
++     * container.
++     *
++     * O custo e o tooltip dos indicadores de microfone, que so alcanca
++     * quem tem permissao de mover. Vale menos que o gesto funcionar onde
++     * a pessoa mira.
++     *
++     * `touchAction: none` entrega o toque ao arrasto em vez de a rolagem.
++     * So vale sobre a LINHA da pessoa, que e um alvo pequeno: a lista
++     * continua rolando pelo nome do canal, pelas categorias e pelos vaos.
++     */
++    arrastavel: {
++      true: {
++        cursor: "grab",
++        touchAction: "none",
++        userSelect: "none",
++        WebkitUserSelect: "none",
++        "& img, & svg": { pointerEvents: "none" },
++      },
++    },
++    /** Fileira de ladrilhos grandes, centrada no palco. */
++    palco: {
++      true: {
++        flexWrap: "wrap",
++        justifyContent: "safe center",
++        alignContent: "safe center",
++        gap: "var(--gap-lg)",
++        width: "100%",
++        height: "100%",
++      },
++    },
++  },
+ });
+ 
+ const previewUser = cva({
+@@ -195,6 +441,58 @@ const previewUser = cva({
+         },
+       },
+     },
++    /**
++     * Ladrilho: avatar em cima, nome embaixo, indicadores no rodape.
++     *
++     * O nome usa `flex-grow: 1` para ocupar a linha na barra lateral; em
++     * coluna isso faria a caixa esticar ate a altura toda da faixa. Aqui
++     * ele volta a ter o tamanho do texto, com largura limitada para nomes
++     * compridos nao alargarem o ladrilho.
++     */
++    faixa: {
++      true: {
++        flexDirection: "column",
++        justifyContent: "center",
++        gap: "var(--gap-sm)",
++        padding: "var(--gap-sm) var(--gap-md)",
++        flexShrink: 0,
++
++        "& > span": {
++          flexGrow: 0,
++          maxWidth: "96px",
++          textAlign: "center",
++        },
++      },
++    },
++    /**
++     * Ladrilho do palco.
++     *
++     * Um retangulo do tamanho dos quadros de video, com o avatar grande no
++     * centro -- para uma conversa so de audio ocupar o palco com o mesmo
++     * peso que ela teria com camera ligada, em vez de virar um selo
++     * perdido no meio do vazio.
++     */
++    palco: {
++      true: {
++        flexDirection: "column",
++        justifyContent: "center",
++        gap: "var(--gap-md)",
++
++        width: "260px",
++        height: "180px",
++        flexShrink: 0,
++        padding: "var(--gap-lg)",
++
++        borderRadius: "var(--borderRadius-lg)",
++        background: "var(--md-sys-color-surface-container-high)",
++
++        "& > span": {
++          flexGrow: 0,
++          maxWidth: "100%",
++          textAlign: "center",
++        },
++      },
++    },
+   },
+ });
+ 

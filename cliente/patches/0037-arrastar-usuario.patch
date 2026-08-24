@@ -1,0 +1,190 @@
+diff --git a/packages/client/components/ui/components/features/voice/arrastar-usuario.ts b/packages/client/components/ui/components/features/voice/arrastar-usuario.ts
+new file mode 100644
+index 0000000..2619fbd
+--- /dev/null
++++ b/packages/client/components/ui/components/features/voice/arrastar-usuario.ts
+@@ -0,0 +1,184 @@
++import { createSignal } from "solid-js";
++
++/**
++ * Arrastar uma pessoa de um canal de voz para outro.
++ *
++ * ISTO NAO USA O ARRASTA-E-SOLTA DO NAVEGADOR, e a escolha foi deliberada.
++ *
++ * A primeira versao usava `draggable` + `dragstart` + `dataTransfer`, que e
++ * o caminho obvio, e nao funcionou nunca -- duas correcoes seguidas nao
++ * fizeram o gesto comecar. A lista de canais e uma zona de reordenacao da
++ * `svelte-dnd-action`, que sobre CADA item faz:
++ *
++ *     draggableEl.draggable = false;
++ *     draggableEl.ondragstart = () => false;
++ *     draggableEl.addEventListener("mousedown", handleMouseDown);
++ *
++ * A pessoa e desenhada dentro desse item. Cada tentativa de conviver com
++ * isso -- parar a propagacao do `mousedown`, parar a do `dragstart` --
++ * resolvia um bloqueio e esbarrava no seguinte, e o gesto continuava
++ * morrendo em algum ponto que so aparece em execucao.
++ *
++ * Eventos de ponteiro nao disputam nada disso: `pointerdown` acontece
++ * antes de `mousedown`, ninguem nesse caminho os cancela, e o alvo da
++ * soltura e decidido por `elementFromPoint` em vez de depender de o
++ * navegador aceitar a zona de soltura. De quebra funciona em toque, que o
++ * arrasta-e-solta do HTML nao faz em navegador de celular -- e o aplicativo
++ * vai para o celular.
++ *
++ * O canal que aceita soltura se marca com `data-canal-voz`.
++ */
++
++/** Quem esta sendo arrastado agora, se alguem. */
++const [quemArrasta, setQuemArrasta] = createSignal<string | undefined>();
++
++/** Sobre qual canal o ponteiro esta, durante o arrasto. */
++const [canalSobOPonteiro, setCanalSobOPonteiro] = createSignal<
++  string | undefined
++>();
++
++export { quemArrasta, canalSobOPonteiro };
++
++/** Quanto o ponteiro precisa andar, no mouse, para virar arrasto. */
++const FOLGA_PX = 6;
++
++/** Quanto tempo segurar, no toque, para virar arrasto. */
++const ESPERA_TOQUE_MS = 350;
++
++let fantasma: HTMLElement | undefined;
++
++function criarFantasma(texto: string, x: number, y: number) {
++  fantasma = document.createElement("div");
++  fantasma.textContent = texto;
++  // Estilo inline de proposito: este elemento vive no <body>, fora da
++  // arvore de componentes, e nao deve depender de nenhuma folha de estilo
++  // que possa nao estar carregada no momento.
++  Object.assign(fantasma.style, {
++    position: "fixed",
++    left: "0",
++    top: "0",
++    transform: `translate(${x + 12}px, ${y + 12}px)`,
++    padding: "4px 10px",
++    borderRadius: "8px",
++    background: "var(--md-sys-color-primary, #8249DB)",
++    color: "var(--md-sys-color-on-primary, #fff)",
++    font: "500 13px/1.2 sans-serif",
++    pointerEvents: "none",
++    zIndex: "10000",
++    boxShadow: "0 4px 16px rgba(0,0,0,.35)",
++    opacity: "0.95",
++  } as Partial<CSSStyleDeclaration>);
++  document.body.appendChild(fantasma);
++}
++
++function moverFantasma(x: number, y: number) {
++  if (fantasma) fantasma.style.transform = `translate(${x + 12}px, ${y + 12}px)`;
++}
++
++function sumirFantasma() {
++  fantasma?.remove();
++  fantasma = undefined;
++}
++
++/** Qual canal de voz esta debaixo destas coordenadas, se algum. */
++function canalEm(x: number, y: number): string | undefined {
++  const alvo = document.elementFromPoint(x, y);
++  const canal = alvo?.closest?.("[data-canal-voz]") as HTMLElement | null;
++  return canal?.dataset.canalVoz || undefined;
++}
++
++/**
++ * Comeca a acompanhar um possivel arrasto.
++ *
++ * Chamado no `pointerdown` da pessoa. Ainda NAO e um arrasto: enquanto o
++ * ponteiro nao andar (ou nao for segurado, no toque), o clique, o cartao
++ * de perfil e o menu de contexto continuam funcionando normalmente.
++ */
++export function iniciarArrasto(
++  userId: string,
++  nome: string,
++  e: PointerEvent,
++): void {
++  // Botao direito abre menu; botao do meio nao interessa.
++  if (e.pointerType === "mouse" && e.button !== 0) return;
++
++  const inicioX = e.clientX;
++  const inicioY = e.clientY;
++  const toque = e.pointerType !== "mouse";
++  let arrastando = false;
++  let espera: ReturnType<typeof setTimeout> | undefined;
++
++  function comecar(x: number, y: number) {
++    if (arrastando) return;
++    arrastando = true;
++    setQuemArrasta(userId);
++    // Se alguma selecao de texto escapou antes do arrasto comecar, ela
++    // some agora -- senao fica um rastro azul por cima da lista.
++    try {
++      window.getSelection()?.removeAllRanges();
++    } catch {
++      /* navegador sem selecao acessivel: nao ha rastro a limpar */
++    }
++    criarFantasma(nome, x, y);
++    document.body.style.cursor = "grabbing";
++  }
++
++  function aoMover(ev: PointerEvent) {
++    if (!arrastando) {
++      const andou =
++        Math.abs(ev.clientX - inicioX) > FOLGA_PX ||
++        Math.abs(ev.clientY - inicioY) > FOLGA_PX;
++      // No toque, andar antes da espera e rolagem da lista, nao arrasto.
++      if (toque) {
++        if (andou && espera) {
++          clearTimeout(espera);
++          espera = undefined;
++          encerrar();
++        }
++        return;
++      }
++      if (!andou) return;
++      comecar(ev.clientX, ev.clientY);
++    }
++
++    // Sem isto, no toque a lista rola por baixo do arrasto.
++    ev.preventDefault();
++    moverFantasma(ev.clientX, ev.clientY);
++    setCanalSobOPonteiro(canalEm(ev.clientX, ev.clientY));
++  }
++
++  function aoSoltar(ev: PointerEvent) {
++    const estava = arrastando;
++    const destino = estava ? canalEm(ev.clientX, ev.clientY) : undefined;
++    encerrar();
++
++    if (!estava || !destino) return;
++
++    // Quem confere se o movimento pode acontecer e o servidor, que le os
++    // cargos do banco. Daqui vai so o pedido.
++    window.dispatchEvent(
++      new CustomEvent("dp-mover-usuario", {
++        detail: { usuario: userId, canal: destino },
++      }),
++    );
++  }
++
++  function encerrar() {
++    if (espera) clearTimeout(espera);
++    espera = undefined;
++    arrastando = false;
++    setQuemArrasta(undefined);
++    setCanalSobOPonteiro(undefined);
++    sumirFantasma();
++    document.body.style.cursor = "";
++    window.removeEventListener("pointermove", aoMover);
++    window.removeEventListener("pointerup", aoSoltar);
++    window.removeEventListener("pointercancel", encerrar);
++  }
++
++  window.addEventListener("pointermove", aoMover, { passive: false });
++  window.addEventListener("pointerup", aoSoltar);
++  window.addEventListener("pointercancel", encerrar);
++
++  if (toque) espera = setTimeout(() => comecar(inicioX, inicioY), ESPERA_TOQUE_MS);
++}

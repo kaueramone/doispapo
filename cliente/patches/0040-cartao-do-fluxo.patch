@@ -1,0 +1,20 @@
+diff --git a/packages/client/components/auth/src/flows/Flow.tsx b/packages/client/components/auth/src/flows/Flow.tsx
+index c351b3c..77460a0 100644
+--- a/packages/client/components/auth/src/flows/Flow.tsx
++++ b/packages/client/components/auth/src/flows/Flow.tsx
+@@ -22,11 +22,11 @@ export const FlowBase = styled("div", {
+     maxWidth: "360px",
+     maxHeight: "600px",
+     padding: "45px 40px",
+-    borderRadius: "32px",
+-    marginTop: "20px",
+-    marginBottom: "20px",
++    borderRadius: "33px",
+     justifySelf: "center",
+-    marginInline: "auto",
++    // Sem margem propria: quem centraliza e espaca agora e o miolo da
++    // pagina. As margens de 20px aqui abriam uma fresta entre o cartao e o
++    // fio de gradiente que o envolve.
+ 
+     _phone: {
+       background: "none",

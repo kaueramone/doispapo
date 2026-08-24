@@ -1,0 +1,203 @@
+diff --git a/packages/client/components/app/interface/settings/user/Conquistas.tsx b/packages/client/components/app/interface/settings/user/Conquistas.tsx
+new file mode 100644
+index 0000000..bb4486b
+--- /dev/null
++++ b/packages/client/components/app/interface/settings/user/Conquistas.tsx
+@@ -0,0 +1,197 @@
++import { For, Match, Show, Switch, createResource } from "solid-js";
++
++import { Trans } from "@lingui-solid/solid/macro";
++import { styled } from "styled-system/jsx";
++
++import { useClient } from "@revolt/client";
++import { Text } from "@revolt/ui/components/design";
++import { Column } from "@revolt/ui/components/layout";
++import { Symbol } from "@revolt/ui/components/utils/Symbol";
++
++/** Onde o nosso servico responde, atras da mesma origem */
++const API = "/api-convites";
++
++type Conquista = {
++  chave: string;
++  titulo: string;
++  descricao: string;
++  icone: string;
++  conquistada: boolean;
++  em: number | null;
++  meta: number;
++  valor: number;
++  unidade: string;
++};
++
++/**
++ * Conquistas
++ *
++ * O progresso completo -- inclusive o que falta -- so aparece para a
++ * propria pessoa. De terceiros, o servico devolve apenas o que ja foi
++ * conquistado.
++ */
++export default function Conquistas() {
++  const client = useClient();
++
++  const [itens] = createResource(async () => {
++    const [nome, valor] = client()!.authenticationHeader;
++    const r = await fetch(`${API}/conquistas`, { headers: { [nome]: valor } });
++    if (!r.ok) throw new Error(String(r.status));
++    return ((await r.json()).itens ?? []) as Conquista[];
++  });
++
++  /**
++   * Horas sao contadas em segundos e mostradas em horas.
++   *
++   * A barra usa o valor cru; o texto, a unidade que a pessoa reconhece.
++   * Ninguem pensa a propria vida em "180000 segundos".
++   */
++  function mostrar(c: Conquista) {
++    const div = c.unidade === "horas" ? 3600 : 1;
++    const atual = Math.floor(Math.min(c.valor, c.meta) / div);
++    return `${atual} de ${Math.floor(c.meta / div)} ${c.unidade}`;
++  }
++
++  const porcento = (c: Conquista) =>
++    Math.max(0, Math.min(100, (c.valor / c.meta) * 100));
++
++  return (
++    <Column gap="lg">
++      <Switch>
++        <Match when={itens.loading}>
++          <Vazio>
++            <Trans>Loading…</Trans>
++          </Vazio>
++        </Match>
++        <Match when={itens.error}>
++          <Vazio>
++            <Trans>Could not load the news right now.</Trans>
++          </Vazio>
++        </Match>
++        <Match when={itens()}>
++          <For each={itens()}>
++            {(c) => (
++              <Cartao conquistada={c.conquistada}>
++                <Medalha conquistada={c.conquistada}>
++                  <Symbol size={24}>{c.icone}</Symbol>
++                </Medalha>
++                <Corpo>
++                  <Text class="title" size="small">
++                    {c.titulo}
++                  </Text>
++                  <Descricao>{c.descricao}</Descricao>
++                  <Show
++                    when={!c.conquistada}
++                    fallback={<Feito>{mostrar(c)}</Feito>}
++                  >
++                    <Barra>
++                      <Preenchida style={{ width: `${porcento(c)}%` }} />
++                    </Barra>
++                    <Descricao>{mostrar(c)}</Descricao>
++                  </Show>
++                </Corpo>
++              </Cartao>
++            )}
++          </For>
++        </Match>
++      </Switch>
++    </Column>
++  );
++}
++
++const Vazio = styled("div", {
++  base: {
++    padding: "var(--gap-lg)",
++    color: "var(--md-sys-color-outline)",
++  },
++});
++
++const Cartao = styled("div", {
++  base: {
++    display: "flex",
++    gap: "var(--gap-lg)",
++    alignItems: "flex-start",
++
++    padding: "var(--gap-lg)",
++    borderRadius: "var(--borderRadius-lg)",
++    background: "var(--md-sys-color-surface-container)",
++  },
++  variants: {
++    conquistada: {
++      false: {
++        // Quem ainda nao conquistou nao esta em falta: fica mais quieto,
++        // nao apagado. Cinza demais lê como "indisponivel".
++        opacity: 0.82,
++      },
++    },
++  },
++});
++
++const Medalha = styled("div", {
++  base: {
++    flexShrink: 0,
++    display: "grid",
++    placeItems: "center",
++
++    width: "44px",
++    height: "44px",
++    borderRadius: "var(--borderRadius-full)",
++  },
++  variants: {
++    conquistada: {
++      true: {
++        background: "var(--md-sys-color-primary)",
++        color: "var(--md-sys-color-on-primary)",
++        fill: "var(--md-sys-color-on-primary)",
++      },
++      false: {
++        background: "var(--md-sys-color-surface-container-highest)",
++        color: "var(--md-sys-color-outline)",
++        fill: "var(--md-sys-color-outline)",
++      },
++    },
++  },
++});
++
++const Corpo = styled("div", {
++  base: {
++    minWidth: 0,
++    display: "flex",
++    flexDirection: "column",
++    gap: "var(--gap-sm)",
++    flexGrow: 1,
++  },
++});
++
++const Descricao = styled("span", {
++  base: {
++    fontSize: "0.8125rem",
++    color: "var(--md-sys-color-outline)",
++  },
++});
++
++const Feito = styled("span", {
++  base: {
++    fontSize: "0.8125rem",
++    fontWeight: 500,
++    color: "var(--md-sys-color-primary)",
++  },
++});
++
++const Barra = styled("div", {
++  base: {
++    height: "6px",
++    borderRadius: "var(--borderRadius-full)",
++    background: "var(--md-sys-color-surface-container-highest)",
++    overflow: "hidden",
++  },
++});
++
++const Preenchida = styled("div", {
++  base: {
++    height: "100%",
++    borderRadius: "var(--borderRadius-full)",
++    background: "var(--md-sys-color-primary)",
++    transition: "width var(--transitions-medium) ease-out",
++  },
++});

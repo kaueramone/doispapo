@@ -1,0 +1,170 @@
+diff --git a/packages/client/components/ui/components/utils/MarcaCarregando.tsx b/packages/client/components/ui/components/utils/MarcaCarregando.tsx
+new file mode 100644
+index 0000000..9b5bc3b
+--- /dev/null
++++ b/packages/client/components/ui/components/utils/MarcaCarregando.tsx
+@@ -0,0 +1,164 @@
++import { createUniqueId } from "solid-js";
++
++/**
++ * Contorno da marca, vetorizado a partir do simbolo do favicon.
++ *
++ * Nasceu de um `potrace` sobre o canal alfa do PNG, com a transformacao do
++ * tracador ja aplicada nas coordenadas -- sem isso o `<g transform>` que ele
++ * gera tambem transformaria o gradiente, e a marca saia inteira roxa.
++ */
++const MARCA = "M 533.5,0.6 c -10.5,0.7 -29.6,3.4 -42.5,5.8 c -6.9,1.4 -19.2,3.7 -27.5,5.2 c -130.3,23.5 -241,101.9 -313.5,221.8 c -12.9,21.5 -24.1,45.8 -32.1,69.5 c -6.9,20.7 -9.2,23.4 -26.3,30 c -25.4,9.8 -40.7,19.2 -53.7,32.9 c -13.8,14.6 -23.2,31.7 -28.3,51.2 c -5.8,22.8 -8.6,47.7 -8.6,78 c 0,56.9 11.9,102.1 34.2,130.8 c 19.7,25.3 66.3,44.6 93.7,38.8 c 9.6,-2 14.9,-4.7 21.6,-10.8 c 6.1,-5.5 10.4,-13.4 13.2,-23.8 c 2.5,-9.3 2.3,-37 -0.5,-60 c -4.9,-40.6 -7.2,-61.4 -8.3,-75.9 c -1.5,-20.5 -0.6,-71.6 1.5,-87.1 c 6.8,-48.8 21.4,-91.5 46.4,-135.5 c 8,-14.1 26.6,-41.6 37.3,-55 c 12.2,-15.4 44.3,-47.9 58.4,-59.2 c 53.2,-42.5 111.4,-69.4 180.5,-83.3 c 34.8,-7 48.9,-8.3 83,-7.7 c 40.8,0.8 66.3,4.1 103.5,13.4 c 49.4,12.2 99.8,35.1 140.5,63.6 c 36.6,25.6 71.8,60.3 96.3,95 c 32,45.1 54.3,98.6 63.7,152.2 c 4.4,25.7 5.5,38.9 5.4,70 c 0,32.2 -1.2,46.2 -6,72.5 c -16.7,90.5 -63.9,166 -143.1,228.7 c -69.9,55.5 -170.8,102.1 -297.1,137.4 c -10.6,2.9 -19.1,5.8 -18.9,6.3 c 0.7,2.1 11.6,8.7 20,12.1 c 16.5,6.6 44.6,12.4 76.7,15.7 c 18.5,1.9 65.3,1.6 81.5,-0.6 c 26,-3.4 68.6,-13.7 80.5,-19.4 c 5,-2.5 6.5,-2.7 17,-2.6 c 10.4,0 12.5,0.3 21.5,3.4 c 13.5,4.6 39,17.4 75.4,37.9 c 31,17.4 39,20.9 52.5,23.2 c 19.9,3.4 38.2,-4.6 43,-18.6 c 2,-6 2.1,-17.9 0.0999999999999,-26.2 c -2,-8.5 -14,-44.8 -25.2,-76.3 c -10,-28.1 -14.3,-42.9 -14.3,-49 c 0,-3.3 1.7,-5.8 13.6,-21.1 c 17.3,-22.2 31.6,-43.5 38.1,-56.9 c 2.8,-5.8 10.1,-20.7 16.1,-33.2 c 12.8,-26.4 10.2,-23.8 35.8,-35.7 c 31,-14.5 40.1,-20.7 51.8,-35.3 c 15.4,-19.2 25.7,-47 30.8,-83.3 c 2.1,-14.3 1.7,-63.8 -0.5,-80.5 c -5,-37.1 -12.7,-62.8 -23.5,-78.6 c -8.5,-12.6 -22.7,-26.6 -35.6,-35.1 c -7.2,-4.9 -23.6,-12.2 -37.2,-16.7 c -4.5,-1.5 -8.9,-3.5 -9.7,-4.4 c -0.9,-0.9 -3.5,-7.3 -6,-14.2 c -9.6,-27.3 -23.4,-56.2 -39.6,-83.2 c -20,-33.2 -40.2,-58.9 -69.6,-88.4 c -29.4,-29.5 -55,-49.8 -86.5,-68.7 c -57.3,-34.3 -135.2,-59.2 -210,-67.2 c -14.1,-1.5 -57.5,-2.7 -69.5,-1.9 z M 542,126.6 c -24.9,1.7 -46.7,5.2 -68.5,10.9 c -123.7,32.4 -218.9,133.9 -243.4,259.5 c -4.6,23.6 -5.5,34.2 -5.5,64.5 c 0,31.9 0.7,39.9 6.9,71.5 c 15.2,78.5 8.6,129 -20.9,160.7 c -14.2,15.2 -34.3,25.8 -57.6,30.4 c -3.6,0.7 -6.9,1.6 -7.3,1.9 c -0.5,0.4 8.3,11.9 19.4,25.6 c 11.1,13.7 20.5,25.4 21,26 c 0.5,0.6 -7.1,25.7 -18,59.5 c -10.4,32.1 -19.5,61.1 -20.2,64.4 c -1.7,8.1 -1.7,22.1 0,26.8 c 4.4,12.6 17.1,16.4 37.2,11.2 c 3.8,-1 34.3,-15.7 79,-38 l 72.8,-36.5 l 10.3,2.5 c 28.6,6.9 65.7,9.3 93.3,6.1 c 56.5,-6.6 108.9,-29.8 160.5,-71.1 l 12.5,-10 l 11.9,-2.3 c 84,-16.3 161.5,-67.8 210.9,-140.3 c 38.2,-56 57.7,-119.6 57.7,-188.4 c 0,-32.6 -3.7,-60.1 -12.4,-91.6 c -10.9,-39.7 -34.1,-84.5 -61.2,-118.4 c -16.5,-20.7 -44.3,-46.9 -66.9,-63.1 c -46,-33 -101.9,-54.1 -159.5,-60.3 c -10.5,-1.2 -43.3,-2.1 -52,-1.5 z m -106,274.3 c 36.9,11.6 54.3,54 36.3,88.3 c -7,13.4 -19.8,24.4 -34.5,29.5 c -9.6,3.4 -24.3,4.2 -34.2,1.9 c -8.6,-2 -20.5,-8.2 -27.3,-14.1 c -6.5,-5.7 -14.4,-17.3 -17.3,-25.6 c -3.1,-8.9 -3.9,-26.8 -1.5,-35.8 c 5.8,-22.5 24.3,-40.5 46.7,-45.6 c 8.4,-2 23.3,-1.3 31.8,1.4 z m 276.5,-1.4 c 14.8,3.1 30.2,13.3 38.4,25.4 c 7,10.2 10,19 10.7,31.6 c 1.1,17.5 -4.5,33.2 -16.6,45.8 c -12.1,12.8 -24.7,18.6 -42,19.4 c -18.9,1 -33.1,-4.6 -46.5,-18.1 c -9.2,-9.3 -13.6,-16.7 -16.5,-28.2 c -11.3,-44.1 28,-85.2 72.5,-75.9 z m -252.8,211.1 c 38.1,23.2 77.4,33.7 113.6,30.4 c 29.1,-2.6 55.7,-11.7 83.9,-28.7 c 7.5,-4.6 14.8,-8.3 16.1,-8.3 c 7,0 15.7,12.4 15.7,22.4 c 0,30.3 -28.7,52.4 -76.7,59 c -39.4,5.4 -86.1,1 -124.9,-11.9 c -36.6,-12.1 -56.4,-28.5 -56.5,-46.5 c -0.1,-6 2.5,-13.5 5.9,-17.4 c 2.5,-2.8 7.4,-5.6 9.9,-5.6 c 1.1,0 7,3 13,6.6 z";
++
++/** Comprimento do traco, medido com `getTotalLength` no proprio caminho. */
++const COMPRIMENTO = 9058;
++
++/**
++ * Azul e roxo da marca, amostrados do PNG: o gradiente e diagonal, do canto
++ * superior esquerdo ao inferior direito.
++ */
++export const AZUL = "#179EF0",
++  ROXO = "#8249DB";
++
++/**
++ * Duracao de um ciclo completo.
++ *
++ * Exportado porque a tela de entrada segura a troca por dois ciclos: com o
++ * numero repetido em dois lugares, mudar o ritmo da animacao aqui deixaria a
++ * tela liberando no meio de um ciclo, sem ninguem perceber por que.
++ */
++export const CICLO_MARCA_MS = 1800;
++
++const CSS = `
++@keyframes dp-marca-traco {
++  0%   { stroke-dashoffset: ${COMPRIMENTO}; opacity: 1 }
++  55%  { stroke-dashoffset: 0; opacity: 1 }
++  92%  { stroke-dashoffset: 0; opacity: 1 }
++  100% { stroke-dashoffset: 0; opacity: 0 }
++}
++@keyframes dp-marca-corpo {
++  0%, 45%  { opacity: .12 }
++  72%, 92% { opacity: 1 }
++  100%     { opacity: .12 }
++}
++.dp-marca-traco {
++  fill: none;
++  stroke-width: 12;
++  stroke-linecap: round;
++  stroke-linejoin: round;
++  stroke-dasharray: ${COMPRIMENTO};
++  animation: dp-marca-traco ${CICLO_MARCA_MS}ms ease-in-out infinite;
++}
++.dp-marca-corpo { animation: dp-marca-corpo ${CICLO_MARCA_MS}ms ease-in-out infinite }
++
++/*
++  Quem pediu menos movimento recebe a marca parada, e nao um piscar mais
++  lento: o proposito aqui e dizer "estamos carregando", e a marca sozinha ja
++  diz isso no lugar onde um avatar ou um conteudo deveria estar.
++*/
++@media (prefers-reduced-motion: reduce) {
++  .dp-marca-traco { display: none }
++  .dp-marca-corpo { animation: none; opacity: .5 }
++}
++`;
++
++/**
++ * A folha de estilo entra uma vez so.
++ *
++ * Este componente aparece em lista -- um por participante enquanto os perfis
++ * carregam -- e um `<style>` dentro do SVG viraria uma copia por instancia.
++ */
++let estiloPosto = false;
++function garantirEstilo() {
++  if (estiloPosto || typeof document === "undefined") return;
++  estiloPosto = true;
++  const el = document.createElement("style");
++  el.id = "dp-marca-carregando";
++  el.textContent = CSS;
++  document.head.append(el);
++}
++
++/**
++ * Carregando, com a marca se remontando.
++ *
++ * O contorno se desenha, o preenchimento entra atras dele e o ciclo recomeca.
++ * Nunca fica vazio: fora do momento cheio a marca continua ali, fantasma, para
++ * o lugar nao piscar entre um ciclo e outro.
++ *
++ * Sem texto de proposito -- e o elemento grafico que carrega o recado.
++ */
++export function MarcaCarregando(props: { size?: number; title?: string }) {
++  garantirEstilo();
++
++  // O gradiente e referenciado por id. Com um id fixo, todas as instancias
++  // apontariam para o primeiro SVG do documento -- e desmontar justamente ele
++  // deixaria as outras sem cor nenhuma.
++  const id = createUniqueId();
++  const lado = () => props.size ?? 48;
++
++  return (
++    <svg
++      role="img"
++      aria-label={props.title ?? "Carregando"}
++      width={lado()}
++      height={Math.round((lado() * 976) / 1124)}
++      viewBox="0 0 1124 976"
++      xmlns="http://www.w3.org/2000/svg"
++    >
++      <defs>
++        <linearGradient
++          id={id}
++          x1="0"
++          y1="0"
++          x2="1124"
++          y2="976"
++          gradientUnits="userSpaceOnUse"
++        >
++          <stop offset="0" stop-color={AZUL} />
++          <stop offset="1" stop-color={ROXO} />
++        </linearGradient>
++      </defs>
++      <path class="dp-marca-corpo" fill={`url(#${id})`} d={MARCA} />
++      <path class="dp-marca-traco" stroke={`url(#${id})`} d={MARCA} />
++    </svg>
++  );
++}
++
++
++/**
++ * A marca parada, sem animacao.
++ *
++ * Mesmo caminho vetorial da versao que carrega -- e o ponto de reutilizar:
++ * duas copias do `d` divergiriam no dia em que a marca mudasse, e ninguem
++ * lembraria da segunda. Aqui ela e so identidade, nao espera: onde nada
++ * esta carregando, animar seria ruido.
++ */
++export function Marca(props: { size?: number; title?: string }) {
++  const id = createUniqueId();
++  const lado = () => props.size ?? 64;
++
++  return (
++    <svg
++      role="img"
++      aria-label={props.title ?? "Dois Papo"}
++      width={lado()}
++      height={Math.round((lado() * 976) / 1124)}
++      viewBox="0 0 1124 976"
++      xmlns="http://www.w3.org/2000/svg"
++    >
++      <defs>
++        <linearGradient
++          id={id}
++          x1="0"
++          y1="0"
++          x2="1124"
++          y2="976"
++          gradientUnits="userSpaceOnUse"
++        >
++          <stop offset="0" stop-color={AZUL} />
++          <stop offset="1" stop-color={ROXO} />
++        </linearGradient>
++      </defs>
++      <path fill={`url(#${id})`} d={MARCA} />
++    </svg>
++  );
++}

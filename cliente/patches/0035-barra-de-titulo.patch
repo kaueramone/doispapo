@@ -1,0 +1,40 @@
+diff --git a/packages/client/components/app/interface/desktop/Titlebar.tsx b/packages/client/components/app/interface/desktop/Titlebar.tsx
+index ea44dee..cb0959e 100644
+--- a/packages/client/components/app/interface/desktop/Titlebar.tsx
++++ b/packages/client/components/app/interface/desktop/Titlebar.tsx
+@@ -26,13 +26,19 @@ export function Titlebar() {
+   );
+   const { lifecycle } = useClientLifecycle();
+ 
++  /**
++   * A conexao caiu, ou nunca se completou depois de ter existido.
++   *
++   * `Connecting` saiu desta lista de proposito. Ele cobre a carga inicial, em
++   * que a tela de entrada ja mostra a marca se remontando -- a barra azul por
++   * cima dela era um segundo aviso da mesma coisa, e o unico que ficava
++   * escrito. Perder a conexao no meio do uso continua avisando: ali a pessoa
++   * precisa saber, e precisa do "reconectar agora".
++   */
+   function isDisconnected() {
+-    return [
+-      State.Connecting,
+-      State.Disconnected,
+-      State.Reconnecting,
+-      State.Offline,
+-    ].includes(lifecycle.state());
++    return [State.Disconnected, State.Reconnecting, State.Offline].includes(
++      lifecycle.state(),
++    );
+   }
+ 
+   function maximise() {
+@@ -79,9 +85,6 @@ export function Titlebar() {
+               }}
+             >
+               <Switch>
+-                <Match when={lifecycle.state() === State.Connecting}>
+-                  Connecting
+-                </Match>
+                 {/* <Match when={lifecycle.state() === State.Connected}>Connected</Match> */}
+                 <Match when={lifecycle.state() === State.Disconnected}>
+                   Disconnected

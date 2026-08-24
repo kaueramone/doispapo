@@ -1,8 +1,21 @@
 diff --git a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx
-index cb34678..d16e52c 100644
+index cb34678..c9445a0 100644
 --- a/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx
 +++ b/packages/client/components/ui/components/features/voice/callCard/VoiceCallCard.tsx
-@@ -20,9 +20,9 @@ import { useVoice } from "@revolt/rtc";
+@@ -2,10 +2,12 @@ import {
+   JSX,
+   Match,
+   Show,
++  Suspense,
+   Switch,
+   createContext,
+   createEffect,
+   createSignal,
++  lazy,
+   onCleanup,
+   onMount,
+   useContext,
+@@ -20,9 +22,27 @@ import { useVoice } from "@revolt/rtc";
  import { useState } from "@revolt/state";
  import { SlideState } from "@revolt/ui/components/navigation/SlideDrawer";
  
@@ -10,10 +23,54 @@ index cb34678..d16e52c 100644
  import { VoiceCallCardActiveRoom } from "./VoiceCallCardActiveRoom";
  import { VoiceCallCardPiP } from "./VoiceCallCardPiP";
 -import { VoiceCallCardPreview } from "./VoiceCallCardPreview";
++
++/**
++ * Faixa de presenca, carregada sob demanda.
++ *
++ * O import direto fecha um ciclo: a faixa le a lista de participantes do
++ * `VoiceChannelPreview`, que traz o menu de contexto de `@revolt/app`,
++ * que por sua vez chega de volta a este arquivo pelo ponto de montagem do
++ * cartao. O bundle sobe com os modulos do ciclo meio inicializados e o
++ * app morre antes de montar, com um `Cannot access '...' before
++ * initialization` -- foi exatamente o que o portao de fumaca pegou.
++ *
++ * O `lazy` corta a aresta: vira um pedaco separado, buscado quando a
++ * faixa aparece pela primeira vez, e a ordem de inicializacao volta a ser
++ * uma arvore.
++ */
++const FaixaDePresenca = lazy(() =>
++  import("../FaixaDePresenca").then((m) => ({ default: m.FaixaDePresenca })),
++);
  
  type Mode = "floating" | "moving";
  type FloatType = "tl" | "tr" | "bl" | "br";
-@@ -134,6 +134,14 @@ export function VoiceCallCardContext(props: { children: JSX.Element }) {
+@@ -109,10 +129,18 @@ export function VoiceCallCardContext(props: { children: JSX.Element }) {
+     if (voice.fullscreen()) {
+       sty.transform = ``;
+       sty.width = `100%`;
++      // A altura inline do palco venceria o `100vh` da variante de tela
++      // cheia. Limpar devolve a regra ao CSS.
++      sty.height = ``;
+       setMode();
+     } else if (inf?.pos && (!inf.drawer || inf.drawer === SlideState.SHOWN)) {
+       sty.transform = `translate(${inf.pos.x}px, ${inf.pos.y}px)`;
+       sty.width = `${inf.pos.width}px`;
++      // A altura tambem vem do marcador. Ela era fixa (40vh no CSS) porque
++      // o cartao era uma janela sobre o historico; agora o marcador ocupa a
++      // area principal inteira do canal de voz, e o palco tem de acompanhar
++      // -- inclusive quando o painel de chat abre e a area encolhe.
++      sty.height = `${inf.pos.height}px`;
+       setMode();
+     } else if (!inCall()) {
+       const y = inf?.pos.y ?? ref.getBoundingClientRect().y;
+@@ -129,11 +157,21 @@ export function VoiceCallCardContext(props: { children: JSX.Element }) {
+       y = float[0] === "t" ? PAD_Y : `calc(100vh - var(--flt-h) - ${PAD_Y})`;
+     sty.transform = `translate(${x}, ${y})`;
+     sty.width = "";
++    // Idem: flutuando, quem manda sao as medidas de miniatura (--flt-w/h).
++    sty.height = "";
+     setMode("floating");
+   }
  
    onCleanup(resetEvents);
  
@@ -28,7 +85,7 @@ index cb34678..d16e52c 100644
    onMount(() => {
      document
        .getElementById("floating")
-@@ -172,7 +180,13 @@ export function VoiceCallCardContext(props: { children: JSX.Element }) {
+@@ -172,7 +210,13 @@ export function VoiceCallCardContext(props: { children: JSX.Element }) {
            fullscreen={voice.fullscreen()}
          >
            <Switch>
@@ -43,25 +100,128 @@ index cb34678..d16e52c 100644
                <VoiceCallCardPiP />
              </Match>
              <Match when={channel()}>
-@@ -274,16 +288,14 @@ function VoiceCallCard(props: {
+@@ -180,6 +224,7 @@ export function VoiceCallCardContext(props: { children: JSX.Element }) {
+                 channel={channel()!}
+                 inCall={inCall()}
+                 showCard={voice.showCard(channel()!)}
++                temVideo={voice.hasVisual()}
+                 fullscreen={voice.fullscreen()}
+               />
+             </Match>
+@@ -262,25 +307,51 @@ export function VoiceChannelCallCardMount(props: { channel: Channel }) {
+     setInfo();
+   });
+ 
+-  return <div ref={ref!} />;
++  // O marcador deixou de ser um ponto e passou a ser a area.
++  //
++  // Ele nasceu como um `<div>` vazio no topo do historico, so para dizer
++  // ao cartao flutuante onde se ancorar. Num canal de voz o historico saiu
++  // da area principal, e o que sobra e este marcador -- entao ele cresce
++  // para ocupar tudo, e o palco recebe do `getBoundingClientRect` a
++  // posicao E a altura da area.
++  return <div ref={ref!} style={{ "flex-grow": 1, "min-height": 0 }} />;
+ }
+ 
+ /**
+  * Call card
+  */
++/**
++ * Palco do canal de voz.
++ *
++ * Tres estados, todos ocupando a area principal inteira:
++ *
++ * - **fora da chamada** -- o cartao de entrada, com quem ja esta la dentro.
++ *   E o componente original do upstream, que o patch da janela flutuante
++ *   tinha aposentado; aqui ele volta ao papel para o qual foi escrito.
++ * - **dentro, sem video** -- os participantes, grandes, no centro.
++ * - **dentro, com video** -- a grade de quadros.
++ *
++ * O historico nao mora mais aqui: num canal de voz ele vive no painel da
++ * direita, aberto pelo icone de chat no cabecalho.
++ */
+ function VoiceCallCard(props: {
+   channel: Channel;
+   inCall: boolean;
    showCard: boolean;
++  temVideo: boolean;
    fullscreen: boolean;
  }) {
-+  // There is no longer a "join the call" state to fall back to: opening a
-+  // voice channel connects you, and `showCard` is only true once someone is
-+  // publishing video or a screen — so reaching here means the room is live.
    return (
      <Show when={props.showCard}>
        <Base fullscreen={props.fullscreen}>
 -        <Card active={props.inCall} fullscreen={props.fullscreen}>
--          <Show
++        <Card active fullscreen={props.fullscreen}>
+           <Show
 -            when={props.inCall}
 -            fallback={<VoiceCallCardPreview channel={props.channel} />}
--          >
--            <VoiceCallCardActiveRoom />
--          </Show>
-+        <Card active fullscreen={props.fullscreen}>
-+          <VoiceCallCardActiveRoom />
-         </Card>
-       </Base>
-     </Show>
++            when={props.temVideo}
++            fallback={
++              <Suspense>
++                <FaixaDePresenca palco />
++              </Suspense>
++            }
+           >
+             <VoiceCallCardActiveRoom />
+           </Show>
+@@ -292,8 +363,10 @@ function VoiceCallCard(props: {
+ 
+ const Base = styled("div", {
+   base: {
+-    left: 0,
+-    top: "var(--gap-md)",
++    // Preenche o marcador, que agora e a area principal inteira. Era
++    // `top: var(--gap-md)` com altura livre: uma janela pousada no topo do
++    // historico. Sem historico embaixo, nao ha o que pousar em cima.
++    inset: 0,
+     padding: "var(--gap-md)",
+ 
+     width: "100%",
+@@ -309,8 +382,6 @@ const Base = styled("div", {
+   variants: {
+     fullscreen: {
+       true: {
+-        top: 0,
+-        height: "100%",
+         padding: 0,
+       },
+     },
+@@ -326,12 +397,21 @@ const Card = styled("div", {
+     transitionTimingFunction: "ease-in-out",
+ 
+     borderRadius: "var(--borderRadius-lg)",
+-    background: "var(--md-sys-color-secondary-container)",
++
++    // Um degrau de cinza acima da barra lateral, como no Discord: o palco
++    // e o foco da tela e nao pode competir com ela. Era
++    // `secondary-container`, o azul do tema -- aceitavel numa janela de
++    // 40vh, demais quando toma a pagina.
++    background: "var(--md-sys-color-surface-container)",
+   },
+   variants: {
+     active: {
+       true: {
+         width: "100%",
++        // O palco ocupa a altura toda: quem a define agora e o marcador,
++        // medido a cada mudanca de tamanho da area. O `40vh` que existia
++        // aqui era a altura de uma janela sobre o historico.
++        height: "100%",
+       },
+       false: {
+         width: "360px",
+@@ -347,15 +427,6 @@ const Card = styled("div", {
+       false: {},
+     },
+   },
+-  compoundVariants: [
+-    {
+-      active: [true],
+-      fullscreen: [false],
+-      css: {
+-        height: "40vh",
+-      },
+-    },
+-  ],
+   defaultVariants: {
+     active: false,
+     fullscreen: false,

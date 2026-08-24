@@ -1,0 +1,41 @@
+diff --git a/packages/client/components/ui/components/design/MenuButton.tsx b/packages/client/components/ui/components/design/MenuButton.tsx
+index c851d03..45233a0 100644
+--- a/packages/client/components/ui/components/design/MenuButton.tsx
++++ b/packages/client/components/ui/components/design/MenuButton.tsx
+@@ -189,10 +189,12 @@ const base = cva({
+       normal: {
+         "--color": "var(--md-sys-color-outline)",
+         background: "transparent",
++        _hover: { background: "var(--md-sys-color-surface-container)" },
+       },
+       muted: {
+         "--color": "var(--md-sys-color-outline-variant)",
+         background: "transparent",
++        _hover: { background: "var(--md-sys-color-surface-container)" },
+ 
+         "& img": {
+           opacity: "0.3",
+@@ -201,10 +203,21 @@ const base = cva({
+       active: {
+         "--color": "var(--md-sys-color-on-surface)",
+         background: "transparent",
++        _hover: { background: "var(--md-sys-color-surface-container)" },
+       },
++      /**
++       * Item selecionado em cinza neutro, nao no azul do Material.
++       *
++       * `primary-container` e a cor de destaque do tema (#384379): um azul
++       * saturado que puxa o olho para a lista de canais e briga com o
++       * conteudo. O `surface-container-high` (#292a2f) e o degrau de cinza
++       * logo acima do fundo da barra -- praticamente o #2C2C30 que o
++       * Discord usa, e vindo do proprio sistema de cores, nao de um hex
++       * solto que ficaria errado se o tema mudar.
++       */
+       selected: {
+-        "--color": "var(--md-sys-color-on-primary-container)",
+-        background: "var(--md-sys-color-primary-container)",
++        "--color": "var(--md-sys-color-on-surface)",
++        background: "var(--md-sys-color-surface-container-high)",
+       },
+     },
+   },

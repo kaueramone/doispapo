@@ -1,5 +1,5 @@
 diff --git a/packages/client/src/interface/channels/ChannelHeader.tsx b/packages/client/src/interface/channels/ChannelHeader.tsx
-index 6525f97..3b16eb4 100644
+index 6525f97..047849a 100644
 --- a/packages/client/src/interface/channels/ChannelHeader.tsx
 +++ b/packages/client/src/interface/channels/ChannelHeader.tsx
 @@ -141,7 +141,21 @@ export function ChannelHeader(props: Props) {
@@ -24,4 +24,39 @@ index 6525f97..3b16eb4 100644
 +      >
          <IconButton
            onPress={() => voice.connect(props.channel)}
+           use:floating={{
+@@ -202,6 +216,34 @@ export function ChannelHeader(props: Props) {
+         </Button>
+       </Show>
+ 
++      {/*
++        Historico do canal de voz.
++        
++        Num canal de voz a area principal e o palco da chamada -- o chat
++        continua existindo, mas deixa de ser o centro da pagina e passa a
++        ser uma gaveta, aberta por este icone. Em canal de texto o botao
++        nao aparece: la o historico ja e a tela.
++      */}
++      <Show when={props.sidebarState && props.channel.isVoice}>
++        <IconButton
++          onPress={() =>
++            props.setSidebarState!(
++              props.sidebarState!().state === "chat"
++                ? { state: "default" }
++                : { state: "chat" },
++            )
++          }
++          use:floating={{
++            tooltip: {
++              placement: "bottom",
++              content: t`Chat`,
++            },
++          }}
++        >
++          <Symbol>chat</Symbol>
++        </IconButton>
++      </Show>
++
+       <Show when={props.sidebarState}>
+         <IconButton
            use:floating={{

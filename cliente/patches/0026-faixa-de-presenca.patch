@@ -1,0 +1,71 @@
+diff --git a/packages/client/components/ui/components/features/voice/FaixaDePresenca.tsx b/packages/client/components/ui/components/features/voice/FaixaDePresenca.tsx
+new file mode 100644
+index 0000000..299b41c
+--- /dev/null
++++ b/packages/client/components/ui/components/features/voice/FaixaDePresenca.tsx
+@@ -0,0 +1,65 @@
++/**
++ * Presenca da chamada sem video.
++ *
++ * A fonte e o `vidTracks`, construido com `withPlaceholder: true` -- uma
++ * entrada por participante, mesmo sem ninguem publicando. E justamente o
++ * dado que o `visualTracks()` filtra fora por nao medir video: inutil
++ * para a grade, exato para mostrar quem esta na sala.
++ *
++ * Duas formas, uma so lista:
++ *
++ * - `palco` -- os participantes grandes, centrados, ocupando a area
++ *   principal do canal de voz. E o estado normal de uma conversa so de
++ *   audio, que e a maioria delas.
++ * - sem `palco` -- uma faixa fina, para quando isto precisar dividir
++ *   espaco com outra coisa.
++ *
++ * Sem texto de proposito. Um rotulo aqui exigiria um msgId novo, que o
++ * catalogo compilado nao tem -- apareceria em ingles ate alguem traduzir,
++ * para ganhar pouco: o rodape da lista de canais ja diz "Voz conectada".
++ */
++import { styled } from "styled-system/jsx";
++
++import { PresencaAoVivo } from "./VoiceChannelPreview";
++
++const Faixa = styled("div", {
++  base: {
++    // O Float que envolve isto e `pointer-events: none`, para o clique
++    // atravessar. A faixa reativa em si mesma, senao os indicadores de
++    // cada pessoa nao respondem ao ponteiro.
++    pointerEvents: "auto",
++
++    width: "100%",
++    display: "flex",
++    alignItems: "center",
++    justifyContent: "center",
++
++    overflowX: "auto",
++    overflowY: "hidden",
++  },
++  variants: {
++    palco: {
++      true: {
++        height: "100%",
++        padding: "var(--gap-lg)",
++      },
++      false: {
++        height: "112px",
++        padding: "0 var(--gap-md)",
++        borderRadius: "var(--borderRadius-lg)",
++        background: "var(--md-sys-color-secondary-container)",
++      },
++    },
++  },
++  defaultVariants: {
++    palco: false,
++  },
++});
++
++export function FaixaDePresenca(props: { palco?: boolean }) {
++  return (
++    <Faixa palco={props.palco}>
++      <PresencaAoVivo faixa={!props.palco} palco={props.palco} />
++    </Faixa>
++  );
++}

@@ -1,0 +1,41 @@
+diff --git a/packages/client/src/LoadingScreen.tsx b/packages/client/src/LoadingScreen.tsx
+index 124d033..356c0d5 100644
+--- a/packages/client/src/LoadingScreen.tsx
++++ b/packages/client/src/LoadingScreen.tsx
+@@ -2,7 +2,8 @@ import { Trans, useLingui } from "@lingui-solid/solid/macro";
+ import { JSX, Show, createSignal, onCleanup, onMount } from "solid-js";
+ import { styled } from "styled-system/jsx";
+ 
+-import { Button, CircularProgress, Symbol, Text } from "@revolt/ui";
++import { Button, Symbol, Text } from "@revolt/ui";
++import { MarcaCarregando } from "@revolt/ui/components/utils/MarcaCarregando";
+ 
+ /**
+  * Stoat status page URL
+@@ -137,8 +138,13 @@ export function LoadingScreen() {
+ 
+   return (
+     <Base>
++      {/*
++        A marca no lugar do anel de progresso. Um anel generico serve a
++        qualquer app; a primeira tela e onde a marca tem mais a dizer, e o
++        movimento de se remontar diz "esta vindo" sem precisar escrever.
++      */}
+       <Spinner>
+-        <CircularProgress />
++        <MarcaCarregando size={96} />
+       </Spinner>
+ 
+       <Show when={notice()} keyed>
+@@ -227,8 +233,9 @@ const Base = styled("div", {
+ const Spinner = styled("div", {
+   base: {
+     flexShrink: 0,
+-    width: "48px",
+-    height: "48px",
++    display: "flex",
++    alignItems: "center",
++    justifyContent: "center",
+   },
+ });
+ 

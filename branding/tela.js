@@ -190,10 +190,27 @@
       '.dp-tela-capa button{cursor:pointer;border:0;border-radius:9px;' +
         'padding:9px 20px;font:650 13px system-ui,sans-serif;color:#fff;' +
         'background:linear-gradient(100deg,#2E8BEB,#8C41D9)}' +
-      '.dp-tela-parar{position:absolute;right:9px;top:9px;z-index:6;' +
-        'cursor:pointer;border:0;border-radius:8px;padding:6px 12px;' +
-        'font:600 12px system-ui,sans-serif;color:#e8edf6;' +
-        'background:rgba(11,17,25,.72)}';
+      /* Embaixo, ao centro: e onde o controle de video mora em todo
+         lugar, e sai de cima do conteudo que a pessoa esta assistindo --
+         o canto superior direito costuma ser justamente onde ficam o
+         placar do jogo e a barra de ferramentas do que se compartilha.
+
+         Discreto parado, firme no hover: nao e um botao que se procura o
+         tempo todo, mas quando se procura tem de estar claro. */
+      /* Acima de tudo que o quadro desenha por cima do video -- o nome
+         de quem transmite e os indicadores ficam na mesma celula da
+         grade, e o botao estava perdendo para eles. */
+      '.dp-tela-parar{position:absolute;left:50%;bottom:12px;z-index:30;' +
+        'transform:translateX(-50%);cursor:pointer;border:0;' +
+        'border-radius:999px;padding:8px 17px;' +
+        'font:600 12.5px system-ui,sans-serif;color:#e8edf6;' +
+        'background:rgba(11,17,25,.6);backdrop-filter:blur(6px);' +
+        'opacity:.5;transition:opacity .15s ease,background .15s ease,' +
+        'transform .15s ease}' +
+      /* O translateX tem de vir junto no hover: sem ele o botao pula para
+         a esquerda no instante em que o mouse chega. */
+      '.dp-tela-parar:hover{opacity:1;background:rgba(11,17,25,.92);' +
+        'transform:translateX(-50%) translateY(-2px)}';
     document.head.appendChild(e);
   }
 
@@ -313,6 +330,31 @@
     } catch (e) { return null; }
   }
 
+  /* Anuncia quais telas eu estou assistindo.
+
+     Quem clica em "assistir" era o unico que sabia disso: a assinatura
+     sob demanda e uma decisao local, e o quadro dos outros continuava
+     dizendo apenas quem compartilha.
+
+     Aqui so avisamos, por evento. Quem publica de fato e o cliente
+     compilado, do outro lado da injecao: publicar exige uma chamada
+     autenticada ao nosso servico, porque o token que o navegador recebe
+     vem SEM permissao de escrever os proprios atributos -- o
+     `setAttributes` daqui era recusado calado pelo LiveKit.
+
+     Vai o conjunto inteiro a cada mudanca, e nao o que mudou: e o estado
+     completo, entao nao ha como duas mudancas rapidas deixarem a lista
+     pela metade. */
+  function publicarAssistindo() {
+    try {
+      var nome = window.dpSalaNome && window.dpSalaNome();
+      if (!nome) return;
+      window.dispatchEvent(new CustomEvent("dp-assistindo", {
+        detail: { sala: nome, faixas: Object.keys(assistindo) }
+      }));
+    } catch (e) {}
+  }
+
   function marcarAssistido(pub, ligado) {
     try {
       var lista = [pub, irmaDeAudio(pub)];
@@ -330,6 +372,7 @@
           try { p.setSubscribed(false); } catch (e) {}
         }
       }
+      publicarAssistindo();
     } catch (e) {}
   }
 
@@ -443,8 +486,10 @@
         marcarAssistido(pub, ligado);
       } else if (ligado) {
         assistindo[s] = true;      // ainda nao vimos a publicacao
+        publicarAssistindo();
       } else {
         delete assistindo[s];
+        publicarAssistindo();
       }
     } catch (e) {}
   };

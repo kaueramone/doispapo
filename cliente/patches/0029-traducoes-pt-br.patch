@@ -1,0 +1,22 @@
+diff --git a/packages/client/components/i18n/catalogs/pt-BR/messages.po b/packages/client/components/i18n/catalogs/pt-BR/messages.po
+index 0cd1600..a5f9708 100644
+--- a/packages/client/components/i18n/catalogs/pt-BR/messages.po
++++ b/packages/client/components/i18n/catalogs/pt-BR/messages.po
+@@ -2969,7 +2969,7 @@ msgstr ""
+ 
+ #: components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx
+ msgid "Start the call"
+-msgstr ""
++msgstr "Começar a chamada"
+ 
+ #: components/app/interface/settings/user/Native.tsx
+ msgid "Start with Computer"
+@@ -3527,7 +3527,7 @@ msgstr ""
+ #. placeholder {0}: names.join(", ")
+ #: components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx
+ msgid "With {0}"
+-msgstr ""
++msgstr "Com {0}"
+ 
+ #: components/modal/modals/CreateGroupOrServer.tsx
+ msgid "Would you like to create a new group or server?"

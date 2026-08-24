@@ -1,5 +1,5 @@
 diff --git a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
-index fa1ef5a..618a092 100644
+index fa1ef5a..2db7af5 100644
 --- a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
 +++ b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
 @@ -6,6 +6,7 @@ import {
@@ -19,15 +19,17 @@ index fa1ef5a..618a092 100644
  import { useState } from "@revolt/state";
  import {
    Column,
-@@ -34,6 +35,7 @@ import {
+@@ -33,7 +34,9 @@ import {
+   symbolSize,
    typography,
  } from "@revolt/ui";
++import { canalSobOPonteiro } from "@revolt/ui/components/features/voice/arrastar-usuario";
  import { VoiceChannelPreview } from "@revolt/ui/components/features/voice/VoiceChannelPreview";
 +import { VoiceDock } from "@revolt/ui/components/features/voice/VoiceDock";
  import { createDragHandle } from "@revolt/ui/components/utils/Draggable";
  import { Symbol } from "@revolt/ui/components/utils/Symbol";
  
-@@ -93,6 +95,34 @@ export const ServerSidebar = (props: Props) => {
+@@ -93,6 +96,34 @@ export const ServerSidebar = (props: Props) => {
    const navigate = useNavigate();
    const { isMobile } = useDevice();
  
@@ -62,7 +64,7 @@ index fa1ef5a..618a092 100644
    // Users can manage certain parts of the server individually, regardless of their ManageServer Permission
    const canManageServer = () =>
      props.server.orPermission(
-@@ -252,6 +282,7 @@ export const ServerSidebar = (props: Props) => {
+@@ -252,6 +283,7 @@ export const ServerSidebar = (props: Props) => {
            )}
          </Draggable>
        </div>
@@ -70,10 +72,34 @@ index fa1ef5a..618a092 100644
      </SidebarBase>
    );
  };
-@@ -494,6 +525,20 @@ function Entry(
+@@ -490,14 +522,47 @@ function Entry(
+             : "normal",
+   );
+ 
++  /**
++   * Recebe alguem arrastado de outro canal de voz.
++   *
++   * A soltura so avisa o servidor -- ele confere o cargo de quem pediu,
++   * descobre onde a pessoa esta e manda o cliente dela mudar de canal.
++   * Nada aqui decide se o movimento pode acontecer.
++   */
++  const alvoDeSoltura = () =>
++    props.channel.isVoice && canalSobOPonteiro() === props.channel.id;
++
+   return (
      <Column gap="sm">
        <MenuButton
          href={`/server/${props.channel.serverId}/channel/${props.channel.id}`}
++        /*
++          A marca que faz deste canal um destino de soltura.
++
++          Quem procura o destino e o `arrastar-usuario.ts`, com
++          `elementFromPoint` sobre as coordenadas em que a pessoa soltou.
++          Nao ha `onDrop` porque nao ha arrasta-e-solta do navegador aqui
++          -- ele nunca chegou a comecar dentro da zona de reordenacao.
++        */
++        data-canal-voz={props.channel.isVoice ? props.channel.id : undefined}
++        attention={alvoDeSoltura() ? "selected" : attentionState()}
 +        /*
 +          Double click on a voice channel connects; single click just opens it
 +          so you can read along without joining. Connecting while already
@@ -91,3 +117,7 @@ index fa1ef5a..618a092 100644
          use:floating={props.menuGenerator(props.channel)}
          size="normal"
          alert={alertState()}
+-        attention={attentionState()}
+         icon={
+           <>
+             <Switch fallback={<Symbol>grid_3x3</Symbol>}>

@@ -1,14 +1,14 @@
 diff --git a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
-index 6df8439..f63b1b8 100644
+index 6df8439..7d141c2 100644
 --- a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 +++ b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 @@ -1,4 +1,4 @@
 -import { createSignal, Show } from "solid-js";
-+import { createSignal, onCleanup, onMount, Show } from "solid-js";
++import { For, createSignal, onCleanup, onMount, Show } from "solid-js";
  import {
    TrackReference,
    useEnsureParticipant,
-@@ -8,11 +8,16 @@ import {
+@@ -8,12 +8,17 @@ import {
    VideoTrack,
  } from "solid-livekit-components";
  
@@ -22,11 +22,13 @@ index 6df8439..f63b1b8 100644
 +import MdOpenInNew from "@material-design-icons/svg/outlined/open_in_new.svg?component-solid";
 +
  import { UserContextMenu } from "@revolt/app";
+-import { useUser } from "@revolt/markdown/users";
 +import { ContextMenuButton } from "@revolt/app/menus/ContextMenu";
- import { useUser } from "@revolt/markdown/users";
++import { useUser, useUsers } from "@revolt/markdown/users";
  import { useVoice } from "@revolt/rtc";
  import { useState } from "@revolt/state";
-@@ -21,6 +26,12 @@ import { Row } from "@revolt/ui/components/layout";
+ import { Avatar } from "@revolt/ui/components/design";
+@@ -21,24 +26,190 @@ import { Row } from "@revolt/ui/components/layout";
  import { OverflowingText } from "@revolt/ui/components/utils";
  import { Symbol } from "@revolt/ui/components/utils/Symbol";
  
@@ -39,7 +41,97 @@ index 6df8439..f63b1b8 100644
  import { VoiceStatefulUserIcons } from "../VoiceStatefulUserIcons";
  
  type TileProps = {
-@@ -33,12 +44,86 @@ type TileProps = {
+   focus?: boolean;
+ };
+ 
++/**
++ * Fila de quem esta assistindo, no canto do quadro.
++ *
++ * `grid-area: 1/1` porque o quadro e uma grade de uma celula so -- o video
++ * ocupa a mesma, e sem isto a fila empurraria o layout em vez de pousar em
++ * cima dele.
++ */
++const Espectadores = styled("div", {
++  base: {
++    gridArea: "1/1",
++    justifySelf: "end",
++    alignSelf: "start",
++    zIndex: 2,
++
++    display: "flex",
++    alignItems: "center",
++    gap: "var(--gap-xs)",
++
++    margin: "var(--gap-sm)",
++    padding: "3px 6px",
++    borderRadius: "var(--borderRadius-full)",
++    background: "rgba(0, 0, 0, .55)",
++    backdropFilter: "blur(4px)",
++    pointerEvents: "auto",
++  },
++});
++
++/**
++ * Indice de condicoes, no canto superior esquerdo do quadro.
++ *
++ * Numeros alinhados em tabular para nao dancarem a cada leitura -- eles
++ * mudam de dois em dois segundos, e largura variavel faria a linha inteira
++ * tremer no canto da tela.
++ */
++const Condicoes = styled("div", {
++  base: {
++    gridArea: "1/1",
++    justifySelf: "start",
++    alignSelf: "start",
++    zIndex: 2,
++    pointerEvents: "none",
++
++    display: "flex",
++    alignItems: "center",
++    gap: "4px",
++
++    margin: "var(--gap-sm)",
++    padding: "2px 7px",
++    borderRadius: "var(--borderRadius-md)",
++
++    fontSize: "0.6875rem",
++    fontWeight: 500,
++    fontVariantNumeric: "tabular-nums",
++    fontFamily: "var(--fonts-monospace, ui-monospace, monospace)",
++
++    color: "rgba(255, 255, 255, .72)",
++    background: "rgba(0, 0, 0, .45)",
++    backdropFilter: "blur(4px)",
++
++    "& i": {
++      fontStyle: "normal",
++      opacity: 0.4,
++    },
++  },
++  variants: {
++    /**
++     * So muda de cor quando ha o que dizer. Um indicador que vive colorido
++     * vira parte do fundo, e ai nao avisa mais nada.
++     */
++    gravidade: {
++      atencao: { color: "#F0C674" },
++      ruim: { color: "#F08579", background: "rgba(60, 12, 8, .55)" },
++    },
++  },
++});
++
++const Excedente = styled("span", {
++  base: {
++    fontSize: "0.6875rem",
++    fontWeight: 500,
++    color: "#fff",
++    paddingInline: "2px",
++  },
++});
++
+ /**
+  * Individual participant tile
+  */
  export function ParticipantTile(props: TileProps) {
    const voice = useVoice();
    const state = useState();
@@ -51,6 +143,7 @@ index 6df8439..f63b1b8 100644
    let videoRef: HTMLVideoElement | undefined;
  
 +  const idFaixa = () => voice.trackId(track);
++
 +  const [emJanela, setEmJanela] = createSignal(estaAberta(idFaixa()));
 +  onMount(() => onCleanup(aoMudarDestacados((ids) =>
 +    setEmJanela(ids.includes(idFaixa())))));
@@ -126,7 +219,396 @@ index 6df8439..f63b1b8 100644
    const [videoDims, setVideoDims] = createSignal<{
      height: number;
      width: number;
-@@ -86,13 +171,34 @@ export function ParticipantTile(props: TileProps) {
+@@ -71,6 +242,388 @@ export function ParticipantTile(props: TileProps) {
+ 
+   const isVideo = () => !isVideoMuted();
+   const isScreenShare = () => track.source === Track.Source.ScreenShare;
++
++  /**
++   * Quem esta assistindo a esta tela.
++   *
++   * So faz sentido em tela compartilhada: camera e audio chegam a todos, e
++   * uma lista de "espectadores" ali seria a sala inteira, sempre.
++   *
++   * A POSICAO desta declaracao importa. `useUsers` monta um `createMemo`,
++   * que roda o calculo na hora em que e criado -- e o calculo le
++   * `isScreenShare`. Declarado antes dele, o memo caia na zona morta
++   * temporal e derrubava o quadro inteiro, video junto: foi o que fez as
++   * telas e as cameras sumirem da chamada. Mesma armadilha que ja quebrou
++   * a 0.36.0 e a faixa de presenca.
++   */
++  const espectadores = () =>
++    isScreenShare()
++      ? voice.quemAssiste((track as TrackReference).publication?.trackSid)
++      : [];
++  const quemAssiste = useUsers(espectadores, true);
++
++  /**
++   * Condicoes da transmissao: quadros por segundo, atraso e perda.
++   *
++   * A perda vem da DIFERENCA entre duas leituras, nao do total acumulado.
++   * O contador do WebRTC soma desde o inicio da faixa: meia hora depois de
++   * um engasgo de dez segundos, o acumulado ainda acusaria perda numa
++   * transmissao que ha muito voltou ao normal. O que interessa aqui e
++   * agora.
++   */
++  const [condicoes, setCondicoes] = createSignal<{
++    fps?: number;
++    perda?: number;
++    altura?: number;
++    /**
++     * So no PROPRIO quadro: o que esta segurando o codificador.
++     *
++     * Este numero nao existe em lugar nenhum do servidor. Quem transmite e
++     * o unico que sabe se os quadros estao caindo por falta de processador
++     * ou por falta de banda -- e sao problemas com solucoes opostas. Sem
++     * ele so restava adivinhar.
++     */
++    limite?: "cpu" | "banda" | "outro";
++    /** So no proprio quadro: milissegundos gastos para codificar cada quadro. */
++    msQuadro?: number;
++    /** So nos quadros recebidos: congelamentos desde a leitura anterior. */
++    travadas?: number;
++    /**
++     * So no proprio quadro: o codificador esta PARADO.
++     *
++     * Nao e o mesmo que ir mal. Com `dynacast`, camada que ninguem assina
++     * deixa de ser enviada, e a linha de saida vem sem quadro nenhum. A
++     * primeira medicao que chegou ao servidor veio assim, toda vazia -- e
++     * foi ela que denunciou o problema: nao havia nada de errado com a
++     * rede, a transmissao e que estava sendo desligada e religada.
++     */
++    pausado?: boolean;
++    /**
++     * So no proprio quadro: quantos quadros por segundo a CAPTURA esta
++     * entregando, antes de codificar.
++     *
++     * E a medida que fecha o cerco. Se a captura entrega 21 e o envio sai
++     * a 21, o codificador nao esta largando nada -- quem nao esta
++     * produzindo 30 quadros e a tela, e ai o problema esta na origem, nao
++     * no caminho. Se a captura entrega 30 e o envio sai a 21, ai sim o
++     * gargalo e daqui para a frente.
++     */
++    capturaFps?: number;
++    /**
++     * So no proprio quadro: segundos acumulados em que o codificador
++     * esteve segurado por processador e por banda.
++     *
++     * `limite` e uma foto do instante da leitura e some entre uma amostra
++     * e outra -- inutil para um problema que OSCILA. Estes contadores sao
++     * acumulados: um aperto de meio segundo entre duas leituras nao
++     * escapa deles.
++     */
++    segCpu?: number;
++    segBanda?: number;
++    /**
++     * Quem esta codificando ou decodificando: peca de silicio ou software.
++     *
++     * O navegador diz o nome do motor em `encoderImplementation` /
++     * `decoderImplementation`. Nomes com "MediaFoundation", "NVENC",
++     * "D3D11" ou "External" sao aceleracao por hardware; "libvpx",
++     * "OpenH264" e "ffmpeg" sao software puro.
++     *
++     * Isto nao da para adivinhar de fora, e muda o que faz sentido
++     * corrigir: VP8 praticamente nao tem codificador em hardware, entao
++     * uma maquina inteira pode estar codificando tela no processador sem
++     * ninguem perceber.
++     */
++    motor?: string;
++    /** O codec de fato em uso (VP8, H264, AV1...). */
++    codec?: string;
++  }>({});
++
++  /**
++   * Um respiro de reproducao nas telas recebidas.
++   *
++   * Numa rota longa -- Portugal ao Brasil, por exemplo -- os pacotes nao
++   * chegam so mais tarde: chegam em intervalos irregulares. Sem folga, o
++   * navegador exibe cada quadro assim que ele chega e engasga a cada
++   * atraso; com 250 ms de folga ele tem de onde tirar o proximo quadro
++   * enquanto o seguinte nao chegou.
++   *
++   * Um quarto de segundo e alto para conversa e barato para tela: ninguem
++   * percebe atraso no que esta sendo mostrado, e o movimento para de
++   * picotar.
++   */
++  onMount(() => {
++    if (!isScreenShare()) return;
++    const faixa = (track as TrackReference).publication?.track;
++    if (faixa instanceof RemoteVideoTrack) {
++      try {
++        faixa.setPlayoutDelay(0.25);
++      } catch {
++        /* navegador sem suporte segue sem folga, como antes */
++      }
++    }
++  });
++
++  onMount(() => {
++    let antes:
++      | {
++          perdidos: number;
++          recebidos: number;
++          travadas: number;
++          tempoCodifica: number;
++          quadrosCodificados: number;
++        }
++      | undefined;
++    let voltas = 0;
++
++    /** Entre varias camadas, a limitacao mais grave manda. */
++    const peso = { cpu: 3, banda: 2, outro: 1 } as const;
++
++    const relogio = setInterval(async () => {
++      const faixa = (track as TrackReference).publication?.track;
++      if (!faixa || typeof faixa.getRTCStatsReport !== "function") return;
++
++      let relatorio;
++      try {
++        relatorio = await faixa.getRTCStatsReport();
++      } catch {
++        return;
++      }
++      if (!relatorio) return;
++
++      // Duas passadas, nao uma. A ordem em que o navegador entrega as
++      // linhas nao e garantida, e decidir "isto e meu ou e dos outros"
++      // no meio do laco depende de ja ter visto a linha certa.
++      const saidas: Record<string, number | string>[] = [];
++      const entradas: Record<string, number | string>[] = [];
++      relatorio.forEach((s: Record<string, number | string>) => {
++        if (s.kind !== "video") return;
++        if (s.type === "outbound-rtp") saidas.push(s);
++        else if (s.type === "inbound-rtp") entradas.push(s);
++      });
++
++      let fps: number | undefined,
++        altura: number | undefined,
++        perda: number | undefined,
++        limite: "cpu" | "banda" | "outro" | undefined,
++        msQuadro: number | undefined,
++        travadas: number | undefined,
++        pausado: boolean | undefined,
++        capturaFps: number | undefined,
++        segCpu: number | undefined,
++        segBanda: number | undefined,
++        motor: string | undefined,
++        codec: string | undefined;
++
++      // `codecId` aponta para outra linha do relatorio; sem este mapa o
++      // nome do codec fica sendo um identificador opaco.
++      const codecs = new Map<string, string>();
++      relatorio.forEach((s2: Record<string, number | string>) => {
++        if (s2.type === "codec" && typeof s2.mimeType === "string")
++          codecs.set(s2.id as string, s2.mimeType.replace(/^video\//i, ""));
++      });
++
++      const souEu = saidas.length > 0;
++
++      if (souEu) {
++        // Com simulcast ha uma linha por camada. A de cima e a que conta:
++        // e dela que sai a imagem que os outros veem.
++        let tempoCodifica = 0;
++        let quadrosCodificados = 0;
++        let maiorAltura = 0;
++
++        for (const s of saidas) {
++          const h = typeof s.frameHeight === "number" ? s.frameHeight : 0;
++          if (h >= maiorAltura) {
++            maiorAltura = h;
++            altura = h || altura;
++            if (typeof s.framesPerSecond === "number")
++              fps = Math.round(s.framesPerSecond);
++          }
++
++          const r = s.qualityLimitationReason;
++          const traduzido =
++            r === "cpu"
++              ? ("cpu" as const)
++              : r === "bandwidth"
++                ? ("banda" as const)
++                : r === "other"
++                  ? ("outro" as const)
++                  : undefined;
++          if (traduzido && (!limite || peso[traduzido] > peso[limite]))
++            limite = traduzido;
++
++          if (typeof s.encoderImplementation === "string")
++            motor = s.encoderImplementation;
++          if (typeof s.codecId === "string")
++            codec = codecs.get(s.codecId) ?? codec;
++
++          const d = s.qualityLimitationDurations as unknown as
++            | Record<string, number>
++            | undefined;
++          if (d) {
++            if (typeof d.cpu === "number") segCpu = Math.max(segCpu ?? 0, d.cpu);
++            if (typeof d.bandwidth === "number")
++              segBanda = Math.max(segBanda ?? 0, d.bandwidth);
++          }
++
++          if (typeof s.totalEncodeTime === "number")
++            tempoCodifica += s.totalEncodeTime;
++          if (typeof s.framesEncoded === "number")
++            quadrosCodificados += s.framesEncoded;
++        }
++
++        // Saida sem quadro nenhum e faixa PAUSADA, nao faixa ruim. Sem
++        // separar os dois casos, o relato chega ao servidor com todos os
++        // campos vazios e nao se sabe se o navegador nao respondeu ou se
++        // a transmissao foi desligada.
++        pausado = maiorAltura === 0 && fps === undefined;
++
++        // A `media-source` e a taxa da CAPTURA -- o que o navegador
++        // consegue arrancar da tela, antes de qualquer codificacao. Lida
++        // sempre, e nao so quando o envio esta parado: comparada com a
++        // taxa de saida, ela diz de que lado do codificador esta o
++        // gargalo, que e a pergunta que sobrou.
++        relatorio.forEach((s2: Record<string, number | string>) => {
++          if (s2.type !== "media-source" || s2.kind !== "video") return;
++          if (typeof s2.framesPerSecond === "number")
++            capturaFps = Math.round(s2.framesPerSecond);
++          if (pausado && typeof s2.height === "number") altura = s2.height;
++        });
++        if (pausado && fps === undefined) fps = capturaFps;
++
++        // Tempo de codificacao tambem por diferenca: o contador do WebRTC
++        // e acumulado desde o inicio, e a media de uma hora inteira nao
++        // diz nada sobre o engasgo de agora.
++        if (antes) {
++          const dTempo = Math.max(0, tempoCodifica - antes.tempoCodifica);
++          const dQuadros = Math.max(
++            0,
++            quadrosCodificados - antes.quadrosCodificados,
++          );
++          if (dQuadros > 0) msQuadro = (dTempo / dQuadros) * 1000;
++        }
++        antes = {
++          perdidos: antes?.perdidos ?? 0,
++          recebidos: antes?.recebidos ?? 0,
++          travadas: antes?.travadas ?? 0,
++          tempoCodifica,
++          quadrosCodificados,
++        };
++      } else {
++        let perdidos: number | undefined,
++          recebidos: number | undefined,
++          congelou: number | undefined;
++
++        for (const s of entradas) {
++          if (typeof s.framesPerSecond === "number")
++            fps = Math.round(s.framesPerSecond);
++          if (typeof s.frameHeight === "number") altura = s.frameHeight;
++          if (typeof s.packetsLost === "number") perdidos = s.packetsLost;
++          if (typeof s.packetsReceived === "number")
++            recebidos = s.packetsReceived;
++          if (typeof s.freezeCount === "number") congelou = s.freezeCount;
++          if (typeof s.decoderImplementation === "string")
++            motor = s.decoderImplementation;
++          if (typeof s.codecId === "string")
++            codec = codecs.get(s.codecId) ?? codec;
++        }
++
++        if (perdidos !== undefined && recebidos !== undefined) {
++          if (antes) {
++            const dPerdidos = Math.max(0, perdidos - antes.perdidos);
++            const dRecebidos = Math.max(0, recebidos - antes.recebidos);
++            const total = dPerdidos + dRecebidos;
++            if (total > 0) perda = (dPerdidos / total) * 100;
++          }
++          if (congelou !== undefined && antes)
++            travadas = Math.max(0, congelou - antes.travadas);
++
++          antes = {
++            perdidos,
++            recebidos,
++            travadas: congelou ?? antes?.travadas ?? 0,
++            tempoCodifica: antes?.tempoCodifica ?? 0,
++            quadrosCodificados: antes?.quadrosCodificados ?? 0,
++          };
++        }
++      }
++
++      setCondicoes({
++        fps,
++        perda,
++        altura,
++        limite,
++        msQuadro,
++        travadas,
++        pausado,
++        capturaFps,
++        segCpu,
++        segBanda,
++        motor,
++        codec,
++      });
++
++      // A cada cinco voltas (10s) quem transmite conta ao servidor como
++      // esta indo. E o unico jeito de enxergar daqui o que so existe no
++      // navegador de quem transmite -- sem isso, diagnosticar travamento
++      // dos outros vira troca de mensagem e adivinhacao.
++      voltas += 1;
++      if (souEu && isScreenShare() && voltas % 5 === 0) {
++        window.dispatchEvent(
++          new CustomEvent("dp-condicoes", {
++            detail: {
++              fps,
++              altura,
++              limite,
++              msQuadro,
++              pausado,
++              capturaFps,
++              segCpu,
++              segBanda,
++              motor,
++              codec,
++              // A maioria acessa pelo aplicativo de Windows, que e um
++              // Tauri sobre WebView2 -- e para o servidor ele se anuncia
++              // como "Edge", igual ao navegador. Sem esta marca nao da
++              // para separar os dois nas medicoes.
++              app:
++                !!(window as unknown as Record<string, unknown>)
++                  .__TAURI_INTERNALS__ ||
++                !!(window as unknown as Record<string, unknown>).__TAURI__ ||
++                !!(window as unknown as Record<string, unknown>).native,
++            },
++          }),
++        );
++      }
++    }, 2000);
++
++    onCleanup(() => clearInterval(relogio));
++  });
++
++  /** Verde nao aparece: so vale dizer algo quando ha algo a dizer. */
++  const gravidade = () => {
++    const { fps, perda, limite, travadas } = condicoes();
++    if (
++      (perda ?? 0) >= 5 ||
++      (fps !== undefined && fps > 0 && fps < 8) ||
++      (travadas ?? 0) >= 3
++    )
++      return "ruim" as const;
++    if (
++      (perda ?? 0) >= 1.5 ||
++      (fps !== undefined && fps > 0 && fps < 15) ||
++      (travadas ?? 0) > 0 ||
++      limite === "cpu"
++    )
++      return "atencao" as const;
++    return undefined;
++  };
++
++  const temCondicoes = () =>
++    (isVideo() || isScreenShare()) &&
++    (condicoes().fps !== undefined ||
++      condicoes().altura !== undefined ||
++      condicoes().limite !== undefined);
+   const isSpeaking = useIsSpeaking(participant);
+ 
+   const getHeight = () => {
+@@ -86,13 +639,34 @@ export function ParticipantTile(props: TileProps) {
    return (
      <Show when={!isScreenShare() || !isRemoteScreenShareMuted()}>
        <div
@@ -163,7 +645,7 @@ index 6df8439..f63b1b8 100644
          }
          onClick={() => voice.toggleFocus(track)}
          use:floating={{
-@@ -107,6 +213,23 @@ export function ParticipantTile(props: TileProps) {
+@@ -107,6 +681,23 @@ export function ParticipantTile(props: TileProps) {
                member={user().member}
                inVoice={!isScreenShare()}
                isScreenshare={isScreenShare()}
@@ -187,3 +669,96 @@ index 6df8439..f63b1b8 100644
              />
            ),
          }}
+@@ -144,6 +735,92 @@ export function ParticipantTile(props: TileProps) {
+             }}
+           />
+         </Show>
++        {/*
++          Espectadores sempre visiveis, e nao dentro do Overlay: aquele so
++          aparece no hover em tela compartilhada, e saber quem esta vendo a
++          sua tela nao e detalhe que se procura -- e o tipo de coisa que
++          muda o que voce faz com ela.
++        */}
++        {/*
++          Condicoes da transmissao, no canto oposto aos espectadores.
++          Discreto de proposito: e para consultar quando algo parece
++          errado, nao para competir com o que esta sendo transmitido.
++        */}
++        <Show when={temCondicoes()}>
++          <Condicoes gravidade={gravidade()}>
++            <Show when={condicoes().altura}>{condicoes().altura}p</Show>
++            <Show when={condicoes().fps !== undefined}>
++              <i>·</i>
++              {condicoes().fps} fps
++            </Show>
++            <Show when={voice.ping() !== undefined}>
++              <i>·</i>
++              {voice.ping()} ms
++            </Show>
++            <Show when={condicoes().perda !== undefined}>
++              <i>·</i>
++              {condicoes().perda!.toFixed(1)}% perda
++            </Show>
++            <Show when={condicoes().travadas}>
++              <i>·</i>
++              {condicoes().travadas}x travou
++            </Show>
++            <Show
++              when={
++                condicoes().capturaFps !== undefined &&
++                condicoes().fps !== undefined &&
++                Math.abs(condicoes().capturaFps! - condicoes().fps!) >= 3
++              }
++            >
++              <i>·</i>
++              captura {condicoes().capturaFps} fps
++            </Show>
++            <Show when={condicoes().pausado}>
++              <i>·</i>
++              envio pausado
++            </Show>
++            <Show when={condicoes().limite}>
++              <i>·</i>
++              {condicoes().limite === "cpu"
++                ? "processador no limite"
++                : condicoes().limite === "banda"
++                  ? "banda no limite"
++                  : "limitado"}
++            </Show>
++            <Show when={condicoes().msQuadro !== undefined}>
++              <i>·</i>
++              {condicoes().msQuadro!.toFixed(0)}ms/quadro
++            </Show>
++          </Condicoes>
++        </Show>
++
++        <Show when={quemAssiste().length}>
++          <Espectadores
++            use:floating={{
++              tooltip: {
++                placement: "bottom",
++                content: quemAssiste()
++                  .map((u) => u!.username)
++                  .join(", "),
++              },
++            }}
++          >
++            <For each={quemAssiste().slice(0, 4)}>
++              {(u) => (
++                <Avatar
++                  size={20}
++                  src={u!.avatar}
++                  fallback={u!.username}
++                  interactive={false}
++                />
++              )}
++            </For>
++            <Show when={quemAssiste().length > 4}>
++              <Excedente>+{quemAssiste().length - 4}</Excedente>
++            </Show>
++          </Espectadores>
++        </Show>
++
+         <Overlay showOnHover={isScreenShare()}>
+           <OverlayInner>
+             <OverflowingText>{user().username}</OverflowingText>

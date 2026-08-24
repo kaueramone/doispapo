@@ -63,8 +63,21 @@ cd "$BR"
 # publicada - a garantia de que a troca de pipeline nao mudou nada por
 # conta propria.
 if [ ! -d dist-orig ]; then
-  echo "==> extraindo build original do container"
-  docker cp stoat-web-1:/app/dist ./dist-orig
+  # ATENCAO: extrair de `stoat-web-1:/app/dist` NAO funciona — o
+  # compose.override monta ./branding/dist-patched exatamente ali, entao
+  # o docker cp devolveria o build JA MARCADO, e a marca seria aplicada
+  # duas vezes sobre ele. A fonte limpa e a IMAGEM, nunca o container.
+  echo "==> extraindo build original da imagem do servico"
+  IMG=$(docker inspect stoat-web-1 --format '{{.Config.Image}}')
+  CID=$(docker create "$IMG")
+  docker cp "$CID":/app/dist ./dist-orig
+  docker rm "$CID" >/dev/null
+  if grep -q "dp-css-marca" dist-orig/index.html 2>/dev/null; then
+    rm -rf dist-orig
+    echo "!! o dist-orig extraido ja vinha marcado; abortando para nao"
+    echo "   empilhar marca sobre marca"
+    exit 1
+  fi
 fi
 
 # Ate a 0.32 a entrada era o dist-orig: a imagem pronta do registry, com

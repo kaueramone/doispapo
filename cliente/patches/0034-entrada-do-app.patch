@@ -1,0 +1,54 @@
+diff --git a/packages/client/src/Interface.tsx b/packages/client/src/Interface.tsx
+index a2cdbdf..dc2b239 100644
+--- a/packages/client/src/Interface.tsx
++++ b/packages/client/src/Interface.tsx
+@@ -4,6 +4,7 @@ import {
+   JSX,
+   Match,
+   onCleanup,
++  onMount,
+   Switch,
+ } from "solid-js";
+ 
+@@ -21,6 +22,7 @@ import { Navigate, useBeforeLeave, useLocation } from "@revolt/routing";
+ import { useState } from "@revolt/state";
+ import { LAYOUT_SECTIONS } from "@revolt/state/stores/Layout";
+ 
++import { CICLO_MARCA_MS } from "../components/ui/components/utils/MarcaCarregando";
+ import { SlideDrawer } from "../components/ui/components/navigation/SlideDrawer";
+ import { LoadingScreen } from "./LoadingScreen";
+ import { Sidebar } from "./interface/Sidebar";
+@@ -62,6 +64,24 @@ const Interface = (props: { children: JSX.Element }) => {
+     ].includes(lifecycle.state());
+   }
+ 
++  /**
++   * A tela de entrada fica no ar por dois ciclos inteiros da marca.
++   *
++   * Sem isto ela pisca: numa recarga com tudo em cache a conexao se completa
++   * em algumas centenas de milissegundos, e o que a pessoa ve e um lampejo de
++   * meia animacao. Um piso curto custa menos do que parece -- ninguem percebe
++   * espera onde ha movimento -- e entrega a marca inteira, montada duas vezes,
++   * em vez de um borrao.
++   *
++   * O relogio comeca junto com o componente, entao a conexao corre por baixo:
++   * o piso so aparece quando ela termina antes.
++   */
++  const [marcaCompleta, setMarcaCompleta] = createSignal(false);
++  onMount(() => {
++    const relogio = setTimeout(() => setMarcaCompleta(true), CICLO_MARCA_MS * 2);
++    onCleanup(() => clearTimeout(relogio));
++  });
++
+   //Drawer slider for mobile
+   let rootRef, sDrawer: SlideDrawer | undefined;
+   const [contRef, setContRef] = createSignal<HTMLDivElement>();
+@@ -95,7 +115,7 @@ const Interface = (props: { children: JSX.Element }) => {
+           <Match when={!isLoggedIn()}>
+             <Navigate href="/login" />
+           </Match>
+-          <Match when={lifecycle.loadedOnce()}>
++          <Match when={lifecycle.loadedOnce() && marcaCompleta()}>
+             <Layout
+               disconnected={isDisconnected()}
+               style={{ "flex-grow": 1, "min-height": 0 }}
