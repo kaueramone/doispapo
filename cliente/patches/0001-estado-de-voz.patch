@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/rtc/state.tsx b/packages/client/components/rtc/state.tsx
-index d03d90e..4b6ab4d 100644
+index d03d90e..56615ee 100644
 --- a/packages/client/components/rtc/state.tsx
 +++ b/packages/client/components/rtc/state.tsx
 @@ -17,6 +17,7 @@ import {
@@ -10,20 +10,59 @@ index d03d90e..4b6ab4d 100644
    VideoResolution,
  } from "livekit-client";
  import { DenoiseTrackProcessor } from "livekit-rnnoise-processor";
-@@ -42,11 +43,29 @@ type State =
-   | "CONNECTED"
-   | "RECONNECTING";
+@@ -35,6 +36,51 @@ import { VoiceCallCardContext } from "@revolt/ui/components/features/voice/callC
+ import { InRoom } from "./components/InRoom";
+ import { RoomAudioManager } from "./components/RoomAudioManager";
  
-+/** Nome do canal para onde quem fica inativo e levado */
-+export const NOME_CANAL_AUSENTE = "Ausente";
++/**
++ * Camada unica para tela, em vez de duas.
++ *
++ * A livekit liga simulcast por padrao e ninguem escolheu isso aqui: cada
++ * tela saia como 1280x720 E 640x360, duas codificacoes VP8 simultaneas a
++ * 30 quadros, as duas em software -- VP8 praticamente nao tem codificador
++ * de silicio em GPU de PC. Com pico de cinco pessoas numa sala, a camada
++ * de baixo custava processador de quem transmite e quase nao era assinada.
++ *
++ * O preco de desligar e real e vale dito: quem tem banda pequena perde o
++ * degrau de 360p e passa a receber 720p ou nada. Por isso fica atras de
++ * uma chave em vez de cravado -- `dp_tela_simulcast=1` devolve o
++ * comportamento antigo sem precisar de build novo, do mesmo jeito que
++ * `dp_adaptativo_off` faz com o adaptiveStream.
++ */
++function telaSimulcast(): boolean {
++  try {
++    return localStorage.getItem("dp_tela_simulcast") === "1";
++  } catch {
++    return false;
++  }
++}
 +
-+/** Quanto tempo sem atividade antes de mover para o canal Ausente */
-+const AUSENTE_MS = 10 * 60 * 1000;
++/**
++ * H.264 na tela, no lugar do VP8.
++ *
++ * `vp8` e o padrao da livekit, e a medicao mostrou `libvpx` em 100% das
++ * amostras: todo mundo codificando tela no processador, mesmo com GPU
++ * ociosa. H.264 tem codificador em silicio -- NVENC, Quick Sync, AMF --
++ * em qualquer maquina moderna, e ainda e o codec que Safari e iOS
++ * preferem para decodificar.
++ *
++ * Nao ha promessa aqui: se o navegador nao entregar o codificador de
++ * hardware, ele cai no OpenH264 por software e nada piora. Quem confirma
++ * e o campo `motor` da medicao, que passa a dizer o nome do motor em uso.
++ * `dp_tela_codec=vp8` volta atras sem build novo.
++ */
++function telaCodec(): "h264" | "vp8" {
++  try {
++    return localStorage.getItem("dp_tela_codec") === "vp8" ? "vp8" : "h264";
++  } catch {
++    return "h264";
++  }
++}
 +
-+/** De quanto em quanto tempo conferimos a inatividade */
-+const AUSENTE_CHECAGEM_MS = 30 * 1000;
-+
- type ScreenShareQuality = {
+ type State =
+   | "READY"
+   | "DISCONNECTED"
+@@ -46,7 +92,16 @@ type ScreenShareQuality = {
    name: ScreenShareQualityName;
    resolution: VideoResolution;
    fullName: string;
@@ -41,7 +80,7 @@ index d03d90e..4b6ab4d 100644
  };
  
  class Voice {
-@@ -75,6 +94,53 @@ class Voice {
+@@ -75,6 +130,49 @@ class Voice {
    fullscreen: Accessor<boolean>;
    #setFullscreen: Setter<boolean>;
  
@@ -88,14 +127,10 @@ index d03d90e..4b6ab4d 100644
 +  destacados: Accessor<string[]>;
 +  #setDestacados: Setter<string[]>;
 +
-+  /** Instante da ultima atividade: falar, transmitir ou assistir */
-+  #ultimaAtividade = Date.now();
-+  #relogioAusente: ReturnType<typeof setInterval> | undefined;
-+
    focusId: Accessor<string | undefined>;
    #setFocus: Setter<string | undefined>;
  
-@@ -95,6 +161,11 @@ class Voice {
+@@ -95,6 +193,11 @@ class Voice {
      this.#settings = voiceSettings;
      this.sound = sound;
  
@@ -107,7 +142,7 @@ index d03d90e..4b6ab4d 100644
      const [channel, setChannel] = createSignal<Channel>();
      this.channel = channel;
      this.#setChannel = setChannel;
-@@ -124,6 +195,22 @@ class Voice {
+@@ -124,6 +227,22 @@ class Voice {
      this.fullscreen = fullscreen;
      this.#setFullscreen = setFullscreen;
  
@@ -130,7 +165,7 @@ index d03d90e..4b6ab4d 100644
      const [focus, setFocus] = createSignal<string>();
      this.focusId = focus;
      this.#setFocus = setFocus;
-@@ -141,8 +228,70 @@ class Voice {
+@@ -141,8 +260,70 @@ class Voice {
  
    async connect(channel: Channel, auth?: { url: string; token: string }) {
      this.disconnect();
@@ -201,35 +236,15 @@ index d03d90e..4b6ab4d 100644
        audioCaptureDefaults: {
          deviceId: this.#settings.preferredAudioInputDevice,
          echoCancellation: this.#settings.echoCancellation,
-@@ -165,6 +314,9 @@ class Voice {
-       { room, onlySubscribed: false },
-     );
- 
-+    this.#ultimaAtividade = Date.now();
-+    this.#iniciarRelogioAusente();
-+
-     batch(() => {
-       this.#setRoom(room);
-       this.#setChannel(channel);
-@@ -174,8 +326,16 @@ class Voice {
+@@ -174,6 +355,7 @@ class Voice {
      });
  
      room.addListener("connected", () => {
 +      this.#setEntrando();
        this.#setState("CONNECTED");
--      if (this.speakingPermission)
-+      // Entrar no canal de ausentes nao liga o microfone -- e, sobretudo,
-+      // NAO mexe na preferencia salva.
-+      //
-+      // `micOn` e persistido. Escrever `false` nele aqui deixaria a pessoa
-+      // muda tambem no PROXIMO canal em que entrasse, sem nada na tela
-+      // explicando por que ninguem a ouve. Pular o trecho que liga o
-+      // microfone basta: ele ainda nao esta ligado neste ponto.
-+      if (this.speakingPermission && !this.ehCanalAusente(channel))
+       if (this.speakingPermission)
          room.localParticipant
-           .setMicrophoneEnabled(this.#settings.micOn)
-           .then((track) => {
-@@ -199,6 +359,40 @@ class Voice {
+@@ -199,6 +381,32 @@ class Voice {
        this.sound.playSound("userJoinVoice");
      });
  
@@ -259,18 +274,10 @@ index d03d90e..4b6ab4d 100644
 +    this.#ouvirAssistindo();
 +    this.#ouvirCondicoes();
 +
-+    // Falar e o sinal mais direto de presenca. O evento ja existe e chega
-+    // pelo SFU, entao nao precisamos medir audio por conta propria aqui.
-+    room.addListener("activeSpeakersChanged", (falantes) => {
-+      if (falantes.some((p) => p.identity === room.localParticipant.identity)) {
-+        this.#ultimaAtividade = Date.now();
-+      }
-+    });
-+
      room.addListener("disconnected", () => this.#setState("DISCONNECTED"));
  
      room.addListener("participantConnected", () => {
-@@ -231,16 +425,7 @@ class Voice {
+@@ -231,16 +439,7 @@ class Voice {
        }
      });
  
@@ -288,7 +295,7 @@ index d03d90e..4b6ab4d 100644
  
      if (!auth) {
        auth = await channel.joinCall(selected);
-@@ -251,6 +436,103 @@ class Voice {
+@@ -251,6 +450,30 @@ class Voice {
      });
    }
  
@@ -316,83 +323,10 @@ index d03d90e..4b6ab4d 100644
 +    );
 +  }
 +
-+  /** Se este canal e o destino de quem fica inativo */
-+  ehCanalAusente(canal?: Channel) {
-+    return (
-+      !!canal?.name &&
-+      canal.name.trim().toLowerCase() === NOME_CANAL_AUSENTE.toLowerCase()
-+    );
-+  }
-+
-+  /**
-+   * Se a pessoa esta fazendo algo que conta como presenca.
-+   *
-+   * Falar e o sinal principal, mas nao o unico: quem esta com camera
-+   * ligada, compartilhando, ou assistindo a uma tela esta claramente ali.
-+   * Mover alguem no meio de quinze minutos de gameplay assistido em
-+   * silencio seria pior do que nao ter o recurso.
-+   */
-+  #estaPresente() {
-+    if (this.video() || this.screenshare()) return true;
-+
-+    // Quem esta assistindo a uma tela: o controle disso mora no script de
-+    // compartilhamento sob demanda, do outro lado da injecao. Se ele nao
-+    // estiver carregado, a leitura simplesmente nao acontece.
-+    try {
-+      const tela = (
-+        window as unknown as { dpTela?: () => { assistindo?: string[] } }
-+      ).dpTela;
-+      if (tela && (tela().assistindo?.length ?? 0) > 0) return true;
-+    } catch {
-+      /* nada a fazer: presenca por outros meios continua valendo */
-+    }
-+
-+    return false;
-+  }
-+
-+  #iniciarRelogioAusente() {
-+    this.#pararRelogioAusente();
-+    this.#relogioAusente = setInterval(
-+      () => this.#conferirAusencia(),
-+      AUSENTE_CHECAGEM_MS,
-+    );
-+  }
-+
-+  #pararRelogioAusente() {
-+    if (this.#relogioAusente) {
-+      clearInterval(this.#relogioAusente);
-+      this.#relogioAusente = undefined;
-+    }
-+  }
-+
-+  async #conferirAusencia() {
-+    const atual = this.channel();
-+    if (!atual || this.state() !== "CONNECTED") return;
-+
-+    // Ja esta no canal de ausentes: nao ha para onde mover.
-+    if (this.ehCanalAusente(atual)) return;
-+
-+    if (this.#estaPresente()) {
-+      this.#ultimaAtividade = Date.now();
-+      return;
-+    }
-+
-+    if (Date.now() - this.#ultimaAtividade < AUSENTE_MS) return;
-+
-+    const destino = atual.server?.channels?.find(
-+      (c) => c.isVoice && this.ehCanalAusente(c),
-+    );
-+    // Sem canal de ausentes no servidor, a pessoa fica onde esta. Criar um
-+    // aqui seria criar canal a partir de quem talvez nem tenha permissao.
-+    if (!destino || destino.id === atual.id) return;
-+
-+    await this.connect(destino);
-+  }
-+
    disconnect() {
      try {
        const room = this.room();
-@@ -259,8 +541,23 @@ class Voice {
+@@ -259,8 +482,21 @@ class Voice {
        room.removeAllListeners();
        room.disconnect();
  
@@ -407,8 +341,6 @@ index d03d90e..4b6ab4d 100644
 +      // para sempre. Quem fecha e o modulo de destaque, avisado aqui.
 +      window.dispatchEvent(new CustomEvent("dp-voz-encerrada"));
 +
-+      this.#pararRelogioAusente();
-+
        batch(() => {
          this.#setState("READY");
 +        this.#setEntrando();
@@ -416,7 +348,7 @@ index d03d90e..4b6ab4d 100644
          this.#setRoom();
          this.#setChannel();
          this.#setFullscreen(false);
-@@ -357,6 +654,9 @@ class Voice {
+@@ -357,6 +593,9 @@ class Voice {
          resolution: ScreenSharePresets.h720fps30.resolution,
          fullName: `720p 30FPS`,
          contentHint: "motion",
@@ -426,7 +358,7 @@ index d03d90e..4b6ab4d 100644
        },
      };
  
-@@ -377,6 +677,11 @@ class Voice {
+@@ -377,6 +616,11 @@ class Voice {
              resolution: ScreenSharePresets.h1080fps30.resolution,
              fullName: `1080p 30FPS`,
              contentHint: "motion",
@@ -438,7 +370,7 @@ index d03d90e..4b6ab4d 100644
            };
            const originalResolution = ScreenSharePresets.original.resolution;
            originalResolution.frameRate = 5;
-@@ -404,6 +709,13 @@ class Voice {
+@@ -404,6 +648,13 @@ class Voice {
              resolution: originalResolution,
              fullName: `Source 5FPS`,
              contentHint: "text",
@@ -452,7 +384,7 @@ index d03d90e..4b6ab4d 100644
            };
          }
        }
-@@ -411,6 +723,53 @@ class Voice {
+@@ -411,6 +662,53 @@ class Voice {
      return qualities;
    }
  
@@ -506,7 +438,7 @@ index d03d90e..4b6ab4d 100644
    async toggleScreenshare() {
      const room = this.room();
      if (!room) throw "invalid state";
-@@ -452,22 +811,53 @@ class Voice {
+@@ -452,22 +750,59 @@ class Voice {
          });
        }
  
@@ -560,12 +492,72 @@ index d03d90e..4b6ab4d 100644
 +            // configuracao anterior passou em branco e todo mundo
 +            // transmitiu no padrao de fabrica: 15 quadros.
 +            screenShareEncoding: qualidade.encoding,
++            // Uma camada, nao duas. Ver `telaSimulcast` acima: o padrao da
++            // biblioteca e `true`, e ninguem tinha escolhido isso.
++            simulcast: telaSimulcast(),
++            // Ver `telaCodec`. O padrao da biblioteca e VP8, que nesta
++            // frota codifica sempre em software.
++            videoCodec: telaCodec(),
 +          },
          );
  
          const screenAudioTrack = room.localParticipant.getTrackPublication(
-@@ -510,6 +900,13 @@ class Voice {
-               });
+@@ -497,19 +832,56 @@ class Voice {
+             const quality = qualities[qualityName] || qualities.low!;
+ 
+             if (localTrack.videoTrack) {
+-              await localTrack.videoTrack.mediaStreamTrack.applyConstraints({
+-                frameRate: { max: quality.resolution.frameRate },
+-                width:
+-                  quality.resolution.width === 0
+-                    ? undefined
+-                    : { max: quality.resolution.width },
+-                height:
+-                  quality.resolution.width === 0
+-                    ? undefined
+-                    : { max: quality.resolution.height },
+-              });
++              /*
++                Reconfigurar a captura SO quando a qualidade muda.
++
++                `applyConstraints` SUBSTITUI o conjunto de constraints da
++                faixa; nao soma a ele. A captura nasce pedindo
++                `frameRate: 30` -- que a especificacao trata como IDEAL --
++                e a versao anterior desta chamada trocava isso por
++                `{ max: 30 }`: um teto sem pedido. Depois dela, nada mais
++                PEDIA 30 quadros ao navegador, so o proibia de passar de 30.
++
++                E ela rodava em praticamente toda transmissao, porque o
++                modal de qualidade abre por padrao. Quando a pessoa escolhe
++                a MESMA qualidade que ja foi publicada -- o caminho comum,
++                ja que o modal abre com a preferencia guardada
++                selecionada -- nao ha nada a reconfigurar, e o certo e nao
++                mexer: reimpor 1280x720 sobre uma captura que ja nasceu
++                1280x720 reconfigura o caminho de captura a toa, e e dentro
++                dele que o redimensionamento por quadro acontece.
++
++                Quando muda de verdade, o pedido vai com `ideal` E `max`,
++                simetrico ao que o `getDisplayMedia` pediu na origem.
++              */
++              if (quality !== qualidade) {
++                await localTrack.videoTrack.mediaStreamTrack.applyConstraints({
++                  frameRate: {
++                    ideal: quality.resolution.frameRate,
++                    max: quality.resolution.frameRate,
++                  },
++                  width:
++                    quality.resolution.width === 0
++                      ? undefined
++                      : { ideal: quality.resolution.width },
++                  // Era `quality.resolution.width === 0` aqui tambem --
++                  // copia e cola. Inocuo hoje, porque a unica qualidade com
++                  // zero tem largura e altura zeradas, mas errado.
++                  height:
++                    quality.resolution.height === 0
++                      ? undefined
++                      : { ideal: quality.resolution.height },
++                });
++              }
                localTrack.videoTrack.mediaStreamTrack.contentHint =
                  quality.contentHint;
 +
@@ -578,7 +570,7 @@ index d03d90e..4b6ab4d 100644
                if (!audio && screenAudioTrack?.track) {
                  room.localParticipant.unpublishTrack(screenAudioTrack.track);
                }
-@@ -577,7 +974,7 @@ class Voice {
+@@ -577,7 +949,7 @@ class Voice {
    toggleFocus(t?: TrackReferenceOrPlaceholder) {
      const id = t ? this.trackId(t) : undefined;
      this.#setFocus(
@@ -587,7 +579,7 @@ index d03d90e..4b6ab4d 100644
      );
    }
  
-@@ -588,7 +985,7 @@ class Voice {
+@@ -588,7 +960,7 @@ class Voice {
    focusTrack() {
      const id = this.focusId();
      return id
@@ -596,7 +588,7 @@ index d03d90e..4b6ab4d 100644
        : undefined;
    }
  
-@@ -600,15 +997,279 @@ class Voice {
+@@ -600,15 +972,277 @@ class Voice {
      return this.room()?.getParticipantByIdentity(userId);
    }
  
@@ -751,15 +743,13 @@ index d03d90e..4b6ab4d 100644
 +    this.#pararDeOuvirCondicoes?.();
 +
 +    const aoMedir = (e: Event) => {
-+      const d = (e as CustomEvent).detail as {
-+        fps?: number;
-+        altura?: number;
-+        limite?: string;
-+        msQuadro?: number;
-+        motor?: string;
-+        codec?: string;
-+        app?: boolean;
-+      };
++      // Campo a campo virava manutencao dupla: o quadro passou a medir
++      // tambem o lado de quem ASSISTE -- recepcao, decodificacao e o que
++      // de fato virou imagem -- e cada campo novo exigia editar aqui
++      // tambem, sob pena de sumir em silencio no caminho. A ponte nao
++      // precisa entender a medida; quem confere e o servidor, que valida
++      // nome por nome antes de gravar.
++      const d = (e as CustomEvent).detail as Record<string, unknown>;
 +      const sala = this.channel()?.id;
 +      if (!sala || !d) return;
 +

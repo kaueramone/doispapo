@@ -1,0 +1,97 @@
+diff --git a/packages/client/components/ui/components/features/voice/folga.ts b/packages/client/components/ui/components/features/voice/folga.ts
+new file mode 100644
+index 0000000..238d303
+--- /dev/null
++++ b/packages/client/components/ui/components/features/voice/folga.ts
+@@ -0,0 +1,91 @@
++import { RemoteTrack, Track } from "livekit-client";
++
++/**
++ * Folga de reproducao: quem espera um pouco, e quem nao espera nunca.
++ *
++ * A REGRA, e ela e do produto, nao da implementacao:
++ *
++ *   microfone            -> NUNCA. Conversa com atraso e conversa
++ *                           atropelada: as pessoas comecam a falar por
++ *                           cima uma da outra.
++ *   tela compartilhada   -> folga, para o movimento parar de picotar.
++ *   audio DA TELA        -> a MESMA folga do video da tela, senao o som
++ *                           do que esta sendo mostrado chega antes da
++ *                           imagem.
++ *
++ * O terceiro caso e o motivo deste arquivo existir. A folga vivia
++ * cravada no `ParticipantTile`, que so enxerga o video; o audio da tela
++ * e montado noutro lugar (`RoomAudioManager`) e ficava sem folga
++ * nenhuma. Resultado: som de jogo adiantado em um quarto de segundo em
++ * relacao a imagem -- e ninguem tinha como perceber lendo qualquer um
++ * dos dois arquivos sozinho.
++ *
++ * Agora os dois leem a mesma constante daqui. Nao e organizacao: e a
++ * unica forma de a sincronia nao depender de alguem lembrar de mudar os
++ * dois numeros juntos.
++ */
++
++/**
++ * Segundos de folga na tela compartilhada.
++ *
++ * `dp_folga_tela` (em MILISSEGUNDOS) sobrescreve, para experimentar sem
++ * build novo: `localStorage.setItem("dp_folga_tela", "400")`.
++ *
++ * Por que 250 ms e nao mais, com alguem a 242 ms do servidor: a folga
++ * serve contra JITTER, e o jitter medido nesta rota e de 1 a 3 ms --
++ * minusculo. Distancia longa nao e o mesmo que chegada irregular. O que
++ * de fato produz travamento aqui e a espera por quadro-chave depois de
++ * um pedido do outro lado, que custa uma ida e volta inteira; 250 ms
++ * cobre aproximadamente uma dessas. Subir mais atrasa TUDO para cobrir
++ * um evento que agora, com camada unica, deve ficar bem mais raro.
++ *
++ * Este numero merece ser reaberto quando houver `freezeCount` e
++ * `totalFreezesDuration` de gente assistindo de verdade -- que passaram
++ * a ser coletados. Ajustar antes disso seria escolher um numero por
++ * intuicao tendo instrumento a caminho.
++ */
++export function folgaDaTela(): number {
++  try {
++    const bruto = localStorage.getItem("dp_folga_tela");
++    if (bruto) {
++      const ms = Number(bruto);
++      // Teto de 2 s: acima disso nao e folga, e atraso -- e alguem
++      // experimentando com um zero a mais nao deveria conseguir tornar a
++      // tela inutil sem perceber.
++      if (Number.isFinite(ms) && ms >= 0 && ms <= 2000) return ms / 1000;
++    }
++  } catch {
++    /* sem localStorage, vale o padrao */
++  }
++  return 0.25;
++}
++
++/**
++ * Aplica a regra acima a uma faixa recebida.
++ *
++ * Fora da tela compartilhada esta funcao NAO FAZ NADA -- de proposito, e
++ * a diferenca importa. Chamar `setPlayoutDelay(0)` no microfone nao seria
++ * "sem buffer": seria pedir ao navegador que use menos buffer do que o
++ * adaptativo dele julga seguro, e o resultado disso e voz picotada em
++ * qualquer oscilacao de rede. O jeito de a voz nao ter atraso nosso e
++ * nao encostar nela.
++ */
++export function aplicarFolga(
++  faixa: RemoteTrack | undefined,
++  fonte: Track.Source,
++): void {
++  if (
++    fonte !== Track.Source.ScreenShare &&
++    fonte !== Track.Source.ScreenShareAudio
++  )
++    return;
++
++  if (!faixa || typeof faixa.setPlayoutDelay !== "function") return;
++
++  try {
++    faixa.setPlayoutDelay(folgaDaTela());
++  } catch {
++    // Navegador sem `playoutDelayHint` segue sem folga, como sempre foi.
++    // Nao e motivo para derrubar nada.
++  }
++}

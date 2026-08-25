@@ -5,9 +5,12 @@
 // de mídia e aviso de nova versão.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    webview::{NewWindowResponse, WebviewWindowBuilder},
     Manager, WindowEvent,
 };
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
@@ -182,11 +185,93 @@ async fn verificar_atualizacao(app: tauri::AppHandle, pedida: bool) {
         });
 }
 
+/// Contador de janelas destacadas, para o rotulo nao repetir.
+///
+/// Rotulo repetido faz o `build()` falhar, e a falha aconteceria dentro do
+/// handler de janela nova -- onde nao ha para quem reclamar. A segunda tela
+/// destacada simplesmente nao abriria.
+static DESTAQUES: AtomicU32 = AtomicU32::new(0);
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            /*
+              A janela principal e construida AQUI, e nao pelo
+              `tauri.conf.json`, por um motivo so: `on_new_window` existe
+              apenas no `WebviewWindowBuilder`.
+
+              Sem esse handler, o wry no Windows responde
+              `args.SetHandled(true)` sem criar janela nenhuma
+              (`wry/src/webview2/mod.rs`), e `window.open()` devolve `null`.
+              Como o Document Picture-in-Picture do Chromium passa pelo
+              MESMO caminho -- `openPictureInPictureWindow` chama
+              `FindOrCreateFrameForNavigation(..., "_blank")` -- os dois
+              jeitos de destacar a tela morriam no mesmo ponto. Era por isso
+              que "destacar em janela" nao funcionava no aplicativo, e a
+              causa nao era permissao do Windows nem API ausente.
+
+              A configuracao da janela continua no JSON (com
+              `"create": false`); `from_config` le o mesmo objeto.
+            */
+            let config = app.config().app.windows.first().cloned().ok_or(
+                "nenhuma janela configurada no tauri.conf.json",
+            )?;
+            let app_ = app.handle().clone();
+
+            WebviewWindowBuilder::from_config(app.handle(), &config)?
+                .on_new_window(move |url, features| {
+                    let n = DESTAQUES.fetch_add(1, Ordering::Relaxed);
+
+                    /*
+                      `window_features(features)` NAO e detalhe de tamanho
+                      e posicao: no Windows ele tambem aplica
+                      `with_environment(opener.environment)`, e a
+                      documentacao da Microsoft e explicita em exigir que a
+                      WebView entregue ao `NewWindow` esteja no MESMO
+                      Environment e no mesmo perfil do opener.
+
+                      E dai vem a parte que decide se isto vale a pena: a
+                      Microsoft documenta que a nova WebView "e devolvida ao
+                      script do opener como o WindowProxy aberto". Um
+                      WindowProxy so existe dentro do mesmo browsing context
+                      group -- e mesma origem, mesmo grupo e sem `noopener`
+                      dao o mesmo processo de renderizacao e o mesmo agent
+                      cluster. E agent cluster igual e exatamente a condicao
+                      para entregar um `MediaStream` vivo de um documento ao
+                      outro, que e o que o `destacar.ts` ja faz no navegador.
+
+                      Essa ultima ligacao e DEDUZIDA, nao documentada. O
+                      teste que a confirma esta no README do desktop.
+                    */
+                    let janela = WebviewWindowBuilder::new(
+                        &app_,
+                        format!("destaque-{n}"),
+                        tauri::WebviewUrl::External(
+                            "about:blank".parse().expect("about:blank e valido"),
+                        ),
+                    )
+                    .window_features(features)
+                    .title(url.as_str())
+                    .on_document_title_changed(|janela, titulo| {
+                        let _ = janela.set_title(&titulo);
+                    })
+                    .build();
+
+                    match janela {
+                        Ok(janela) => NewWindowResponse::Create { window: janela },
+                        // Recusar e melhor que derrubar o aplicativo: o
+                        // `destacar.ts` ja trata `window.open` devolvendo
+                        // null, mantendo o quadro na grade e avisando.
+                        Err(e) => {
+                            eprintln!("janela de destaque nao abriu: {e}");
+                            NewWindowResponse::Deny
+                        }
+                    }
+                })
+                .build()?;
+
             let abrir = MenuItem::with_id(app, "abrir", "Abrir Dois Papo", true, None::<&str>)?;
             let buscar = MenuItem::with_id(app, "buscar", "Procurar atualização", true, None::<&str>)?;
             let sair = MenuItem::with_id(app, "sair", "Sair", true, None::<&str>)?;
@@ -230,10 +315,16 @@ fn main() {
             Ok(())
         })
         .on_window_event(|janela, evento| {
-            // Fechar esconde em vez de encerrar: chamadas de voz continuam.
             if let WindowEvent::CloseRequested { api, .. } = evento {
-                api.prevent_close();
-                let _ = janela.hide();
+                // Fechar esconde em vez de encerrar: chamadas de voz
+                // continuam. Mas SO a janela principal -- uma janela de
+                // destaque que apenas se esconde ficaria segurando a
+                // assinatura da faixa para sempre, e o botao de fechar
+                // dela nao faria nada visivel na segunda vez.
+                if janela.label() == "principal" {
+                    api.prevent_close();
+                    let _ = janela.hide();
+                }
             }
         })
         .run(tauri::generate_context!())

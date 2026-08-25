@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
-index 6df8439..7d141c2 100644
+index 6df8439..b5afdd5 100644
 --- a/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 +++ b/packages/client/components/ui/components/features/voice/callCard/ParticipantTile.tsx
 @@ -1,4 +1,4 @@
@@ -28,7 +28,7 @@ index 6df8439..7d141c2 100644
  import { useVoice } from "@revolt/rtc";
  import { useState } from "@revolt/state";
  import { Avatar } from "@revolt/ui/components/design";
-@@ -21,24 +26,190 @@ import { Row } from "@revolt/ui/components/layout";
+@@ -21,24 +26,191 @@ import { Row } from "@revolt/ui/components/layout";
  import { OverflowingText } from "@revolt/ui/components/utils";
  import { Symbol } from "@revolt/ui/components/utils/Symbol";
  
@@ -38,6 +38,7 @@ index 6df8439..7d141c2 100644
 +  estaAberta,
 +  recolher,
 +} from "../destacar";
++import { aplicarFolga } from "../folga";
  import { VoiceStatefulUserIcons } from "../VoiceStatefulUserIcons";
  
  type TileProps = {
@@ -219,7 +220,7 @@ index 6df8439..7d141c2 100644
    const [videoDims, setVideoDims] = createSignal<{
      height: number;
      width: number;
-@@ -71,6 +242,388 @@ export function ParticipantTile(props: TileProps) {
+@@ -71,6 +243,651 @@ export function ParticipantTile(props: TileProps) {
  
    const isVideo = () => !isVideoMuted();
    const isScreenShare = () => track.source === Track.Source.ScreenShare;
@@ -317,6 +318,29 @@ index 6df8439..7d141c2 100644
 +    motor?: string;
 +    /** O codec de fato em uso (VP8, H264, AV1...). */
 +    codec?: string;
++    /**
++     * So nos quadros recebidos: quadros que viraram IMAGEM, por segundo.
++     *
++     * `framesPerSecond` do `inbound-rtp` conta o que o decodificador
++     * produziu, e decodificado nao e exibido: com a janela coberta, o
++     * quadro fora da tela ou o compositor apertado, o navegador decodifica
++     * e joga fora. Este numero vem do `requestVideoFrameCallback`, que so
++     * dispara em quadro apresentado -- e por isso e o unico que
++     * corresponde ao que a pessoa realmente ve.
++     */
++    renderFps?: number;
++    /** So nos quadros recebidos: quadros decodificados por segundo. */
++    decodeFps?: number;
++    /** So nos quadros recebidos: quadros largados desde a leitura anterior. */
++    largados?: number;
++    /**
++     * So nos quadros recebidos: folga do jitter buffer, em ms.
++     *
++     * Pela RAZAO entre os dois contadores acumulados, nao pelo total: o
++     * `jitterBufferDelay` sozinho cresce para sempre e nao diz nada sobre
++     * o atraso de agora.
++     */
++    msBuffer?: number;
 +  }>({});
 +
 +  /**
@@ -332,28 +356,104 @@ index 6df8439..7d141c2 100644
 +   * percebe atraso no que esta sendo mostrado, e o movimento para de
 +   * picotar.
 +   */
++  /**
++   * Relogio de QUADROS, nao de tempo.
++   *
++   * Tudo o que o WebRTC informa termina no decodificador. Entre decodificar
++   * e aparecer na tela ainda ha o compositor do navegador, e e ali que
++   * mora boa parte do que as pessoas chamam de travamento. O
++   * `requestVideoFrameCallback` so dispara em quadro apresentado, entao
++   * `presentedFrames` e o unico contador que mede o que se ve.
++   *
++   * Fica fora do `setInterval` de proposito: amarra-lo ao intervalo
++   * custaria uma volta inteira de atraso a cada leitura.
++   */
++  let apresentados: number | undefined;
++  let apresentadosEm: number | undefined;
++  let vfcAlvo: HTMLVideoElement | undefined;
++  let vfcId: number | undefined;
++
++  type VideoComQuadro = HTMLVideoElement & {
++    requestVideoFrameCallback?: (
++      cb: (agora: number, meta: { presentedFrames?: number }) => void,
++    ) => number;
++    cancelVideoFrameCallback?: (id: number) => void;
++  };
++
++  /**
++   * (Re)liga o relogio de quadros ao <video> atual.
++   *
++   * O elemento nasce depois deste componente -- esta dentro de um <Show> --
++   * e e trocado quando a faixa muda. Por isso a ligacao e conferida a cada
++   * volta do relogio de condicoes, em vez de feita uma vez no `onMount`:
++   * feita uma vez, ela pegaria `undefined` e nunca mais tentaria.
++   */
++  function acompanharQuadros() {
++    const v = videoRef as VideoComQuadro | undefined;
++    if (!v || typeof v.requestVideoFrameCallback !== "function") return;
++    if (vfcAlvo === v) return;
++
++    if (vfcAlvo && vfcId !== undefined)
++      (vfcAlvo as VideoComQuadro).cancelVideoFrameCallback?.(vfcId);
++    vfcAlvo = v;
++    apresentados = undefined;
++    apresentadosEm = undefined;
++
++    const proximo = () => {
++      // Sem esta guarda, o laco do elemento antigo continua vivo depois da
++      // troca de faixa e os dois passam a escrever no mesmo contador.
++      if (vfcAlvo !== v) return;
++      vfcId = v.requestVideoFrameCallback!((agora, meta) => {
++        if (typeof meta?.presentedFrames === "number") {
++          apresentados = meta.presentedFrames;
++          apresentadosEm = agora;
++        }
++        proximo();
++      });
++    };
++    proximo();
++  }
++
++  onCleanup(() => {
++    if (vfcAlvo && vfcId !== undefined)
++      (vfcAlvo as VideoComQuadro).cancelVideoFrameCallback?.(vfcId);
++    vfcAlvo = undefined;
++  });
++
 +  onMount(() => {
-+    if (!isScreenShare()) return;
 +    const faixa = (track as TrackReference).publication?.track;
 +    if (faixa instanceof RemoteVideoTrack) {
-+      try {
-+        faixa.setPlayoutDelay(0.25);
-+      } catch {
-+        /* navegador sem suporte segue sem folga, como antes */
-+      }
++      // A regra e a decisao de quanto esperar moram em `../folga`, junto
++      // com as do audio. Aqui ficava so o video da tela, e o audio DELA
++      // seguia sem folga nenhuma noutro arquivo -- som adiantado em
++      // relacao a imagem, sem que qualquer um dos dois lados denunciasse.
++      aplicarFolga(faixa, track.source);
 +    }
 +  });
 +
 +  onMount(() => {
-+    let antes:
-+      | {
-+          perdidos: number;
-+          recebidos: number;
-+          travadas: number;
-+          tempoCodifica: number;
-+          quadrosCodificados: number;
-+        }
-+      | undefined;
++    /**
++     * Leitura anterior de cada contador acumulado.
++     *
++     * Um objeto so, de campos opcionais, no lugar de um registro que cada
++     * ramo reescrevia inteiro. Quem transmite e quem assiste leem
++     * contadores diferentes, e a versao anterior zerava os de um ao entrar
++     * no ramo do outro -- o que fazia a primeira leitura depois de qualquer
++     * troca de papel sair sem delta.
++     */
++    const antes: {
++      perdidos?: number;
++      recebidos?: number;
++      travadas?: number;
++      tempoCodifica?: number;
++      quadrosCodificados?: number;
++      decodificados?: number;
++      largados?: number;
++      apresentados?: number;
++      apresentadosEm?: number;
++      bufferSegundos?: number;
++      bufferQuadros?: number;
++    } = {};
 +    let voltas = 0;
 +
 +    /** Entre varias camadas, a limitacao mais grave manda. */
@@ -362,6 +462,10 @@ index 6df8439..7d141c2 100644
 +    const relogio = setInterval(async () => {
 +      const faixa = (track as TrackReference).publication?.track;
 +      if (!faixa || typeof faixa.getRTCStatsReport !== "function") return;
++
++      // Confere a cada volta porque o <video> nasce depois deste
++      // componente e muda quando a faixa muda.
++      acompanharQuadros();
 +
 +      let relatorio;
 +      try {
@@ -393,7 +497,21 @@ index 6df8439..7d141c2 100644
 +        segCpu: number | undefined,
 +        segBanda: number | undefined,
 +        motor: string | undefined,
-+        codec: string | undefined;
++        codec: string | undefined,
++        renderFps: number | undefined,
++        decodeFps: number | undefined,
++        largados: number | undefined,
++        msBuffer: number | undefined;
++
++      /**
++       * Contadores brutos e dimensoes, para o servidor.
++       *
++       * Taxas ja calculadas respondem "quanto"; estes respondem "de onde".
++       * A pergunta que sobrou da auditoria -- se o navegador esta
++       * REDUZINDO cada quadro dentro do caminho de captura -- so se
++       * responde comparando o tamanho pedido, o entregue e o do monitor.
++       */
++      const bruto: Record<string, number | string> = {};
 +
 +      // `codecId` aponta para outra linha do relatorio; sem este mapa o
 +      // nome do codec fica sendo um identificador opaco.
@@ -410,6 +528,8 @@ index 6df8439..7d141c2 100644
 +        // e dela que sai a imagem que os outros veem.
 +        let tempoCodifica = 0;
 +        let quadrosCodificados = 0;
++        let quadrosEnviados = 0;
++        let camadas = 0;
 +        let maiorAltura = 0;
 +
 +        for (const s of saidas) {
@@ -420,6 +540,13 @@ index 6df8439..7d141c2 100644
 +            if (typeof s.framesPerSecond === "number")
 +              fps = Math.round(s.framesPerSecond);
 +          }
++
++          // Camada ATIVA, nao camada declarada: com dynacast a linha
++          // continua no relatorio depois de a camada ser desligada. Sem
++          // esta contagem, `msQuadro` -- que soma o custo de todas -- nao
++          // tem por quanto ser dividido.
++          if (typeof s.framesPerSecond === "number" && s.framesPerSecond > 0)
++            camadas += 1;
 +
 +          const r = s.qualityLimitationReason;
 +          const traduzido =
@@ -451,6 +578,7 @@ index 6df8439..7d141c2 100644
 +            tempoCodifica += s.totalEncodeTime;
 +          if (typeof s.framesEncoded === "number")
 +            quadrosCodificados += s.framesEncoded;
++          if (typeof s.framesSent === "number") quadrosEnviados += s.framesSent;
 +        }
 +
 +        // Saida sem quadro nenhum e faixa PAUSADA, nao faixa ruim. Sem
@@ -468,6 +596,9 @@ index 6df8439..7d141c2 100644
 +          if (s2.type !== "media-source" || s2.kind !== "video") return;
 +          if (typeof s2.framesPerSecond === "number")
 +            capturaFps = Math.round(s2.framesPerSecond);
++          if (typeof s2.width === "number") bruto.fonteLargura = s2.width;
++          if (typeof s2.height === "number") bruto.fonteAltura = s2.height;
++          if (typeof s2.frames === "number") bruto.quadrosCapturados = s2.frames;
 +          if (pausado && typeof s2.height === "number") altura = s2.height;
 +        });
 +        if (pausado && fps === undefined) fps = capturaFps;
@@ -475,7 +606,10 @@ index 6df8439..7d141c2 100644
 +        // Tempo de codificacao tambem por diferenca: o contador do WebRTC
 +        // e acumulado desde o inicio, e a media de uma hora inteira nao
 +        // diz nada sobre o engasgo de agora.
-+        if (antes) {
++        if (
++          antes.tempoCodifica !== undefined &&
++          antes.quadrosCodificados !== undefined
++        ) {
 +          const dTempo = Math.max(0, tempoCodifica - antes.tempoCodifica);
 +          const dQuadros = Math.max(
 +            0,
@@ -483,17 +617,51 @@ index 6df8439..7d141c2 100644
 +          );
 +          if (dQuadros > 0) msQuadro = (dTempo / dQuadros) * 1000;
 +        }
-+        antes = {
-+          perdidos: antes?.perdidos ?? 0,
-+          recebidos: antes?.recebidos ?? 0,
-+          travadas: antes?.travadas ?? 0,
-+          tempoCodifica,
-+          quadrosCodificados,
-+        };
++        antes.tempoCodifica = tempoCodifica;
++        antes.quadrosCodificados = quadrosCodificados;
++
++        bruto.camadas = camadas;
++        bruto.quadrosEnviados = quadrosEnviados;
++        bruto.quadrosCodificados = quadrosCodificados;
++
++        /*
++          O que a captura diz de si mesma.
++
++          `getSettings()` e a unica fonte do que o navegador REALMENTE
++          concedeu: `frameRate` aqui e a cadencia acordada com a fonte, e
++          `displaySurface` diz se e tela inteira, janela ou aba -- que e
++          justamente o que muda o custo por quadro. Comparado com
++          `screen`, revela se cada quadro esta sendo reduzido dentro do
++          caminho de captura antes mesmo de chegar ao codificador.
++        */
++        const mst = (faixa as unknown as { mediaStreamTrack?: MediaStreamTrack })
++          .mediaStreamTrack;
++        const cfg = mst?.getSettings?.() as
++          | (MediaTrackSettings & { displaySurface?: string })
++          | undefined;
++        if (cfg) {
++          if (typeof cfg.width === "number") bruto.capturaLargura = cfg.width;
++          if (typeof cfg.height === "number") bruto.capturaAltura = cfg.height;
++          if (typeof cfg.frameRate === "number")
++            bruto.capturaPedida = Math.round(cfg.frameRate);
++          if (typeof cfg.displaySurface === "string")
++            bruto.superficie = cfg.displaySurface;
++        }
++        if (typeof screen?.width === "number") bruto.telaLargura = screen.width;
++        if (typeof screen?.height === "number") bruto.telaAltura = screen.height;
++        if (typeof devicePixelRatio === "number")
++          bruto.telaEscala = devicePixelRatio;
 +      } else {
 +        let perdidos: number | undefined,
 +          recebidos: number | undefined,
-+          congelou: number | undefined;
++          congelou: number | undefined,
++          decodificados: number | undefined,
++          quadrosLargados: number | undefined,
++          quadrosRecebidos: number | undefined,
++          bufferSegundos: number | undefined,
++          bufferQuadros: number | undefined,
++          segCongelado: number | undefined,
++          pausas: number | undefined;
 +
 +        for (const s of entradas) {
 +          if (typeof s.framesPerSecond === "number")
@@ -503,6 +671,19 @@ index 6df8439..7d141c2 100644
 +          if (typeof s.packetsReceived === "number")
 +            recebidos = s.packetsReceived;
 +          if (typeof s.freezeCount === "number") congelou = s.freezeCount;
++          if (typeof s.framesDecoded === "number")
++            decodificados = s.framesDecoded;
++          if (typeof s.framesDropped === "number")
++            quadrosLargados = s.framesDropped;
++          if (typeof s.framesReceived === "number")
++            quadrosRecebidos = s.framesReceived;
++          if (typeof s.totalFreezesDuration === "number")
++            segCongelado = s.totalFreezesDuration;
++          if (typeof s.pauseCount === "number") pausas = s.pauseCount;
++          if (typeof s.jitterBufferDelay === "number")
++            bufferSegundos = s.jitterBufferDelay;
++          if (typeof s.jitterBufferEmittedCount === "number")
++            bufferQuadros = s.jitterBufferEmittedCount;
 +          if (typeof s.decoderImplementation === "string")
 +            motor = s.decoderImplementation;
 +          if (typeof s.codecId === "string")
@@ -510,23 +691,85 @@ index 6df8439..7d141c2 100644
 +        }
 +
 +        if (perdidos !== undefined && recebidos !== undefined) {
-+          if (antes) {
++          if (antes.perdidos !== undefined && antes.recebidos !== undefined) {
 +            const dPerdidos = Math.max(0, perdidos - antes.perdidos);
 +            const dRecebidos = Math.max(0, recebidos - antes.recebidos);
 +            const total = dPerdidos + dRecebidos;
 +            if (total > 0) perda = (dPerdidos / total) * 100;
 +          }
-+          if (congelou !== undefined && antes)
-+            travadas = Math.max(0, congelou - antes.travadas);
-+
-+          antes = {
-+            perdidos,
-+            recebidos,
-+            travadas: congelou ?? antes?.travadas ?? 0,
-+            tempoCodifica: antes?.tempoCodifica ?? 0,
-+            quadrosCodificados: antes?.quadrosCodificados ?? 0,
-+          };
++          antes.perdidos = perdidos;
++          antes.recebidos = recebidos;
 +        }
++
++        if (congelou !== undefined) {
++          if (antes.travadas !== undefined)
++            travadas = Math.max(0, congelou - antes.travadas);
++          antes.travadas = congelou;
++        }
++
++        if (quadrosLargados !== undefined) {
++          if (antes.largados !== undefined)
++            largados = Math.max(0, quadrosLargados - antes.largados);
++          antes.largados = quadrosLargados;
++        }
++
++        if (decodificados !== undefined) {
++          if (antes.decodificados !== undefined)
++            decodeFps = Math.round(
++              Math.max(0, decodificados - antes.decodificados) / 2,
++            );
++          antes.decodificados = decodificados;
++        }
++
++        // Folga do buffer pela RAZAO entre os dois acumulados. O
++        // `jitterBufferDelay` sozinho so cresce: lido em bruto, uma
++        // transmissao de uma hora acusaria atraso enorme mesmo com o
++        // buffer vazio agora.
++        if (bufferSegundos !== undefined && bufferQuadros !== undefined) {
++          if (
++            antes.bufferSegundos !== undefined &&
++            antes.bufferQuadros !== undefined
++          ) {
++            const dS = bufferSegundos - antes.bufferSegundos;
++            const dQ = bufferQuadros - antes.bufferQuadros;
++            if (dQ > 0) msBuffer = (dS / dQ) * 1000;
++          }
++          antes.bufferSegundos = bufferSegundos;
++          antes.bufferQuadros = bufferQuadros;
++        }
++
++        if (quadrosRecebidos !== undefined)
++          bruto.quadrosRecebidos = quadrosRecebidos;
++        if (decodificados !== undefined)
++          bruto.quadrosDecodificados = decodificados;
++        if (quadrosLargados !== undefined)
++          bruto.quadrosLargados = quadrosLargados;
++        if (segCongelado !== undefined) bruto.segCongelado = segCongelado;
++        if (pausas !== undefined) bruto.pausas = pausas;
++        // O tamanho em que a faixa esta sendo EXIBIDA. Com adaptiveStream,
++        // quem escolhe a camada e o tamanho do elemento -- entao um quadro
++        // pequeno recebendo 360p nao e defeito, e a regra funcionando.
++        if (videoRef) {
++          bruto.exibeLargura = videoRef.videoWidth || 0;
++          bruto.exibeAltura = videoRef.videoHeight || 0;
++        }
++      }
++
++      // Quadros que viraram imagem, por segundo. Vale para os dois papeis,
++      // mas so diz algo em faixa recebida: no proprio quadro o navegador
++      // exibe a previa local, que nao passa pelo caminho de rede.
++      if (apresentados !== undefined && apresentadosEm !== undefined) {
++        if (
++          antes.apresentados !== undefined &&
++          antes.apresentadosEm !== undefined
++        ) {
++          const dQuadros = apresentados - antes.apresentados;
++          const dTempo = (apresentadosEm - antes.apresentadosEm) / 1000;
++          if (dTempo > 0.5 && dQuadros >= 0)
++            renderFps = Math.round(dQuadros / dTempo);
++        }
++        antes.apresentados = apresentados;
++        antes.apresentadosEm = apresentadosEm;
 +      }
 +
 +      setCondicoes({
@@ -542,17 +785,26 @@ index 6df8439..7d141c2 100644
 +        segBanda,
 +        motor,
 +        codec,
++        renderFps,
++        decodeFps,
++        largados,
++        msBuffer,
 +      });
 +
-+      // A cada cinco voltas (10s) quem transmite conta ao servidor como
-+      // esta indo. E o unico jeito de enxergar daqui o que so existe no
-+      // navegador de quem transmite -- sem isso, diagnosticar travamento
-+      // dos outros vira troca de mensagem e adivinhacao.
++      // A cada cinco voltas (10s) o quadro conta ao servidor como esta
++      // indo -- agora dos DOIS lados. So quem transmite era medido, e por
++      // isso "recebe", "decodifica" e "renderiza" nunca tiveram numero:
++      // quando alguem dizia que travou, nao havia dado que confirmasse ou
++      // descartasse que o problema fosse do lado de quem assiste.
 +      voltas += 1;
-+      if (souEu && isScreenShare() && voltas % 5 === 0) {
++      if (isScreenShare() && voltas % 5 === 0) {
 +        window.dispatchEvent(
 +          new CustomEvent("dp-condicoes", {
 +            detail: {
++              // Sem o papel e a faixa, as medidas de quem transmite e de
++              // quem assiste caem no mesmo registro e uma apaga a outra.
++              papel: souEu ? "transmite" : "assiste",
++              faixa: (track as TrackReference).publication?.trackSid,
 +              fps,
 +              altura,
 +              limite,
@@ -563,6 +815,13 @@ index 6df8439..7d141c2 100644
 +              segBanda,
 +              motor,
 +              codec,
++              renderFps,
++              decodeFps,
++              largados,
++              msBuffer,
++              perda,
++              travadas,
++              bruto,
 +              // A maioria acessa pelo aplicativo de Windows, que e um
 +              // Tauri sobre WebView2 -- e para o servidor ele se anuncia
 +              // como "Edge", igual ao navegador. Sem esta marca nao da
@@ -581,18 +840,23 @@ index 6df8439..7d141c2 100644
 +    onCleanup(() => clearInterval(relogio));
 +  });
 +
++
 +  /** Verde nao aparece: so vale dizer algo quando ha algo a dizer. */
 +  const gravidade = () => {
-+    const { fps, perda, limite, travadas } = condicoes();
++    const { fps, perda, limite, travadas, renderFps } = condicoes();
++    // `renderFps` entra junto com `fps` de proposito: uma tela que chega a
++    // 30 e aparece a 12 esta ruim para quem assiste, e so este numero sabe.
 +    if (
 +      (perda ?? 0) >= 5 ||
 +      (fps !== undefined && fps > 0 && fps < 8) ||
++      (renderFps !== undefined && renderFps > 0 && renderFps < 8) ||
 +      (travadas ?? 0) >= 3
 +    )
 +      return "ruim" as const;
 +    if (
 +      (perda ?? 0) >= 1.5 ||
 +      (fps !== undefined && fps > 0 && fps < 15) ||
++      (renderFps !== undefined && renderFps > 0 && renderFps < 15) ||
 +      (travadas ?? 0) > 0 ||
 +      limite === "cpu"
 +    )
@@ -608,7 +872,7 @@ index 6df8439..7d141c2 100644
    const isSpeaking = useIsSpeaking(participant);
  
    const getHeight = () => {
-@@ -86,13 +639,34 @@ export function ParticipantTile(props: TileProps) {
+@@ -86,13 +903,34 @@ export function ParticipantTile(props: TileProps) {
    return (
      <Show when={!isScreenShare() || !isRemoteScreenShareMuted()}>
        <div
@@ -645,7 +909,7 @@ index 6df8439..7d141c2 100644
          }
          onClick={() => voice.toggleFocus(track)}
          use:floating={{
-@@ -107,6 +681,23 @@ export function ParticipantTile(props: TileProps) {
+@@ -107,6 +945,23 @@ export function ParticipantTile(props: TileProps) {
                member={user().member}
                inVoice={!isScreenShare()}
                isScreenshare={isScreenShare()}
@@ -669,7 +933,7 @@ index 6df8439..7d141c2 100644
              />
            ),
          }}
-@@ -144,6 +735,92 @@ export function ParticipantTile(props: TileProps) {
+@@ -144,6 +999,106 @@ export function ParticipantTile(props: TileProps) {
              }}
            />
          </Show>
@@ -712,6 +976,20 @@ index 6df8439..7d141c2 100644
 +            >
 +              <i>·</i>
 +              captura {condicoes().capturaFps} fps
++            </Show>
++            <Show
++              when={
++                condicoes().renderFps !== undefined &&
++                condicoes().fps !== undefined &&
++                Math.abs(condicoes().renderFps! - condicoes().fps!) >= 3
++              }
++            >
++              <i>·</i>
++              {condicoes().renderFps} na tela
++            </Show>
++            <Show when={condicoes().largados}>
++              <i>·</i>
++              {condicoes().largados} largados
 +            </Show>
 +            <Show when={condicoes().pausado}>
 +              <i>·</i>

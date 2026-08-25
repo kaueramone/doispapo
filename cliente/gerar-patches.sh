@@ -52,7 +52,6 @@ declare -A SERIE=(
   [0022-menu-com-extras]=packages/client/components/app/menus/UserContextMenu.tsx
   [0023-audio-de-tela-audivel]=packages/client/components/state/stores/Voice.ts
   [0024-selo-ao-vivo]=packages/client/components/ui/components/features/voice/VoiceStatefulUserIcons.tsx
-  [0025-canal-ausente]=packages/client/components/rtc/index.ts
   [0026-faixa-de-presenca]=packages/client/components/ui/components/features/voice/FaixaDePresenca.tsx
   [0027-linha-de-entrada]=packages/client/components/ui/components/features/voice/callCard/VoiceCallCardPreview.tsx
   [0028-canal-de-texto]=packages/client/src/interface/channels/text/TextChannel.tsx
@@ -69,6 +68,8 @@ declare -A SERIE=(
   [0040-cartao-do-fluxo]=packages/client/components/auth/src/flows/Flow.tsx
   [0041-criar-conta]=packages/client/components/auth/src/flows/FlowCreate.tsx
   [0038-palco-movel]=packages/client/components/ui/components/features/voice/callCard/VoiceCallCardActiveRoom.tsx
+  [0042-folga-de-reproducao]=packages/client/components/ui/components/features/voice/folga.ts
+  [0043-audio-da-sala]=packages/client/components/rtc/components/RoomAudioManager.tsx
 )
 
 for nome in $(printf '%s\n' "${!SERIE[@]}" | sort); do

@@ -949,25 +949,44 @@ class Handler(BaseHTTPRequestHandler):
         # Chamadas em andamento, para o contador de duração.
         if rota == "/condicoes":
             agora = int(time.time())
-            itens = []
+            # Duas listas, e nao uma com um campo "papel": quem le isto de
+            # fora -- o amostrar-condicoes.sh -- pede "transmissores" e
+            # imprime uma linha por item. Misturar quem assiste nessa mesma
+            # lista mudaria o significado da serie ja coletada sem avisar.
+            transmite, assiste = [], []
             for d in db.dp_condicoes.find():
                 idade = agora - int(d.get("em") or 0)
                 # Mais de dois minutos parado nao e medicao, e lembranca.
                 if idade > 120:
                     continue
-                itens.append({"usuario": d["_id"], "ha_s": idade,
-                              "sala": d.get("sala"), "fps": d.get("fps"),
-                              "altura": d.get("altura"),
-                              "limite": d.get("limite"),
-                              "msQuadro": d.get("msQuadro"),
-                              "pausado": d.get("pausado"),
-                              "capturaFps": d.get("capturaFps"),
-                              "segCpu": d.get("segCpu"),
-                              "segBanda": d.get("segBanda"),
-                              "motor": d.get("motor"),
-                              "codec": d.get("codec"),
-                              "app": d.get("app")})
-            return self.responde(200, {"transmissores": itens})
+                item = {"usuario": d.get("usuario") or d["_id"],
+                        "ha_s": idade,
+                        "papel": d.get("papel") or "transmite",
+                        "faixa": d.get("faixa"),
+                        "sala": d.get("sala"), "fps": d.get("fps"),
+                        "altura": d.get("altura"),
+                        "limite": d.get("limite"),
+                        "msQuadro": d.get("msQuadro"),
+                        "pausado": d.get("pausado"),
+                        "capturaFps": d.get("capturaFps"),
+                        "segCpu": d.get("segCpu"),
+                        "segBanda": d.get("segBanda"),
+                        "motor": d.get("motor"),
+                        "codec": d.get("codec"),
+                        "renderFps": d.get("renderFps"),
+                        "decodeFps": d.get("decodeFps"),
+                        "largados": d.get("largados"),
+                        "msBuffer": d.get("msBuffer"),
+                        "perda": d.get("perda"),
+                        "travadas": d.get("travadas"),
+                        "bruto": d.get("bruto") or {},
+                        "app": d.get("app")}
+                if item["papel"] == "assiste":
+                    assiste.append(item)
+                else:
+                    transmite.append(item)
+            return self.responde(200, {"transmissores": transmite,
+                                       "assistentes": assiste})
 
         if rota == "/chamadas":
             itens = {
@@ -1209,7 +1228,12 @@ class Handler(BaseHTTPRequestHandler):
             uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
             if not uid:
                 return self.responde(401, {"erro": "sessao_invalida"})
-            c = self.corpo_json(limite=1024)
+            # 1 KB nao cabia mais o que e preciso medir. Os contadores
+            # brutos -- quadros capturados, enviados, recebidos,
+            # decodificados, largados, e o tamanho da fonte, da captura e
+            # do monitor -- sao o que separa "a captura nao entrega" de "o
+            # navegador esta reduzindo cada quadro antes de codificar".
+            c = self.corpo_json(limite=4096)
 
             def numero(v, teto):
                 try:
@@ -1230,22 +1254,79 @@ class Handler(BaseHTTPRequestHandler):
             if limite not in ("cpu", "banda", "outro"):
                 limite = None
 
+            papel = "assiste" if c.get("papel") == "assiste" else "transmite"
+            faixa = texto(c.get("faixa"), 24) or ""
+
+            # Lista fechada, com teto por campo. `bruto` e um dicionario
+            # montado no navegador: aceito como veio, ele vira campo de
+            # texto livre gravado no banco por quem quiser.
+            TETOS = {"camadas": 8,
+                     "quadrosEnviados": 1e9, "quadrosCodificados": 1e9,
+                     "quadrosCapturados": 1e9, "quadrosRecebidos": 1e9,
+                     "quadrosDecodificados": 1e9, "quadrosLargados": 1e9,
+                     "segCongelado": 86400, "pausas": 1e6,
+                     "fonteLargura": 16384, "fonteAltura": 16384,
+                     "capturaLargura": 16384, "capturaAltura": 16384,
+                     "capturaPedida": 240,
+                     "telaLargura": 16384, "telaAltura": 16384,
+                     "telaEscala": 8,
+                     "exibeLargura": 16384, "exibeAltura": 16384}
+            entrada = c.get("bruto")
+            bruto = {}
+            if isinstance(entrada, dict):
+                for chave, teto in TETOS.items():
+                    v = numero(entrada.get(chave), teto)
+                    if v is not None:
+                        bruto[chave] = v
+                superficie = texto(entrada.get("superficie"), 16)
+                if superficie:
+                    bruto["superficie"] = superficie
+
+            doc = {"em": int(time.time()),
+                   "usuario": uid,
+                   "papel": papel,
+                   "faixa": faixa,
+                   "sala": (c.get("sala") or "")[:32],
+                   "fps": numero(c.get("fps"), 120),
+                   "altura": numero(c.get("altura"), 4320),
+                   "limite": limite,
+                   "msQuadro": numero(c.get("msQuadro"), 10000),
+                   "pausado": bool(c.get("pausado")),
+                   "capturaFps": numero(c.get("capturaFps"), 240),
+                   "segCpu": numero(c.get("segCpu"), 86400),
+                   "segBanda": numero(c.get("segBanda"), 86400),
+                   "motor": texto(c.get("motor"), 48),
+                   "codec": texto(c.get("codec"), 16),
+                   "renderFps": numero(c.get("renderFps"), 240),
+                   "decodeFps": numero(c.get("decodeFps"), 240),
+                   "largados": numero(c.get("largados"), 1e6),
+                   "msBuffer": numero(c.get("msBuffer"), 60000),
+                   "perda": numero(c.get("perda"), 100),
+                   "travadas": numero(c.get("travadas"), 1e6),
+                   "bruto": bruto,
+                   "app": bool(c.get("app"))}
+
+            # A chave inclui papel e faixa. Com `_id: uid` a medida de quem
+            # assiste sobrescrevia a de quem transmite a cada dez segundos,
+            # e duas telas abertas ao mesmo tempo brigavam pelo mesmo
+            # registro -- vencia a ultima a chegar.
             db.dp_condicoes.update_one(
-                {"_id": uid},
-                {"$set": {"em": int(time.time()),
-                          "sala": (c.get("sala") or "")[:32],
-                          "fps": numero(c.get("fps"), 120),
-                          "altura": numero(c.get("altura"), 4320),
-                          "limite": limite,
-                          "msQuadro": numero(c.get("msQuadro"), 10000),
-                          "pausado": bool(c.get("pausado")),
-                          "capturaFps": numero(c.get("capturaFps"), 240),
-                          "segCpu": numero(c.get("segCpu"), 86400),
-                          "segBanda": numero(c.get("segBanda"), 86400),
-                          "motor": texto(c.get("motor"), 48),
-                          "codec": texto(c.get("codec"), 16),
-                          "app": bool(c.get("app"))}},
-                upsert=True)
+                {"_id": "%s:%s:%s" % (uid, papel, faixa)},
+                {"$set": doc}, upsert=True)
+
+            # O documento acima e o AGORA, sobrescrito a cada dez segundos.
+            # Esta colecao e a serie -- e foi a serie, nunca a leitura
+            # isolada, que decidiu cada pergunta desta investigacao: 1 fps
+            # pode ser a tela parada e pode ser a captura estrangulada, e o
+            # que separa os dois casos e a sequencia. Some sozinha pelo TTL.
+            try:
+                from datetime import datetime, timezone
+                db.dp_condicoes_serie.insert_one(
+                    dict(doc, quando=datetime.now(timezone.utc)))
+            except Exception:
+                # Medicao nao e funcionalidade: se o historico falhar, a
+                # chamada segue e o "agora" acima ja foi gravado.
+                pass
             return self.responde(200, {"ok": True})
 
         # --------------------------------------- mover alguem de canal
@@ -1566,6 +1647,14 @@ if __name__ == "__main__":
     db.chamadas.create_index("encerrada")
     db.faixas.create_index("sala")
     db.account_invites.create_index("origem")
+    # TTL na criacao, e nao depois: uma serie que grava a cada dez segundos
+    # por transmissor e por espectador cresce rapido, e colecao sem prazo
+    # de validade e do tipo que so aparece quando o disco enche.
+    try:
+        db.dp_condicoes_serie.create_index("quando", expireAfterSeconds=3 * 24 * 3600)
+        db.dp_condicoes_serie.create_index([("usuario", 1), ("em", 1)])
+    except Exception as e:
+        print(f"indice da serie de condicoes: {e}", flush=True)
     print(f"servico de convites em :{PORTA} (limite {LIMITE})", flush=True)
     inicia_repasse()
     inicia_metricas()

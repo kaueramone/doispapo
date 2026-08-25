@@ -3,7 +3,8 @@
   "identifier": "padrao",
   "description": "Permissões da janela principal",
   "windows": [
-    "principal"
+    "principal",
+    "destaque-*"
   ],
   "remote": {
     "urls": [

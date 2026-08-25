@@ -1,0 +1,33 @@
+diff --git a/packages/client/components/rtc/components/RoomAudioManager.tsx b/packages/client/components/rtc/components/RoomAudioManager.tsx
+index 7274245..c47efa0 100644
+--- a/packages/client/components/rtc/components/RoomAudioManager.tsx
++++ b/packages/client/components/rtc/components/RoomAudioManager.tsx
+@@ -6,6 +6,7 @@ import { Key } from "@solid-primitives/keyed";
+ import { RemoteTrackPublication, Track } from "livekit-client";
+ 
+ import { useState } from "@revolt/state";
++import { aplicarFolga } from "@revolt/ui/components/features/voice/folga";
+ 
+ import { useVoice } from "../state";
+ 
+@@ -35,10 +36,18 @@ export function RoomAudioManager() {
+ 
+   createEffect(() => {
+     const tracks = filteredTracks();
+-    console.info("[rtc] filtered tracks", filteredTracks());
+     for (const track of tracks) {
+       (track.publication as RemoteTrackPublication).setSubscribed(true);
+-      console.info(track.publication);
++
++      // O audio DA TELA entra na mesma folga do video dela; o microfone
++      // nao entra em folga nenhuma. `aplicarFolga` conhece a regra e
++      // ignora o que nao for tela -- ver `../../ui/.../voice/folga.ts`.
++      //
++      // Aqui, e nao no quadro: o quadro so enxerga o video. Este efeito
++      // roda de novo quando a assinatura completa, que e quando
++      // `publication.track` passa a existir -- por isso nao precisa de
++      // espera propria.
++      aplicarFolga(track.publication.track, track.source);
+     }
+   });
+ 

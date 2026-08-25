@@ -190,27 +190,36 @@
       '.dp-tela-capa button{cursor:pointer;border:0;border-radius:9px;' +
         'padding:9px 20px;font:650 13px system-ui,sans-serif;color:#fff;' +
         'background:linear-gradient(100deg,#2E8BEB,#8C41D9)}' +
-      /* Embaixo, ao centro: e onde o controle de video mora em todo
-         lugar, e sai de cima do conteudo que a pessoa esta assistindo --
-         o canto superior direito costuma ser justamente onde ficam o
-         placar do jogo e a barra de ferramentas do que se compartilha.
+      /* Em cima, ao centro.
+    
+         O rodape era a escolha anterior, pela regra geral de que controle
+         de video mora embaixo. Na pratica nao e onde a mao vai: numa tela
+         de jogo o rodape e onde ficam barra de vida, inventario e chat do
+         jogo -- e o botao competia com tudo isso. Em cima, ao centro,
+         sobra o unico pedaco do quadro que a nossa propria interface nao
+         usa: as condicoes ficam na esquerda e os espectadores na direita.
 
          Discreto parado, firme no hover: nao e um botao que se procura o
          tempo todo, mas quando se procura tem de estar claro. */
       /* Acima de tudo que o quadro desenha por cima do video -- o nome
          de quem transmite e os indicadores ficam na mesma celula da
          grade, e o botao estava perdendo para eles. */
-      '.dp-tela-parar{position:absolute;left:50%;bottom:12px;z-index:30;' +
+      '.dp-tela-parar{position:absolute;left:50%;top:10px;z-index:30;' +
         'transform:translateX(-50%);cursor:pointer;border:0;' +
         'border-radius:999px;padding:8px 17px;' +
         'font:600 12.5px system-ui,sans-serif;color:#e8edf6;' +
         'background:rgba(11,17,25,.6);backdrop-filter:blur(6px);' +
+        /* Sem isto, num quadro estreito o botao encosta nas condicoes e
+           nos espectadores, que ocupam os dois cantos de cima. */
+        'max-width:calc(100% - 190px);white-space:nowrap;overflow:hidden;' +
+        'text-overflow:ellipsis;' +
         'opacity:.5;transition:opacity .15s ease,background .15s ease,' +
         'transform .15s ease}' +
       /* O translateX tem de vir junto no hover: sem ele o botao pula para
-         a esquerda no instante em que o mouse chega. */
+         a esquerda no instante em que o mouse chega. Descendo, e nao
+         subindo, agora que ele nasce colado no topo. */
       '.dp-tela-parar:hover{opacity:1;background:rgba(11,17,25,.92);' +
-        'transform:translateX(-50%) translateY(-2px)}';
+        'transform:translateX(-50%) translateY(2px)}';
     document.head.appendChild(e);
   }
 
