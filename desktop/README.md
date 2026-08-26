@@ -98,3 +98,59 @@ canal entre grupos, não aceita transfer list.
 A janela destacada tem de chamar `window.dpTelaAssistir(sid, true)` ao abrir
 e `false` ao fechar. Sem isso o `dpTelaBloqueia` do `branding/tela.js` recusa
 a assinatura e a janela abre preta. O `destacar.ts` já faz isso.
+
+## Argumentos do WebView2, e por que existem
+
+A 0.1.7 passou a definir `additionalBrowserArgs`. Antes disso a janela
+rodava com os padrões do wry, e o Chromium fazia o que faz em qualquer
+página: **ao minimizar, rebaixa a prioridade do processo de renderização**.
+
+Numa página comum isso é economia de bateria. Numa chamada de voz é o
+processo que decodifica e toca o áudio perdendo vez para o resto do
+sistema — e o resultado se ouve como voz robotizada. Foi o sintoma
+relatado: minimizou, a voz dos outros picotou.
+
+Os quatro acréscimos:
+
+| flag | o que resolve |
+|---|---|
+| `--disable-renderer-backgrounding` | o rebaixamento de prioridade ao minimizar |
+| `--disable-backgrounding-occluded-windows` | o mesmo, com a janela apenas coberta |
+| `--disable-background-timer-throttling` | `setInterval` caindo para 1×/s (e 1×/min depois de alguns minutos) — é o que estrangula o portão de ruído do `branding/audio.js`, que mede a cada 40 ms e abre/fecha o ganho **no caminho do que se transmite** |
+| `CalculateNativeWinOcclusion` em `--disable-features` | a detecção de janela coberta do Windows, gatilho do rebaixamento |
+
+O último é o menos certo dos quatro: a Microsoft não publica a lista de
+flags que o WebView2 honra.
+
+### A armadilha ao mexer aqui
+
+`additionalBrowserArgs` **substitui** os padrões do wry, não soma. Quem
+define este campo perde silenciosamente:
+
+```
+--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection
+--autoplay-policy=no-user-gesture-required
+```
+
+O segundo é o que deixa o áudio da chamada tocar sem clique. Estão
+repostos em `ARGS_WEBVIEW`, no `main.rs`. Qualquer mudança aqui tem de
+manter os dois.
+
+### O preço
+
+Minimizado, o aplicativo passa a consumir o mesmo que aberto. Para um
+aplicativo de voz isso é o certo, mas é uma mudança real de consumo — vale
+conferir num notebook a bateria antes e depois.
+
+### Como confirmar que era isto
+
+No navegador, sem instalar nada: abrir `chat.doispapo.com` no Chrome
+normal, entrar numa chamada, minimizar e ouvir. Depois fechar o Chrome e
+reabrir com
+
+```
+chrome.exe --disable-renderer-backgrounding --disable-backgrounding-occluded-windows
+```
+
+e repetir. Se o segundo não robotiza e o primeiro sim, a causa está
+confirmada e a 0.1.7 resolve.

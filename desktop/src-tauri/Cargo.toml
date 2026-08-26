@@ -1,6 +1,6 @@
 [package]
 name = "doispapo"
-version = "0.1.6"
+version = "0.1.7"
 description = "Dois Papo — plataforma de comunicação"
 authors = ["kaueramone"]
 edition = "2021"

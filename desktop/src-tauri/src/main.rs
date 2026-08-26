@@ -185,6 +185,47 @@ async fn verificar_atualizacao(app: tauri::AppHandle, pedida: bool) {
         });
 }
 
+/// Argumentos de linha de comando do WebView2.
+///
+/// Precisa repetir os padroes do wry: `additionalBrowserArgs` SUBSTITUI
+/// os padroes, nao soma. Quem define este campo perde silenciosamente o
+/// `--disable-features` do mini-menu e do SmartScreen, e a politica de
+/// autoplay -- que e o que deixa o audio da chamada tocar sem clique.
+///
+/// O que foi acrescentado, e por que:
+///
+///   --disable-renderer-backgrounding
+///   --disable-backgrounding-occluded-windows
+///       Com a janela minimizada, o Chromium rebaixa a prioridade do
+///       processo de renderizacao. Numa pagina comum isso e economia; numa
+///       chamada de voz e o processo que decodifica e toca o audio perdendo
+///       vez para o resto do sistema -- e o resultado se ouve como voz
+///       robotizada. Foi exatamente o sintoma relatado: minimizou, a voz
+///       dos outros picotou.
+///
+///   --disable-background-timer-throttling
+///       Com a janela escondida, `setInterval` cai para uma vez por segundo
+///       e, depois de alguns minutos, para uma vez por MINUTO. O portao de
+///       ruido do `branding/audio.js` mede o nivel a cada 40 ms e abre e
+///       fecha o ganho no caminho do que se transmite: estrangulado, ele
+///       decide a cada segundo se voce esta falando. Corta o comeco das
+///       frases de quem esta com a janela minimizada.
+///
+///   CalculateNativeWinOcclusion (em --disable-features)
+///       Desliga a deteccao de janela coberta do Windows, que e o gatilho
+///       do rebaixamento acima. Este e o menos certo dos quatro: a
+///       Microsoft nao publica a lista de flags que o WebView2 honra.
+///
+/// O preco e real e vale dito: minimizado, o aplicativo passa a consumir
+/// o mesmo que aberto. Para um aplicativo de voz isso e o certo.
+const ARGS_WEBVIEW: &str = concat!(
+    "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,CalculateNativeWinOcclusion",
+    " --autoplay-policy=no-user-gesture-required",
+    " --disable-renderer-backgrounding",
+    " --disable-background-timer-throttling",
+    " --disable-backgrounding-occluded-windows",
+);
+
 /// Contador de janelas destacadas, para o rotulo nao repetir.
 ///
 /// Rotulo repetido faz o `build()` falhar, e a falha aconteceria dentro do
@@ -253,6 +294,20 @@ fn main() {
                         ),
                     )
                     .window_features(features)
+                    // Os mesmos argumentos da principal -- por
+                    // seguranca, nao por necessidade.
+                    //
+                    // Conferido no wry: quando um Environment e fornecido
+                    // (e o `window_features` acima fornece o do opener),
+                    // ele e usado como esta e os argumentos NAO sao lidos
+                    // -- `if let Some(env) = &pl_attrs.environment
+                    // { env.clone() } else { create_environment(..) }`.
+                    // Entao esta linha e inerte hoje. Fica porque, se um
+                    // dia esta janela for criada sem herdar o Environment,
+                    // ela tem de nascer com a mesma configuracao da
+                    // principal -- e descobrir isso pela metade custaria
+                    // caro.
+                    .additional_browser_args(ARGS_WEBVIEW)
                     .title(url.as_str())
                     .on_document_title_changed(|janela, titulo| {
                         let _ = janela.set_title(&titulo);
