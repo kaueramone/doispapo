@@ -76,8 +76,18 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Só tags do aplicativo criam release, e o prefixo é conferido aqui de
+      # propósito. O `verificar_atualizacao` do main.rs lê
+      # `releases/latest`, que é a última release de QUALQUER tag do
+      # repositório, e faz `trim_start_matches("desktop-v")` antes de
+      # comparar. Uma release criada para uma tag da plataforma (v0.44.0)
+      # entraria nessa comparação como "0.44.0" contra "0.1.7" e todo
+      # aplicativo instalado passaria a anunciar uma atualização que não
+      # existe -- para sempre, porque a versão da plataforma só sobe.
+      # O gatilho de cima já é só `desktop-v*`; isto é o cinto além do
+      # suspensório, para quando alguém acrescentar outro gatilho.
       - name: Publicar release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
         uses: softprops/action-gh-release@v2
         with:
           files: publicar/DoisPapo-Setup.exe
