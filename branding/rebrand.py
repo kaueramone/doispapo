@@ -225,32 +225,49 @@ TELA = [
      "tela-sala"),
 
     # 2) video: so assina se o usuario tiver pedido para assistir
-    (re.compile(r'je\(\(\)=>\{i&&o\.publication instanceof ([\w$]+)&&'
-                r'u\(\)&&o\.publication\.setSubscribed\(!0\)\}\)'),
-     r'je(()=>{i&&o.publication instanceof \1&&u()&&!(window.dpTelaBloqueia'
-     r'&&window.dpTelaBloqueia(o.publication))&&'
-     r'o.publication.setSubscribed(!0)})',
+    #
+    # NENHUM nome minificado literal aqui, e isso custou uma publicacao
+    # barrada: a versao anterior casava `je(` e `u()` como texto. Uma
+    # mudanca em OUTRO arquivo -- a barra lateral do servidor -- fez o
+    # minificador renomear `je` para `ze`, e o remendo perdeu o alvo. O
+    # portao pegou, que e o que ele existe para fazer, mas o defeito era
+    # o padrao e nao o build.
+    #
+    # Agora casa a FORMA e usa retrovisor para o objeto (\3), o que
+    # tambem impede casar um trecho onde os nomes nao batem entre si.
+    (re.compile(r'([\w$]+)\(\(\)=>\{([\w$]+)&&([\w$]+)\.publication '
+                r'instanceof ([\w$]+)&&([\w$]+)\(\)&&'
+                r'\3\.publication\.setSubscribed\(!0\)\}\)'),
+     r'\1(()=>{\2&&\3.publication instanceof \4&&\5()&&'
+     r'!(window.dpTelaBloqueia&&window.dpTelaBloqueia(\3.publication))&&'
+     r'\3.publication.setSubscribed(!0)})',
      "tela-assina"),
 
     # 3) video: desassina tambem quando bloqueado, nao so quando some
     #    da tela - no caso relatado os dois quadros estao VISIVEIS
-    (re.compile(r'je\(\(\)=>\{i&&o\.publication instanceof ([\w$]+)&&'
-                r'd\(\)===!1&&u\(\)===!1&&'
-                r'o\.publication\.setSubscribed\(!1\)\}\)'),
-     r'je(()=>{i&&o.publication instanceof \1&&((d()===!1&&u()===!1)||'
-     r'(window.dpTelaBloqueia&&window.dpTelaBloqueia(o.publication)))&&'
-     r'o.publication.setSubscribed(!1)})',
+    (re.compile(r'([\w$]+)\(\(\)=>\{([\w$]+)&&([\w$]+)\.publication '
+                r'instanceof ([\w$]+)&&([\w$]+)\(\)===!1&&([\w$]+)\(\)===!1&&'
+                r'\3\.publication\.setSubscribed\(!1\)\}\)'),
+     r'\1(()=>{\2&&\3.publication instanceof \4&&'
+     r'((\5()===!1&&\6()===!1)||'
+     r'(window.dpTelaBloqueia&&window.dpTelaBloqueia(\3.publication)))&&'
+     r'\3.publication.setSubscribed(!1)})',
      "tela-desassina"),
 
-    # 4) audio: o componente de audio assinava tudo a forca, inclusive
-    #    o som da tela compartilhada
-    (re.compile(r'for\(const s of i\)s\.publication\.setSubscribed\(!0\),'
-                r'console\.info\(s\.publication\)'),
-     r'for(const s of i)(window.dpTelaBloqueia&&'
-     r'window.dpTelaBloqueia(s.publication))||'
-     r'(s.publication.setSubscribed(!0),console.info(s.publication))',
-     "tela-audio"),
+    # O quarto sitio -- a guarda do AUDIO da tela -- saiu daqui.
+    #
+    # Ele casava `for(const s of i)s.publication.setSubscribed(!0),
+    # console.info(s.publication)`, ou seja, dependia de um `console.info`
+    # existir no fonte. Uma limpeza de log em RoomAudioManager.tsx tirou
+    # esse log, o padrao deixou de casar, e o som de toda tela
+    # compartilhada passou a tocar para a sala inteira -- sem erro, sem
+    # aviso, sem nada no build reprovando.
+    #
+    # A guarda agora vive no fonte, em `RoomAudioManager.tsx`. Regra de
+    # produto nao pode depender de um trecho minificado continuar com a
+    # mesma forma.
 ]
+_tela_total = {rotulo: 0 for _, _, rotulo in TELA}
 for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
     s_ = open(f, encoding="utf-8", errors="replace").read()
     o_ = s_
@@ -258,8 +275,21 @@ for f in glob.glob(os.path.join(DST, "assets", "index-*.js")):
         s_, n = padrao.subn(troca, s_)
         if n:
             conta(rotulo, n)
+            _tela_total[rotulo] += n
     if s_ != o_:
         open(f, "w", encoding="utf-8").write(s_)
+
+# Remendo que nao acha o alvo FALHA O BUILD. Antes ele falhava calado:
+# a substituicao simplesmente nao acontecia, o build era aprovado, e o
+# defeito aparecia em producao como comportamento -- som da tela tocando
+# para quem nao pediu. Cada um destes sitios e uma regra de produto.
+_sem_alvo = [r for r, n in _tela_total.items() if n == 0]
+if _sem_alvo:
+    raise SystemExit(
+        "rebrand: remendo(s) de tela sem alvo no bundle: "
+        + ", ".join(sorted(_sem_alvo))
+        + "\n  O upstream renomeou algo, ou o fonte mudou de forma."
+        + "\n  Conferir os padroes em TELA antes de publicar.")
 
 
 # ------------------------------ 1f. links institucionais que nao existem

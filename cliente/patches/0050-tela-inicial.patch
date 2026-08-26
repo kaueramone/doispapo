@@ -1,0 +1,276 @@
+diff --git a/packages/client/src/interface/Home.tsx b/packages/client/src/interface/Home.tsx
+index 617d6b9..7f68faf 100644
+--- a/packages/client/src/interface/Home.tsx
++++ b/packages/client/src/interface/Home.tsx
+@@ -102,6 +102,32 @@ export function HomePage() {
+   const isInLounge =
+     client()!.servers.get("01F7ZSBSFHQ8TA81725KQCSDDP") !== undefined;
+ 
++  /**
++   * Quantas comunidades esta conta já criou, contra o limite da
++   * instância.
++   *
++   * O cliente do upstream NUNCA lê esse limite: a pessoa preenche o nome,
++   * clica em criar e recebe um modal de erro genérico vindo da API. Isso
++   * já era um buraco; com "Crie sua comunidade" virando o primeiro botão
++   * do aplicativo, passaria a ser o primeiro encontro de todo mundo que
++   * já tem uma.
++   */
++  const jaTemComunidade = () => {
++    const eu = client()!.user?.id;
++    const teto =
++      client()!.configuration?.features.limits.default.servers ?? Infinity;
++    const minhas = [...client()!.servers.values()].filter(
++      (s) => s.ownerId === eu,
++    );
++    return minhas.length >= teto ? minhas[0] : null;
++  };
++
++  function criarComunidade() {
++    const minha = jaTemComunidade();
++    if (minha) return navigate(`/server/${minha.id}`);
++    openModal({ type: "create_server", client: client()! });
++  }
++
+   return (
+     <Base>
+       <Header placement="primary">
+@@ -119,117 +145,68 @@ export function HomePage() {
+             })}
+           />
+         </Column>
+-        <Buttons>
+-          <SeparatedColumn>
+-            <CategoryButton
+-              onClick={() =>
+-                openModal({
+-                  type: "create_group_or_server",
+-                  client: client()!,
+-                })
+-              }
+-              description={
+-                <Trans>
+-                  Invite all of your friends, some cool bots, and throw a big
+-                  party.
+-                </Trans>
+-              }
+-              icon={<MdAddCircle />}
+-            >
+-              <Trans>Create a group or server</Trans>
+-            </CategoryButton>
+-            <Switch fallback={null}>
+-              <Match when={showLoungeButton && isInLounge}>
+-                <CategoryButton
+-                  onClick={() => navigate("/server/01F7ZSBSFHQ8TA81725KQCSDDP")}
+-                  description={
+-                    <Trans>
+-                      You can report issues and discuss improvements with us
+-                      directly here.
+-                    </Trans>
+-                  }
+-                  icon={<MdGroups3 />}
+-                >
+-                  <Trans>Go to the Stoat Lounge</Trans>
+-                </CategoryButton>
+-              </Match>
+-              <Match when={showLoungeButton && !isInLounge}>
+-                <CategoryButton
+-                  onClick={() => {
+-                    client()
+-                      .api.get("/invites/Testers")
+-                      .then((invite) =>
+-                        PublicChannelInvite.from(client(), invite),
+-                      )
+-                      .then((invite) => openModal({ type: "invite", invite }));
+-                  }}
+-                  description={
+-                    <Trans>
+-                      You can report issues and discuss improvements with us
+-                      directly here.
+-                    </Trans>
+-                  }
+-                  icon={<MdGroups3 />}
+-                >
+-                  <Trans>Join the Stoat Lounge</Trans>
+-                </CategoryButton>
+-              </Match>
+-            </Switch>
+-            <CategoryButton
+-              variant="tertiary"
+-              onClick={() => window.open("https://ko-fi.com/stoatchat")}
+-              description={
+-                <Trans>Support the project by donating - thank you!</Trans>
+-              }
+-              icon={<MdPayments />}
+-            >
+-              <Trans>Donate to Stoat</Trans>
+-            </CategoryButton>
+-          </SeparatedColumn>
+-          <SeparatedColumn>
+-            <Show when={CONFIGURATION.IS_STOAT}>
+-              <CategoryButton
+-                onClick={() => navigate("/discover")}
+-                description={
++        <Caminhos>
++          <Caminho onClick={criarComunidade}>
++            <MdAddCircle {...iconSize(40)} />
++            <span class="titulo">
++              <Show when={jaTemComunidade()} fallback={<Trans>Crie sua comunidade</Trans>}>
++                <Trans>Abra a sua comunidade</Trans>
++              </Show>
++            </span>
++            <span class="sub">
++              <Show
++                when={jaTemComunidade()}
++                fallback={
+                   <Trans>
+-                    Find a community based on your hobbies or interests.
++                    Um lugar seu, com os canais e as pessoas que você
++                    escolher.
+                   </Trans>
+                 }
+-                icon={<MdExplore />}
+               >
+-                <Trans>Discover Stoat</Trans>
+-              </CategoryButton>
+-            </Show>
+-            <CategoryButton
+-              onClick={() =>
+-                openModal({
+-                  type: "settings",
+-                  config: "user",
+-                  context: { page: "feedback" },
+-                })
+-              }
+-              description={
+-                <Trans>
+-                  Let us know how we can improve our app by giving us feedback.
+-                </Trans>
+-              }
+-              icon={<MdRateReview {...iconSize(22)} />}
+-            >
+-              <Trans>Give feedback on Stoat</Trans>
+-            </CategoryButton>
+-            <CategoryButton
+-              onClick={() => openModal({ type: "settings", config: "user" })}
+-              description={
+-                <Trans>
+-                  You can also click the gear icon in the bottom left.
+-                </Trans>
+-              }
+-              icon={<MdSettings />}
+-            >
+-              <Trans>Open settings</Trans>
+-            </CategoryButton>
+-          </SeparatedColumn>
+-        </Buttons>
++                <Trans>Você já tem uma. Toque para abrir.</Trans>
++              </Show>
++            </span>
++          </Caminho>
++
++          <Caminho onClick={() => navigate("/descobrir")}>
++            <MdExplore {...iconSize(40)} />
++            <span class="titulo">
++              <Trans>Encontre a sua comunidade</Trans>
++            </span>
++            <span class="sub">
++              <Trans>
++                Veja as comunidades abertas e peça para entrar na que for
++                a sua cara.
++              </Trans>
++            </span>
++          </Caminho>
++        </Caminhos>
++
++        {/* Feedback e Configurações eram dois dos quatro botões antigos.
++            Continuam aqui, discretos: para quem não conhece o app, esta
++            era a única porta visível para os dois. Tirá-los junto com a
++            reforma seria um efeito colateral, não uma decisão. */}
++        <Rodape>
++          <a onClick={() => openModal({ type: "settings", config: "user" })}>
++            <Trans>Configurações</Trans>
++          </a>
++          <span>·</span>
++          <a
++            onClick={() =>
++              openModal({
++                type: "settings",
++                config: "user",
++                context: { page: "feedback" },
++              })
++            }
++          >
++            <Trans>Enviar feedback</Trans>
++          </a>
++          <span>·</span>
++          <a href="https://doispapo.com/apoie" target="_blank" rel="noreferrer">
++            <Trans>Apoie o projeto</Trans>
++          </a>
++        </Rodape>
+         <Show when={IS_DEV}>
+           <Button onPress={() => navigate("/dev")}>
+             Open Development Page
+@@ -239,3 +216,62 @@ export function HomePage() {
+     </Base>
+   );
+ }
++
++/**
++ * Os dois caminhos da tela inicial.
++ *
++ * `auto-fit` com mínimo em px: lado a lado no monitor, empilhados no
++ * celular, sem media query.
++ */
++const Caminhos = styled("div", {
++  base: {
++    display: "grid",
++    gap: "16px",
++    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
++    width: "100%",
++    maxWidth: "720px",
++    marginInline: "auto",
++    paddingInline: "16px",
++  },
++});
++
++const Caminho = styled("button", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    alignItems: "flex-start",
++    gap: "8px",
++    padding: "24px",
++    border: "none",
++    cursor: "pointer",
++    textAlign: "start",
++    borderRadius: "16px",
++    color: "var(--md-sys-color-on-surface)",
++    background: "var(--md-sys-color-surface-container)",
++    transition: "background .12s ease, transform .12s ease",
++    "& .titulo": { fontSize: "18px", fontWeight: 600 },
++    "& .sub": { fontSize: "13px", color: "var(--md-sys-color-outline)" },
++    "&:hover": {
++      background: "var(--md-sys-color-surface-container-high)",
++      transform: "translateY(-2px)",
++    },
++    "@media (prefers-reduced-motion: reduce)": {
++      transition: "none",
++      "&:hover": { transform: "none" },
++    },
++  },
++});
++
++const Rodape = styled("div", {
++  base: {
++    display: "flex",
++    flexWrap: "wrap",
++    justifyContent: "center",
++    gap: "8px",
++    marginBlockStart: "24px",
++    fontSize: "13px",
++    color: "var(--md-sys-color-outline)",
++    "& a": { cursor: "pointer", color: "inherit", textDecoration: "none" },
++    "& a:hover": { textDecoration: "underline" },
++  },
++});

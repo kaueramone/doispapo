@@ -14,14 +14,32 @@ Quando alguém sem conta abre um convite de servidor, consultamos quem o
 criou e, havendo cota, emitimos um convite de conta em nome dessa pessoa.
 """
 import base64, hashlib, hmac, json, os, queue, re, secrets, threading, time
+import unicodedata
 import urllib.request, urllib.parse, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from bson import ObjectId
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 
 LIMITE = int(os.environ.get("LIMITE_CONVITES", "5"))
 MONGO  = os.environ.get("MONGO_URL", "mongodb://database:27017")
 PORTA  = int(os.environ.get("PORTA", "8600"))
+# Teto de conexoes simultaneas. 128 casa com o backlog do listen(): nao
+# adianta aceitar mais rapido do que se atende. O custo de uma thread
+# parada e a pilha dela, entao o numero e generoso o bastante para o
+# catalogo (que dispara varias requisicoes ao abrir) e baixo o bastante
+# para que um flood encontre um limite em vez de encontrar o fim da RAM.
+TETO_THREADS = int(os.environ.get("TETO_THREADS", "128"))
+_ocupado = json.dumps({"erro": "ocupado",
+    "mensagem": "Serviço ocupado. Tente de novo em instantes."},
+    ensure_ascii=False).encode()
+RECUSA_OCUPADO = (
+    b"HTTP/1.1 503 Service Unavailable\r\n"
+    b"Content-Type: application/json; charset=utf-8\r\n"
+    b"Content-Length: " + str(len(_ocupado)).encode() + b"\r\n"
+    b"Retry-After: 2\r\n"
+    b"Cache-Control: no-store\r\n"
+    b"Connection: close\r\n\r\n" + _ocupado)
 
 cli = MongoClient(MONGO, serverSelectionTimeoutMS=5000)
 db  = cli.revolt
@@ -302,6 +320,15 @@ def _contar_voz(evento, sala, uid, agora):
 # le esse atributo e se conecta no destino sozinho.
 BIT_MOVER = 1 << 35
 
+# ManageServer -- o bit 1. E a permissao que ja governa as abas "Visao
+# geral", "Convites" e "Banimentos" das configuracoes do servidor. Quem
+# hoje cria um link de convite passa a poder mexer na vitrine: e a mesma
+# autoridade exercida por outro caminho, e nao um conceito novo.
+BIT_GERIR_SERVIDOR = 1 << 1
+
+# O que o dono recebe. Mesmo valor do cliente (`GrantAllSafe`).
+CONCEDE_TUDO = 0x000F_FFFF_FFFF_FFFF
+
 # Quanto esperamos o cliente obedecer antes de tirar a pessoa da sala.
 # Sem isso, "mover" viraria um pedido: um cliente que ignore a ordem
 # deixaria o administrador sem poder nenhum. Com isso, ou a pessoa vai
@@ -310,38 +337,512 @@ BIT_MOVER = 1 << 35
 PRAZO_OBEDECER = 8
 
 
-def pode_mover(uid, servidor):
-    """Se este usuario tem MoveMembers neste servidor.
+def permissao_no_servidor(uid, servidor):
+    """A permissao efetiva de uid neste servidor, ou None se nao ha vinculo.
 
     Le os cargos direto do banco em vez de acreditar no cliente. Ignora
     sobreposicoes por canal de proposito: e uma checagem conservadora --
-    quem tem a permissao no servidor pode mover; quem nao tem, nao move,
+    quem tem a permissao no servidor a tem; quem nao tem, nao a tem,
     mesmo que algum canal especifico lhe desse o direito.
+
+    A distincao entre None e 0 importa: None e "nao e membro, ou o
+    servidor nao existe", e quem recebe None nao pode nem saber que o
+    servidor existe. 0 e "e membro e nao pode nada".
     """
     srv = db.servers.find_one(
         {"_id": servidor},
         {"owner": 1, "roles": 1, "default_permissions": 1})
     if not srv:
-        return False
+        return None
     if srv.get("owner") == uid:
-        return True
+        return CONCEDE_TUDO
 
     membro = db.server_members.find_one(
         {"_id": {"server": servidor, "user": uid}}, {"roles": 1})
     if not membro:
-        return False
+        return None
 
     perm = int(srv.get("default_permissions") or 0)
     cargos = srv.get("roles") or {}
     meus = [cargos[r] for r in (membro.get("roles") or []) if r in cargos]
     # Do menos importante para o mais importante, que e como o allow/deny
-    # de cada cargo se sobrepoe.
+    # de cada cargo se sobrepoe. `rank` MENOR e o cargo mais importante,
+    # entao a ordenacao e invertida para o mais importante sobrepor por
+    # ultimo.
     meus.sort(key=lambda c: int(c.get("rank") or 0), reverse=True)
     for c in meus:
         p = c.get("permissions") or {}
         perm = (perm | int(p.get("a") or 0)) & ~int(p.get("d") or 0)
 
-    return bool(perm & BIT_MOVER)
+    return perm
+
+
+def tem_permissao(uid, servidor, bit):
+    """Se uid tem este bit neste servidor."""
+    perm = permissao_no_servidor(uid, servidor)
+    return bool(perm is not None and perm & bit)
+
+
+def pode_mover(uid, servidor):
+    """Se este usuario tem MoveMembers neste servidor.
+
+    Caso particular de tem_permissao. Mantido com nome proprio porque e
+    assim que a rota /mover le, e porque o nome diz o que a checagem
+    significa naquele lugar.
+    """
+    return tem_permissao(uid, servidor, BIT_MOVER)
+
+
+# ============================================== vitrine da comunidade
+#
+# Visibilidade, categoria e tags -- o que o catalogo publico le.
+#
+# Vive em `dp_comunidade` e NAO no documento do servidor, por dois motivos
+# apurados no codigo:
+#
+#   1. `PATCH /servers/{id}` da API tem schema fechado; campo nosso seria
+#      recusado, e escrever direto no documento seria passar por cima da
+#      API que e dona dele.
+#   2. `servers.categories` ja significa "categorias de CANAIS" -- o nome
+#      esta ocupado, e reusa-lo produziria confusao na primeira manutencao.
+#
+# O `discoverable` nativo tambem nao serve: a API so o aceita de quem tem a
+# flag `privileged`, que vale para a instancia INTEIRA. Testado contra a
+# producao em 26/08: 403 NotPrivileged ate para o dono da comunidade.
+CATEGORIA_PADRAO = "geral"
+MAX_TAGS = 5
+RE_TAG = re.compile(r"^[a-z0-9][a-z0-9-]{0,19}$")
+
+# Quanto tempo alguem rejeitado espera antes de poder pedir de novo.
+# Menos que isso vira insistencia que o administrador tem de suportar;
+# mais vira banimento disfarcado, sem ninguem ter escolhido banir.
+CARENCIA_REJEICAO = 7 * 24 * 3600
+
+# Tetos de pedido. Nao sao defesa contra abuso coordenado -- a instancia e
+# fechada por convite --, e sim contra script e contra o dedo preso no
+# botao. Os numeros saem da escala real:
+#
+#   PENDENTES: ha 3 comunidades hoje. Cinco cobre pedir para todas com
+#   folga, e ainda impede uma conta de pedir para o catalogo inteiro.
+#   Quando o catalogo passar de ~30, sobe ESTE, nao o diario.
+#
+#   DIA: um humano explorando o catalogo com calma nao chega perto. Um
+#   script chega em segundos.
+TETO_PENDENTES = 5
+TETO_PEDIDOS_DIA = 20
+
+# A API do Stoat, pela rede interna do compose.
+API_STOAT = os.environ.get("API_STOAT", "http://api:14702")
+
+# Cartoes por pagina do catalogo. Teto separado do padrao para o cliente
+# nao poder pedir a colecao inteira numa requisicao so.
+PAGINA_CATALOGO = 24
+PAGINA_MAXIMA = 48
+
+
+def sem_acento(t):
+    """Minusculas, sem acento. E o que entra em busca e em etiqueta."""
+    t = unicodedata.normalize("NFKD", (t or "").strip().lower())
+    return "".join(c for c in t if not unicodedata.combining(c))
+
+
+def _normaliza_tags(bruto):
+    """Aceita lista ou texto com virgulas. Devolve (tags, erro).
+
+    Tira acento de proposito: a tag vai virar filtro na URL do catalogo, e
+    e melhor decidir isso agora do que descobrir depois com link publicado.
+    """
+    if bruto is None:
+        return [], None
+    if isinstance(bruto, str):
+        bruto = bruto.replace(";", ",").split(",")
+    if not isinstance(bruto, list):
+        return None, "tags_invalidas"
+    vistas, saida = set(), []
+    for t in bruto:
+        if not isinstance(t, str):
+            return None, "tags_invalidas"
+        t = re.sub(r"[^a-z0-9-]+", "-", sem_acento(t)).strip("-")[:20]
+        if not t:
+            continue
+        if not RE_TAG.match(t) or t in vistas:
+            continue
+        vistas.add(t)
+        saida.append(t)
+        if len(saida) > MAX_TAGS:
+            return None, "tags_demais"
+    return saida, None
+
+
+def categoria_valida(slug):
+    return bool(slug and db.dp_categorias.find_one(
+        {"_id": slug, "ativa": True}, {"_id": 1}))
+
+
+def vitrine_de(servidor):
+    """O estado da vitrine, com padroes para quem ainda nao tem linha."""
+    d = db.dp_comunidade.find_one({"_id": servidor}) or {}
+    return {
+        "publica": bool(d.get("publica")),
+        "categoria": d.get("categoria") or CATEGORIA_PADRAO,
+        "tags": list(d.get("tags") or []),
+        "membros": int(d.get("membros") or 0),
+    }
+
+
+def denormaliza(sid):
+    """Copia nome e contagem de membros do servidor para a nossa linha.
+
+    O catalogo ordena por tamanho e busca por nome. Fazer isso com
+    $lookup em `servers` a cada pagina seria caro e, pior, impossivel de
+    indexar junto com `publica` e `categoria`. Entao os dois campos vivem
+    denormalizados aqui.
+
+    NAO sao a verdade -- a verdade e `servers.name` e a contagem de
+    `server_members`. Divergencia num cartao e aceitavel; o laco de fundo
+    reconcilia, e toda escrita na vitrine passa por aqui.
+    """
+    srv = db.servers.find_one({"_id": sid}, {"name": 1}) or {}
+    nome = srv.get("name") or ""
+    return {
+        "nome": nome,
+        "nome_busca": sem_acento(nome),
+        "membros": db.server_members.count_documents({"_id.server": sid}),
+        "membros_em": time.time(),
+    }
+
+
+def _laco_vitrine():
+    """Reconcilia nome e contagem das comunidades publicas.
+
+    So as publicas: sao as unicas que aparecem em cartao, e o indice
+    parcial ja as separa. Hoje sao zero ou tres documentos.
+    """
+    while True:
+        time.sleep(300)
+        try:
+            for d in db.dp_comunidade.find({"publica": True}, {"_id": 1}):
+                db.dp_comunidade.update_one(
+                    {"_id": d["_id"]}, {"$set": denormaliza(d["_id"])})
+            _reconcilia_solicitacoes()
+        except Exception as e:
+            # Reconciliacao nao e funcionalidade: se falhar, o cartao fica
+            # com um numero velho ate a proxima volta.
+            print(f"vitrine: reconciliacao falhou ({e})", flush=True)
+
+
+def inicia_vitrine():
+    threading.Thread(target=_laco_vitrine, daemon=True).start()
+
+
+def estado_para(uid, sid):
+    """O que o botao do cartao deve dizer para esta pessoa.
+
+    Decidido AQUI e nao no navegador. E o que impede a interface de
+    oferecer "solicitar entrada" para quem esta banido -- o cliente
+    apenas desenha o que este calculo devolveu.
+    """
+    if db.server_members.find_one(
+            {"_id": {"server": sid, "user": uid}}, {"_id": 1}):
+        return "membro", {}
+    if db.server_bans.find_one(
+            {"_id": {"server": sid, "user": uid}}, {"_id": 1}):
+        return "banido", {}
+
+    # A mais recente, nao "alguma": o historico guarda rejeicoes antigas.
+    s = db.dp_solicitacoes.find_one(
+        {"servidor": sid, "usuario": uid}, sort=[("em", -1)])
+    if s:
+        if s.get("estado") == "PENDENTE":
+            return "pendente", {"solicitacao": str(s["_id"]),
+                                "pedido_em": s.get("em")}
+        if s.get("estado") == "REJEITADA":
+            quando = float(s.get("decidido_em") or s.get("em") or 0)
+            libera = quando + CARENCIA_REJEICAO
+            if time.time() < libera:
+                return "rejeitado", {"liberado_em": libera}
+    return "disponivel", {}
+
+
+def estados_para(uid, sids):
+    """Estado do botao para varios servidores de uma vez.
+
+    Tres consultas para a pagina inteira, e nao tres por cartao. Com 24
+    cartoes, a versao ingenua faria 72 idas ao banco -- o N+1 que so
+    incomoda quando o catalogo ja cresceu, e que e barato evitar agora.
+
+    As duas primeiras consultam pela CHAVE PRIMARIA composta (`$in` de
+    documentos `{server, user}`), e nao por `_id.user`: assim usam o
+    indice `_id_` que ja existe, sem precisar criar indice novo numa
+    colecao que e do upstream.
+    """
+    if not sids:
+        return {}
+    chaves = [{"server": x, "user": uid} for x in sids]
+    membro = {d["_id"]["server"] for d in
+              db.server_members.find({"_id": {"$in": chaves}}, {"_id": 1})}
+    banido = {d["_id"]["server"] for d in
+              db.server_bans.find({"_id": {"$in": chaves}}, {"_id": 1})}
+
+    # Ordem crescente de propósito: a ultima gravada sobrescreve, entao o
+    # que sobra no dicionario e a solicitacao mais recente de cada
+    # servidor -- a mesma regra do estado_para de um so.
+    ultima = {}
+    for d in db.dp_solicitacoes.find(
+            {"usuario": uid, "servidor": {"$in": sids}}).sort("em", 1):
+        ultima[d["servidor"]] = d
+
+    agora = time.time()
+    fora = {}
+    for sid in sids:
+        if sid in membro:
+            fora[sid] = ("membro", {})
+            continue
+        if sid in banido:
+            fora[sid] = ("banido", {})
+            continue
+        d = ultima.get(sid)
+        if d and d.get("estado") == "PENDENTE":
+            fora[sid] = ("pendente", {"solicitacao": str(d["_id"]),
+                                      "pedido_em": d.get("em")})
+            continue
+        if d and d.get("estado") == "REJEITADA":
+            libera = float(d.get("decidido_em") or d.get("em") or 0) \
+                + CARENCIA_REJEICAO
+            if agora < libera:
+                fora[sid] = ("rejeitado", {"liberado_em": libera})
+                continue
+        fora[sid] = ("disponivel", {})
+    return fora
+
+
+def _arquivo_url(doc):
+    """Caminho do autumn para um anexo. Relativo de proposito: serve em
+    qualquer host que o Caddy atenda, sem o cliente precisar da config."""
+    if not doc or not doc.get("_id") or not doc.get("tag"):
+        return None
+    return f"/autumn/{doc['tag']}/{doc['_id']}"
+
+
+def cartao(d, srv, estado=None, detalhe=None):
+    """O cartao do catalogo. `d` e a linha nossa, `srv` o documento do
+    servidor -- que pode faltar se o servidor foi apagado."""
+    srv = srv or {}
+    c = {
+        "id": d["_id"],
+        "nome": srv.get("name") or d.get("nome") or "",
+        "descricao": srv.get("description") or "",
+        "icone": _arquivo_url(srv.get("icon")),
+        "banner": _arquivo_url(srv.get("banner")),
+        "membros": int(d.get("membros") or 0),
+        "categoria": d.get("categoria") or CATEGORIA_PADRAO,
+        "tags": list(d.get("tags") or []),
+    }
+    if estado:
+        c["estado"] = estado
+        c.update(detalhe or {})
+    return c
+
+
+def _cursor_le(bruto):
+    """(membros, id) a partir do cursor opaco, ou None se nao servir.
+
+    Cursor invalido devolve None e a consulta comeca do inicio, em vez de
+    estourar: e string vinda da URL, e URL as pessoas editam.
+    """
+    if not bruto:
+        return None
+    try:
+        cru = base64.urlsafe_b64decode(bruto.encode() + b"==").decode()
+        m, i = cru.split(":", 1)
+        if not re.fullmatch(r"[0-9A-Z]{26}", i):
+            return None
+        return int(m), i
+    except Exception:
+        return None
+
+
+def _cursor_escreve(d):
+    return base64.urlsafe_b64encode(
+        f"{int(d.get('membros') or 0)}:{d['_id']}".encode()
+    ).decode().rstrip("=")
+
+
+def pagina_do_catalogo(uid, categoria=None, cursor=None, q=None,
+                       limite=None):
+    """Uma pagina de comunidades publicas, por cursor.
+
+    Cursor e nao `skip`: com `skip` a pagina 50 le e joga fora 1.200
+    documentos, e uma comunidade que ganha membros entre duas paginas faz
+    itens pularem ou repetirem. A ordem e (membros desc, _id asc) --
+    exatamente a dos indices parciais, entao a consulta nao ordena em
+    memoria.
+    """
+    limite = max(1, min(int(limite or PAGINA_CATALOGO), PAGINA_MAXIMA))
+    condicoes = [{"publica": True}]
+
+    if categoria:
+        condicoes.append({"categoria": categoria})
+
+    if q:
+        termo = sem_acento(q)[:40]
+        if termo:
+            # Busca no nome denormalizado ou em etiqueta exata. A varredura
+            # fica contida pelo indice parcial (so publicas). Quando o
+            # catalogo crescer, o caminho e um indice de texto -- e a
+            # consulta muda so aqui.
+            condicoes.append({"$or": [
+                {"nome_busca": {"$regex": re.escape(termo)}},
+                {"tags": termo},
+            ]})
+
+    cur = _cursor_le(cursor)
+    if cur:
+        m, i = cur
+        condicoes.append({"$or": [
+            {"membros": {"$lt": m}},
+            {"membros": m, "_id": {"$gt": i}},
+        ]})
+
+    # Um a mais que o limite: e assim que se sabe se ha proxima pagina sem
+    # uma segunda consulta de contagem.
+    docs = list(db.dp_comunidade
+                .find({"$and": condicoes})
+                .sort([("membros", -1), ("_id", 1)])
+                .limit(limite + 1))
+    tem_mais = len(docs) > limite
+    docs = docs[:limite]
+
+    ids = [d["_id"] for d in docs]
+    servidores = {
+        x["_id"]: x for x in db.servers.find(
+            {"_id": {"$in": ids}},
+            {"name": 1, "description": 1, "icon": 1, "banner": 1})
+    }
+    # O estado do botao vem calculado do servidor, tambem na listagem: e
+    # o que impede o cartao de oferecer "solicitar entrada" para quem
+    # esta banido, sem depender de o cliente pedir a ficha de cada um.
+    estados = estados_para(uid, ids)
+    return {
+        "itens": [
+            cartao(d, servidores.get(d["_id"]), *estados.get(d["_id"], (None, {})))
+            for d in docs
+        ],
+        "proximo": _cursor_escreve(docs[-1]) if tem_mais and docs else None,
+    }
+
+
+def _api_stoat(metodo, caminho, token, corpo=None):
+    """Chama a API do Stoat COM A SESSAO DE QUEM PEDIU.
+
+    Nunca com credencial de terceiro, e isso e a decisao central desta
+    rota: quem aprova e quem cria o convite. A propria API refaz a
+    checagem de permissao, e o registro de auditoria dela sai no nome
+    certo -- de graca. O servico nao guarda, nao reusa e nao registra o
+    token; ele so o repassa dentro da mesma requisicao.
+    """
+    req = urllib.request.Request(
+        API_STOAT + caminho, method=metodo,
+        data=json.dumps(corpo).encode() if corpo is not None else None,
+        headers={"Content-Type": "application/json",
+                 "X-Session-Token": token})
+    with urllib.request.urlopen(req, timeout=8) as r:
+        return r.status, json.loads(r.read() or b"{}")
+
+
+def _canal_para_convite(sid):
+    """Onde apontar o convite emitido na aprovacao.
+
+    Convite para canal de voz e valido, mas joga a pessoa numa sala em vez
+    de numa conversa. Percorre `servers.channels` NA ORDEM (a ordem da
+    barra lateral, que e a que o dono escolheu) e pega o primeiro canal de
+    texto puro.
+    """
+    srv = db.servers.find_one({"_id": sid}, {"channels": 1})
+    ids = list((srv or {}).get("channels") or [])
+    if not ids:
+        return None
+    docs = {c["_id"]: c for c in db.channels.find(
+        {"_id": {"$in": ids}}, {"voice": 1, "channel_type": 1})}
+    for i in ids:
+        c = docs.get(i)
+        if c and c.get("channel_type") == "TextChannel" and "voice" not in c:
+            return i
+    return ids[0]
+
+
+def solicitacao_publica(s):
+    """O que o proprio solicitante pode ver do seu pedido."""
+    return {
+        "id": str(s["_id"]),
+        "servidor": s["servidor"],
+        "estado": s.get("estado"),
+        "em": s.get("em"),
+        "decidido_em": s.get("decidido_em"),
+        "motivo": s.get("motivo"),
+        # O codigo do convite so vai para quem foi aprovado -- e o proprio
+        # dono do pedido, ninguem mais le esta rota.
+        "convite": s.get("convite") if s.get("estado") == "APROVADA" else None,
+    }
+
+
+def _reconcilia_solicitacoes():
+    """Fecha pendentes que a realidade ja resolveu.
+
+    Nao e "rejeitar": ninguem rejeitou. Dai o estado ENCERRADA, com o
+    motivo dizendo o que aconteceu -- marcar isso como REJEITADA
+    dispararia um "seu pedido foi recusado" que nunca existiu.
+
+    A comunidade ficar PRIVADA de proposito NAO entra aqui: ela fecha
+    para pedidos novos, e o administrador decide os que ja estao na fila.
+    Encerrar em massa produziria um aviso de recusa para gente que nao
+    fez nada errado, por uma configuracao que nem sabia existir.
+    """
+    agora = time.time()
+    for s in db.dp_solicitacoes.find({"estado": "PENDENTE"},
+                                     {"servidor": 1, "usuario": 1}):
+        sid, u = s["servidor"], s["usuario"]
+        motivo = None
+        if not db.servers.find_one({"_id": sid}, {"_id": 1}):
+            motivo = "comunidade_removida"
+        elif db.server_bans.find_one(
+                {"_id": {"server": sid, "user": u}}, {"_id": 1}):
+            motivo = "usuario_banido"
+        elif db.server_members.find_one(
+                {"_id": {"server": sid, "user": u}}, {"_id": 1}):
+            # Entrou por link enquanto o pedido estava aberto. O pedido
+            # perdeu o proposito, e aprovar depois nao faria nada.
+            motivo = "ja_entrou"
+        if motivo:
+            db.dp_solicitacoes.update_one(
+                {"_id": s["_id"], "estado": "PENDENTE"},
+                {"$set": {"estado": "ENCERRADA", "decidido_em": agora,
+                          "motivo": motivo}})
+
+
+def guarda_vitrine(uid, sid):
+    """Guarda comum das rotas de vitrine.
+
+    Devolve o par (codigo, corpo) do erro, ou None quando pode seguir.
+    NAO responde por conta propria, e isso e deliberado: a primeira
+    versao chamava `self.responde(...)` aqui e devolvia o resultado --
+    mas `responde` devolve None, entao o `if erro is not None` do
+    chamador nunca disparava. O 403 saia e o codigo seguia, escrevendo um
+    200 com os dados logo atras. Duas respostas na mesma conexao, e a
+    segunda entregava exatamente o que a primeira negou.
+
+    Quem nao e membro recebe 404 e nao 403: 403 confirmaria que o
+    servidor existe, e a existencia de comunidade privada nao pode vazar.
+    """
+    perm = permissao_no_servidor(uid, sid)
+    if perm is None:
+        return 404, {"erro": "nao_encontrado"}
+    if not perm & BIT_GERIR_SERVIDOR:
+        return 403, {
+            "erro": "sem_permissao",
+            "mensagem": "Você precisa de Gerenciar Servidor para mexer "
+                        "na vitrine da comunidade."}
+    return None
 
 
 def _cobrar_obediencia(origem, alvo):
@@ -808,6 +1309,13 @@ def turnstile_ok(token, ip=None):
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    # Com HTTP/1.1 a conexao fica aberta entre requisicoes, e sem prazo
+    # uma conexao ociosa segura a thread para sempre. O socketserver
+    # aplica isto com settimeout() no socket; o BaseHTTPRequestHandler
+    # trata o estouro fechando a conexao, que e o comportamento correto:
+    # o navegador reabre sozinho quando precisar. 30s e bem acima de
+    # qualquer pausa entre as requisicoes que o cliente faz de verdade.
+    timeout = 30
 
     def log_message(self, *a):        # silencia o log padrão, ruidoso
         pass
@@ -872,10 +1380,18 @@ class Handler(BaseHTTPRequestHandler):
     # ---------------------------------------------------------------- GET
     def do_GET(self):
         rota = self.caminho()
-        # Proxy do template do Discord. Público dos dois lados: o
-        # endpoint do Discord dispensa autenticação, e aqui não há
-        # segredo envolvido — só leitura de dado que já é público.
+        # Proxy do template do Discord. O dado do outro lado é público e
+        # não há segredo envolvido, mas a rota exige sessão mesmo assim, e
+        # o motivo não é sigilo: é custo. Cada chamada segura uma thread
+        # nossa por até 12s numa conexão de saída para o discord.com, e
+        # o endereço IP que aparece lá é o da VM, um só para todo mundo.
+        # Sem sessão, qualquer pessoa da internet transforma isto num
+        # amplificador: gasta as nossas threads e queima a nossa cota no
+        # Discord, e o preço cai sobre quem está usando o produto.
         if rota.startswith("/discord-template"):
+            if not usuario_da_sessao(self.headers.get("X-Session-Token")):
+                return self.responde(401, {"erro": "sessao_invalida",
+                    "mensagem": "Entre na sua conta para importar do Discord."})
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             bruto = (q.get("codigo") or [""])[0].strip()
             # aceita link completo ou só o código
@@ -1112,6 +1628,159 @@ class Handler(BaseHTTPRequestHandler):
                 for d in db.account_invites.find({"criado_por": uid})
             ]
             return self.responde(200, s)
+
+        if rota == "/solicitacoes/minhas":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            docs = list(db.dp_solicitacoes.find({"usuario": uid})
+                        .sort("em", -1).limit(50))
+            nomes = {
+                x["_id"]: x.get("name") for x in db.servers.find(
+                    {"_id": {"$in": [d["servidor"] for d in docs]}},
+                    {"name": 1})
+            }
+            itens = []
+            for d in docs:
+                i = solicitacao_publica(d)
+                i["nome"] = nomes.get(d["servidor"]) or ""
+                itens.append(i)
+            return self.responde(200, {"itens": itens})
+
+        m = re.fullmatch(
+            r"/servidores/([0-9A-Z]{26})/solicitacoes/contagem", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            erro = guarda_vitrine(uid, m.group(1))
+            if erro:
+                return self.responde(*erro)
+            # Rota separada e enxuta de proposito: e ela que o contador da
+            # engrenagem consulta em laco, e ele so precisa do numero.
+            return self.responde(200, {"pendentes": db.dp_solicitacoes
+                .count_documents({"servidor": m.group(1),
+                                  "estado": "PENDENTE"})})
+
+        m = re.fullmatch(r"/servidores/([0-9A-Z]{26})/solicitacoes", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            sid = m.group(1)
+            erro = guarda_vitrine(uid, sid)
+            if erro:
+                return self.responde(*erro)
+            docs = list(db.dp_solicitacoes
+                        .find({"servidor": sid, "estado": "PENDENTE"})
+                        .sort("em", -1).limit(200))
+            # Perfis em lote: uma consulta para a fila inteira, e nao uma
+            # por linha.
+            perfis = _perfis([d["usuario"] for d in docs])
+            contas = {
+                u["_id"]: u.get("username") for u in db.users.find(
+                    {"_id": {"$in": [d["usuario"] for d in docs]}},
+                    {"username": 1})
+            }
+            return self.responde(200, {"itens": [{
+                "id": str(d["_id"]),
+                "usuario": d["usuario"],
+                "nome": perfis.get(d["usuario"], {}).get("nome", "?"),
+                "username": contas.get(d["usuario"]) or "",
+                "avatar": perfis.get(d["usuario"], {}).get("avatar"),
+                "mensagem": d.get("mensagem"),
+                "em": d.get("em"),
+            } for d in docs]})
+
+        # --- catalogo (a ordem importa: "categorias" antes do ULID)
+        if rota == "/catalogo/categorias":
+            if not usuario_da_sessao(self.headers.get("X-Session-Token")):
+                return self.responde(401, {"erro": "sessao_invalida"})
+            # Quantas comunidades publicas ha em cada categoria, numa
+            # agregacao so. Sem isso a tela pediria uma contagem por
+            # categoria e faria nove requisicoes para desenhar um menu.
+            contagem = {
+                x["_id"]: x["n"] for x in db.dp_comunidade.aggregate([
+                    {"$match": {"publica": True}},
+                    {"$group": {"_id": "$categoria", "n": {"$sum": 1}}},
+                ])
+            }
+            itens = [
+                {"id": c["_id"], "nome": c.get("nome") or c["_id"],
+                 "emoji": c.get("emoji") or "",
+                 "comunidades": int(contagem.get(c["_id"], 0))}
+                for c in db.dp_categorias.find(
+                    {"ativa": True}, {"nome": 1, "emoji": 1}).sort("ordem", 1)
+            ]
+            return self.responde(200, {
+                "itens": itens,
+                "total": sum(contagem.values()),
+            })
+
+        m = re.fullmatch(r"/catalogo/([0-9A-Z]{26})", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            sid = m.group(1)
+            d = db.dp_comunidade.find_one({"_id": sid})
+            ehmembro = db.server_members.find_one(
+                {"_id": {"server": sid, "user": uid}}, {"_id": 1})
+            # 404 e nao 403 quando a comunidade nao e publica: 403
+            # confirmaria que ela existe, e a existencia de comunidade
+            # privada nao pode vazar. Quem ja e membro enxerga a ficha da
+            # sua propria comunidade mesmo com ela privada.
+            if not d or (not d.get("publica") and not ehmembro):
+                return self.responde(404, {"erro": "nao_encontrado"})
+            srv = db.servers.find_one(
+                {"_id": sid},
+                {"name": 1, "description": 1, "icon": 1, "banner": 1})
+            if not srv:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            estado, detalhe = estado_para(uid, sid)
+            return self.responde(200, cartao(d, srv, estado, detalhe))
+
+        if rota == "/catalogo":
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            p = urllib.parse.parse_qs(
+                urllib.parse.urlparse(self.path).query)
+
+            def um(nome, tam=64):
+                v = (p.get(nome) or [""])[0]
+                return v[:tam] if isinstance(v, str) else ""
+
+            categoria = um("categoria", 40)
+            if categoria and not RE_CODIGO.match(categoria):
+                return self.responde(400, {"erro": "categoria_invalida"})
+            return self.responde(200, pagina_do_catalogo(
+                uid,
+                categoria=categoria or None,
+                cursor=um("cursor", 128) or None,
+                q=um("q", 60) or None,
+                limite=um("limite", 4) or None))
+
+        if rota == "/vitrine/categorias":
+            if not usuario_da_sessao(self.headers.get("X-Session-Token")):
+                return self.responde(401, {"erro": "sessao_invalida"})
+            itens = [
+                {"id": c["_id"], "nome": c.get("nome") or c["_id"],
+                 "emoji": c.get("emoji") or ""}
+                for c in db.dp_categorias.find(
+                    {"ativa": True}, {"nome": 1, "emoji": 1}).sort("ordem", 1)
+            ]
+            return self.responde(200, {"itens": itens})
+
+        m = re.fullmatch(r"/servidores/([0-9A-Z]{26})/vitrine", rota)
+        if m:
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            erro = guarda_vitrine(uid, m.group(1))
+            if erro:
+                return self.responde(*erro)
+            return self.responde(200, vitrine_de(m.group(1)))
 
         self.responde(404, {"erro": "nao_encontrado"})
 
@@ -1638,7 +2307,307 @@ class Handler(BaseHTTPRequestHandler):
                 })
             return self.responde(200, dict(s, codigo=codigo))
 
+        if rota == "/solicitacoes":
+            corpo = self.corpo_json(limite=2048)
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+
+            sid = corpo.get("servidor")
+            if not isinstance(sid, str) or not re.fullmatch(
+                    r"[0-9A-Z]{26}", sid):
+                return self.responde(400, {"erro": "servidor_invalido"})
+
+            # 404 para privada e para inexistente, pelo mesmo motivo do
+            # catalogo: a existencia de comunidade privada nao pode vazar.
+            d = db.dp_comunidade.find_one({"_id": sid}, {"publica": 1})
+            if not d or not d.get("publica") or not db.servers.find_one(
+                    {"_id": sid}, {"_id": 1}):
+                return self.responde(404, {"erro": "nao_encontrado"})
+
+            # O MESMO calculo que o catalogo usa para desenhar o botao.
+            # Uma funcao so, para a tela e a escrita nunca discordarem.
+            estado, det = estado_para(uid, sid)
+            if estado == "membro":
+                return self.responde(409, {
+                    "erro": "ja_e_membro",
+                    "mensagem": "Você já faz parte desta comunidade."})
+            if estado == "banido":
+                return self.responde(403, {
+                    "erro": "sem_acesso",
+                    "mensagem": "Você não pode entrar nesta comunidade."})
+            if estado == "pendente":
+                return self.responde(409, {
+                    "erro": "ja_solicitado",
+                    "mensagem": "Seu pedido já foi enviado."})
+            if estado == "rejeitado":
+                return self.responde(429, dict(det, **{
+                    "erro": "em_carencia",
+                    "mensagem": "Seu pedido foi recusado há pouco. "
+                                "Tente novamente mais tarde."}))
+
+            if db.dp_solicitacoes.count_documents(
+                    {"usuario": uid, "estado": "PENDENTE"}) >= TETO_PENDENTES:
+                return self.responde(429, {
+                    "erro": "muitos_pendentes",
+                    "mensagem": f"Você já tem {TETO_PENDENTES} pedidos "
+                                "aguardando resposta."})
+            if db.dp_solicitacoes.count_documents(
+                    {"usuario": uid,
+                     "em": {"$gte": time.time() - 86400}}) >= TETO_PEDIDOS_DIA:
+                return self.responde(429, {
+                    "erro": "muitos_pedidos",
+                    "mensagem": "Você fez pedidos demais hoje. "
+                                "Tente amanhã."})
+
+            msg = corpo.get("mensagem")
+            msg = msg.strip()[:280] if isinstance(msg, str) else None
+
+            doc = {"servidor": sid, "usuario": uid, "estado": "PENDENTE",
+                   "em": time.time(), "mensagem": msg or None,
+                   "decidido_por": None, "decidido_em": None,
+                   "motivo": None, "convite": None}
+            try:
+                db.dp_solicitacoes.insert_one(doc)
+            except DuplicateKeyError:
+                # O indice unico parcial. Dez cliques produzem um pedido,
+                # e a corrida termina aqui em vez de no banco sujo.
+                return self.responde(409, {
+                    "erro": "ja_solicitado",
+                    "mensagem": "Seu pedido já foi enviado."})
+            return self.responde(200, solicitacao_publica(doc))
+
+        m = re.fullmatch(r"/solicitacoes/([0-9a-f]{24})/cancelar", rota)
+        if m:
+            self.corpo_json(limite=256)
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            # `usuario` na condicao: e o que impede cancelar o pedido dos
+            # outros mandando o id deles.
+            d = db.dp_solicitacoes.find_one_and_update(
+                {"_id": ObjectId(m.group(1)), "usuario": uid,
+                 "estado": "PENDENTE"},
+                {"$set": {"estado": "CANCELADA", "decidido_em": time.time()}},
+                return_document=True)
+            if not d:
+                return self.responde(404, {"erro": "nao_encontrado"})
+            return self.responde(200, solicitacao_publica(d))
+
+        m = re.fullmatch(
+            r"/servidores/([0-9A-Z]{26})/solicitacoes/([0-9a-f]{24})"
+            r"/(aceitar|rejeitar)", rota)
+        if m:
+            sid, oid, acao = m.group(1), m.group(2), m.group(3)
+            corpo = self.corpo_json(limite=1024)
+            token = self.headers.get("X-Session-Token")
+            uid = usuario_da_sessao(token)
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            erro = guarda_vitrine(uid, sid)
+            if erro:
+                return self.responde(*erro)
+
+            sol = db.dp_solicitacoes.find_one(
+                {"_id": ObjectId(oid), "servidor": sid})
+            if not sol:
+                # `servidor` na consulta: mandar o id de uma solicitacao de
+                # OUTRA comunidade nao a alcanca por esta rota.
+                return self.responde(404, {"erro": "nao_encontrado"})
+            if sol.get("estado") != "PENDENTE":
+                return self.responde(409, {
+                    "erro": "ja_decidida",
+                    "estado": sol.get("estado"),
+                    "mensagem": "Este pedido já foi respondido."})
+            if sol.get("usuario") == uid:
+                # Vale inclusive para o dono. Quem pede nao decide.
+                return self.responde(403, {
+                    "erro": "nao_pode_decidir_o_proprio",
+                    "mensagem": "Você não pode decidir o próprio pedido."})
+
+            motivo = corpo.get("motivo")
+            motivo = motivo.strip()[:280] if isinstance(motivo, str) else None
+            agora = time.time()
+
+            if acao == "rejeitar":
+                d = db.dp_solicitacoes.find_one_and_update(
+                    {"_id": sol["_id"], "estado": "PENDENTE"},
+                    {"$set": {"estado": "REJEITADA", "decidido_por": uid,
+                              "decidido_em": agora, "motivo": motivo}},
+                    return_document=True)
+                if not d:
+                    return self.responde(409, {"erro": "ja_decidida"})
+                return self.responde(200, {"ok": True, "estado": "REJEITADA"})
+
+            # --- aceitar
+            canal = _canal_para_convite(sid)
+            if not canal:
+                return self.responde(409, {
+                    "erro": "sem_canal",
+                    "mensagem": "A comunidade não tem canal para onde "
+                                "mandar o convite."})
+
+            # O convite e criado ANTES do compare-and-swap, e nao depois.
+            # Se falhasse depois, a solicitacao ja estaria APROVADA sem
+            # codigo nenhum -- a pessoa veria "aprovado" e nao teria como
+            # entrar. Nesta ordem, o pior caso e um convite orfao, que a
+            # linha abaixo apaga.
+            try:
+                _, inv = _api_stoat(
+                    "POST", f"/channels/{canal}/invites", token)
+                codigo = inv.get("_id")
+            except Exception as e:
+                print(f"solicitacoes: convite falhou ({e})", flush=True)
+                return self.responde(502, {
+                    "erro": "convite_falhou",
+                    "mensagem": "Não consegui criar o convite agora. "
+                                "Tente de novo."})
+            if not codigo:
+                return self.responde(502, {"erro": "convite_falhou"})
+
+            d = db.dp_solicitacoes.find_one_and_update(
+                {"_id": sol["_id"], "estado": "PENDENTE"},
+                {"$set": {"estado": "APROVADA", "decidido_por": uid,
+                          "decidido_em": agora, "motivo": motivo,
+                          "convite": codigo}},
+                return_document=True)
+            if not d:
+                # Outro administrador decidiu entre a leitura e aqui.
+                # Desfaz o convite que acabamos de criar, senao fica um
+                # codigo valido solto que ninguem sabe que existe.
+                try:
+                    _api_stoat("DELETE", f"/invites/{codigo}", token)
+                except Exception:
+                    pass
+                return self.responde(409, {
+                    "erro": "ja_decidida",
+                    "mensagem": "Este pedido já foi respondido."})
+            return self.responde(200, {"ok": True, "estado": "APROVADA",
+                                       "convite": codigo})
+
+        m = re.fullmatch(r"/servidores/([0-9A-Z]{26})/vitrine", rota)
+        if m:
+            sid = m.group(1)
+            # Corpo antes da sessao, como no envio de som: fechar a conexao
+            # sem drenar o corpo faz o navegador mostrar "erro de rede" em
+            # vez do 401/403 que a gente quis dizer.
+            corpo = self.corpo_json(limite=2048)
+            uid = usuario_da_sessao(self.headers.get("X-Session-Token"))
+            if not uid:
+                return self.responde(401, {"erro": "sessao_invalida"})
+            erro = guarda_vitrine(uid, sid)
+            if erro:
+                return self.responde(*erro)
+
+            mudanca = {}
+            if "categoria" in corpo:
+                cat = corpo.get("categoria")
+                if not isinstance(cat, str) or not categoria_valida(cat):
+                    return self.responde(400, {
+                        "erro": "categoria_invalida",
+                        "mensagem": "Escolha uma categoria da lista."})
+                mudanca["categoria"] = cat
+            if "tags" in corpo:
+                tags, e = _normaliza_tags(corpo.get("tags"))
+                if e:
+                    return self.responde(400, {
+                        "erro": e,
+                        "mensagem": f"Use no máximo {MAX_TAGS} etiquetas "
+                                    "curtas, sem acento."})
+                mudanca["tags"] = tags
+            if "publica" in corpo:
+                mudanca["publica"] = bool(corpo.get("publica"))
+            if not mudanca:
+                return self.responde(400, {"erro": "nada_a_mudar"})
+
+            # Publica sem categoria valida nao teria onde aparecer no
+            # catalogo -- viraria comunidade listada em lugar nenhum.
+            atual = vitrine_de(sid)
+            if (mudanca.get("publica", atual["publica"])
+                    and not categoria_valida(
+                        mudanca.get("categoria", atual["categoria"]))):
+                return self.responde(400, {
+                    "erro": "categoria_obrigatoria",
+                    "mensagem": "Escolha a categoria antes de tornar a "
+                                "comunidade pública."})
+
+            agora = time.time()
+            # Nome e contagem denormalizados, para o catalogo ordenar por
+            # tamanho e buscar por nome sem $lookup a cada pagina. O laco
+            # de fundo reconcilia; aqui e para o cartao ja nascer certo.
+            mudanca.update(denormaliza(sid))
+            mudanca["por"] = uid
+            mudanca["atualizado_em"] = agora
+            db.dp_comunidade.update_one(
+                {"_id": sid},
+                {"$set": mudanca, "$setOnInsert": {"em": agora}},
+                upsert=True)
+            return self.responde(200, vitrine_de(sid))
+
         self.responde(404, {"erro": "nao_encontrado"})
+
+
+class Servidor(ThreadingHTTPServer):
+    """ThreadingHTTPServer com fila de conexoes maior que o padrao.
+
+    O padrao do socketserver e 5, e nao e limite de threads: e o backlog
+    do listen(). Conexao que chega com a fila cheia leva RST antes de
+    qualquer codigo nosso rodar -- o cliente ve "erro de rede", nao um
+    erro nosso, e nada disso aparece no log do servico.
+
+    Encontrado medindo, nao supondo: o teste de corrida das solicitacoes
+    manda 20 pedidos ao mesmo tempo, e tres morriam com
+    ConnectionResetError. As guardas estavam certas (um 200, o resto 409),
+    mas tres requisicoes nunca chegaram a ser atendidas.
+
+    Isso passou a importar mais agora: o contador de pendentes consulta em
+    laco, e o catalogo dispara varias requisicoes ao abrir. 128 e o teto
+    usual do kernel e nao custa memoria -- e fila de socket, nao de
+    thread.
+    """
+    request_queue_size = 128
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self._vagas = threading.Semaphore(TETO_THREADS)
+
+    def process_request(self, request, client_address):
+        """Gera a thread da conexao SO se houver vaga.
+
+        O ThreadingHTTPServer cria uma thread por conexao e nao tem teto.
+        Com protocol_version HTTP/1.1 a thread fica presa pela conexao
+        inteira, nao por uma requisicao -- entao N conexoes abertas sao N
+        threads paradas. Um cliente que abre milhares de conexoes e nao
+        fala nada derruba o servico sem enviar um byte de HTTP.
+
+        A recusa e imediata, com blocking=False, e isso e deliberado:
+        process_request roda na thread do accept. Esperar aqui por vaga
+        pararia de aceitar conexoes para TODO mundo -- trocar uma recusa
+        honesta de um cliente por uma indisponibilidade de todos e um mau
+        negocio. Quem e recusado recebe 503 com Retry-After, que e uma
+        resposta, e nao um RST sem explicacao.
+        """
+        if not self._vagas.acquire(blocking=False):
+            try:
+                request.sendall(RECUSA_OCUPADO)
+            except Exception:
+                pass
+            self.shutdown_request(request)
+            print(f"503 ocupado: teto de {TETO_THREADS} conexoes", flush=True)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            # t.start() falhou: a thread nunca rodou, entao o finally do
+            # process_request_thread nunca vai devolver esta vaga.
+            self._vagas.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._vagas.release()
 
 
 if __name__ == "__main__":
@@ -1655,7 +2624,41 @@ if __name__ == "__main__":
         db.dp_condicoes_serie.create_index([("usuario", 1), ("em", 1)])
     except Exception as e:
         print(f"indice da serie de condicoes: {e}", flush=True)
+    # Descoberta de comunidades. Criados aqui alem do script de migracao
+    # para que um container novo os recrie sozinho -- indice que so existe
+    # porque alguem rodou um script uma vez e o tipo de coisa que some numa
+    # reinstalacao e so aparece como lentidao meses depois.
+    try:
+        db.dp_categorias.create_index([("ativa", 1), ("ordem", 1)],
+                                      name="ativas_por_ordem")
+        SO_PUBLICAS = {"publica": True}
+        db.dp_comunidade.create_index(
+            [("categoria", 1), ("membros", -1), ("_id", 1)],
+            name="catalogo_por_categoria", partialFilterExpression=SO_PUBLICAS)
+        db.dp_comunidade.create_index(
+            [("membros", -1), ("_id", 1)],
+            name="catalogo_populares", partialFilterExpression=SO_PUBLICAS)
+        db.dp_comunidade.create_index(
+            [("tags", 1)],
+            name="catalogo_por_tag", partialFilterExpression=SO_PUBLICAS)
+        db.dp_comunidade.create_index(
+            [("nome_busca", 1)],
+            name="catalogo_por_nome", partialFilterExpression=SO_PUBLICAS)
+        # O unico indice UNICO do banco. Com ele, dez cliques em "solicitar"
+        # produzem UM pedido -- garantia de banco, nao checagem no codigo.
+        # Mongo standalone nao tem transacao; isto ocupa o lugar dela.
+        db.dp_solicitacoes.create_index(
+            [("servidor", 1), ("usuario", 1)],
+            name="um_pendente_por_pessoa", unique=True,
+            partialFilterExpression={"estado": "PENDENTE"})
+        db.dp_solicitacoes.create_index(
+            [("servidor", 1), ("estado", 1), ("em", -1)], name="fila_do_admin")
+        db.dp_solicitacoes.create_index(
+            [("usuario", 1), ("em", -1)], name="pedidos_da_pessoa")
+    except Exception as e:
+        print(f"indices da descoberta: {e}", flush=True)
     print(f"servico de convites em :{PORTA} (limite {LIMITE})", flush=True)
     inicia_repasse()
     inicia_metricas()
-    ThreadingHTTPServer(("0.0.0.0", PORTA), Handler).serve_forever()
+    inicia_vitrine()
+    Servidor(("0.0.0.0", PORTA), Handler).serve_forever()

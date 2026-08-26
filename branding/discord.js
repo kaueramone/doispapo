@@ -1,10 +1,12 @@
 /* ---------------------------------------------------------------------
    Dois Papo — importação de template do Discord.
 
-   O template é um recurso oficial e público do Discord: o endpoint não
-   pede autenticação, então nenhum token do usuário entra nisso. A leitura
-   passa pelo nosso serviço apenas porque o navegador não consegue chamar
-   a API do Discord diretamente (sem CORS).
+   O template é um recurso oficial e público do Discord: o endpoint de lá
+   não pede autenticação. A leitura passa pelo nosso serviço porque o
+   navegador não consegue chamar a API do Discord diretamente (sem CORS),
+   e o nosso lado exige sessão — não por sigilo do dado, mas porque a
+   chamada gasta uma thread nossa e a cota do nosso IP no Discord, e isso
+   não pode ficar aberto para a internet inteira.
 
    A criação usa a sessão de quem está importando, então respeita as
    permissões da pessoa no servidor.
@@ -186,10 +188,13 @@
     var v = (document.getElementById("dp-imp-link").value || "").trim();
     if (!v) return msg("Cole o link do template.");
     var bt = document.getElementById("dp-imp-ver");
+    /* A consulta agora exige sessão, e o mesmo token que a criação usa
+       serve aqui. Se ele ainda não foi capturado não adianta chamar: o
+       serviço responderia 401 e a mensagem falaria de login, quando o
+       problema é outro. Melhor dizer a verdade e pedir para repetir. */
+    if (!token) return msg("Recarregue a página e tente de novo.");
     bt.disabled = true; bt.textContent = "Consultando…";
-    _fetch(API + "/discord-template?codigo=" + encodeURIComponent(v))
-      .then(function (r) { return r.json().then(function (j) {
-        return {status: r.status, d: j}; }); })
+    api(API + "/discord-template?codigo=" + encodeURIComponent(v))
       .then(function (r) {
         if (r.status !== 200) { msg(r.d.mensagem || "Não foi possível ler."); return; }
         previa = r.d;

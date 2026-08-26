@@ -1,5 +1,5 @@
 diff --git a/packages/client/components/rtc/components/RoomAudioManager.tsx b/packages/client/components/rtc/components/RoomAudioManager.tsx
-index 7274245..c47efa0 100644
+index 7274245..2a8d7b0 100644
 --- a/packages/client/components/rtc/components/RoomAudioManager.tsx
 +++ b/packages/client/components/rtc/components/RoomAudioManager.tsx
 @@ -6,6 +6,7 @@ import { Key } from "@solid-primitives/keyed";
@@ -10,24 +10,60 @@ index 7274245..c47efa0 100644
  
  import { useVoice } from "../state";
  
-@@ -35,10 +36,18 @@ export function RoomAudioManager() {
+@@ -33,12 +34,53 @@ export function RoomAudioManager() {
+     ),
+   );
  
++  /**
++   * O `tela.js` decide quem esta assistindo a cada tela compartilhada.
++   *
++   * Esta guarda ja existiu -- mas como uma REESCRITA DO BUNDLE em
++   * `rebrand.py`, casando o trecho minificado por expressao regular. O
++   * padrao incluia um `console.info` que eu removi deste arquivo; a
++   * regex deixou de casar, a guarda sumiu sem um erro sequer, e o som de
++   * toda tela compartilhada passou a tocar para a sala inteira sem
++   * ninguem clicar em assistir.
++   *
++   * Por isso ela vive AQUI agora. Regra de produto nao pode depender de
++   * um identificador minificado continuar com o mesmo formato.
++   *
++   * `dpTelaBloqueia` responde `false` para o que nao for tela -- o
++   * microfone nunca passa por aqui.
++   */
++  function telaNaoPedida(pub: RemoteTrackPublication): boolean {
++    const bloqueia = (
++      window as unknown as { dpTelaBloqueia?: (p: unknown) => boolean }
++    ).dpTelaBloqueia;
++    if (typeof bloqueia !== "function") return false;
++    try {
++      return !!bloqueia(pub);
++    } catch {
++      // Excecao aqui deixaria a chamada inteira sem audio. Na duvida,
++      // assina: som a mais incomoda, som a menos quebra a conversa.
++      return false;
++    }
++  }
++
    createEffect(() => {
      const tracks = filteredTracks();
 -    console.info("[rtc] filtered tracks", filteredTracks());
      for (const track of tracks) {
-       (track.publication as RemoteTrackPublication).setSubscribed(true);
+-      (track.publication as RemoteTrackPublication).setSubscribed(true);
 -      console.info(track.publication);
++      const pub = track.publication as RemoteTrackPublication;
++
++      // Som de tela que ninguem pediu para assistir nao e assinado. Nao
++      // desassinamos aqui de proposito: quem liga e desliga a faixa e o
++      // `tela.js`, no clique, e disputar essa decisao com ele quebraria
++      // a janela de captura da previa.
++      if (telaNaoPedida(pub)) continue;
++
++      pub.setSubscribed(true);
 +
 +      // O audio DA TELA entra na mesma folga do video dela; o microfone
 +      // nao entra em folga nenhuma. `aplicarFolga` conhece a regra e
 +      // ignora o que nao for tela -- ver `../../ui/.../voice/folga.ts`.
-+      //
-+      // Aqui, e nao no quadro: o quadro so enxerga o video. Este efeito
-+      // roda de novo quando a assinatura completa, que e quando
-+      // `publication.track` passa a existir -- por isso nao precisa de
-+      // espera propria.
-+      aplicarFolga(track.publication.track, track.source);
++      aplicarFolga(pub.track, track.source);
      }
    });
  

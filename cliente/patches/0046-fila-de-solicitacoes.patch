@@ -1,0 +1,171 @@
+diff --git a/packages/client/components/app/interface/settings/server/Solicitacoes.tsx b/packages/client/components/app/interface/settings/server/Solicitacoes.tsx
+new file mode 100644
+index 0000000..707e0e8
+--- /dev/null
++++ b/packages/client/components/app/interface/settings/server/Solicitacoes.tsx
+@@ -0,0 +1,165 @@
++import { For, Show, createResource, createSignal, onCleanup } from "solid-js";
++
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
++
++import { useClient } from "@revolt/client";
++import { Avatar, Button, CircularProgress, Column, Row, Text } from "@revolt/ui";
++
++import { ServerSettingsProps } from "../ServerSettings";
++
++const API = "/api-convites";
++
++type Pedido = {
++  id: string;
++  usuario: string;
++  nome: string;
++  username: string;
++  avatar: string | null;
++  mensagem: string | null;
++  em: number;
++};
++
++/**
++ * Quanto tempo faz, em português e sem biblioteca.
++ *
++ * A data exata de um pedido de entrada não interessa a ninguém; o que o
++ * administrador quer saber é se faz cinco minutos ou duas semanas.
++ */
++function quandoFoi(em: number) {
++  const s = Math.max(0, Math.floor(Date.now() / 1000 - em));
++  if (s < 60) return "agora mesmo";
++  const m = Math.floor(s / 60);
++  if (m < 60) return `há ${m} min`;
++  const h = Math.floor(m / 60);
++  if (h < 24) return `há ${h} h`;
++  const d = Math.floor(h / 24);
++  return d === 1 ? "há 1 dia" : `há ${d} dias`;
++}
++
++/**
++ * Fila de solicitações de entrada da comunidade.
++ *
++ * Só quem tem Gerenciar Servidor chega aqui — a aba é escondida por essa
++ * permissão, e o serviço a confere de novo em toda rota. A tela não é a
++ * guarda; é o desenho da guarda.
++ */
++export function Solicitacoes(props: ServerSettingsProps) {
++  const { t } = useLingui();
++  const client = useClient();
++  const [ocupado, setOcupado] = createSignal<string | null>(null);
++  const [erro, setErro] = createSignal("");
++
++  function cabecalhos() {
++    const [nome, valor] = client()!.authenticationHeader;
++    return { [nome]: valor, "Content-Type": "application/json" };
++  }
++
++  const [pedidos, { refetch }] = createResource(
++    () => props.server.id,
++    async (id: string) => {
++      const r = await fetch(`${API}/servidores/${id}/solicitacoes`, {
++        headers: cabecalhos(),
++      });
++      if (!r.ok) return [] as Pedido[];
++      return ((await r.json()).itens ?? []) as Pedido[];
++    },
++  );
++
++  // Enquanto a aba está aberta, relê de vez em quando: é o cenário que o
++  // Kaue descreveu -- administrador com a tela aberta vendo o pedido novo
++  // aparecer. Vinte segundos porque pedido de entrada não é mensagem;
++  // ninguém espera latência de milissegundos aqui.
++  const relogio = setInterval(() => refetch(), 20000);
++  onCleanup(() => clearInterval(relogio));
++
++  async function decidir(id: string, acao: "aceitar" | "rejeitar") {
++    setOcupado(id);
++    setErro("");
++    try {
++      const r = await fetch(
++        `${API}/servidores/${props.server.id}/solicitacoes/${id}/${acao}`,
++        { method: "POST", headers: cabecalhos(), body: "{}" },
++      );
++      const corpo = await r.json().catch(() => ({}));
++      if (!r.ok) setErro(corpo.mensagem ?? t`Não consegui responder agora.`);
++    } catch {
++      setErro(t`Não consegui responder agora.`);
++    } finally {
++      setOcupado(null);
++      // Relê sempre, inclusive no erro: se outro administrador decidiu no
++      // meio (o 409), a lista tem de refletir isso na hora em vez de
++      // continuar oferecendo um botão que não vale mais.
++      refetch();
++    }
++  }
++
++  return (
++    <Column gap="lg">
++      <Show when={pedidos.loading && !pedidos()}>
++        <CircularProgress />
++      </Show>
++
++      <Show when={erro()}>
++        <Text size="small">{erro()}</Text>
++      </Show>
++
++      <Show
++        when={(pedidos() ?? []).length}
++        fallback={
++          <Show when={!pedidos.loading}>
++            <Column gap="sm">
++              <Text class="title" size="small">
++                <Trans>Nenhum pedido no momento</Trans>
++              </Text>
++              <Text size="small">
++                <Trans>
++                  Quando alguém encontrar esta comunidade no catálogo e pedir
++                  para entrar, o pedido aparece aqui.
++                </Trans>
++              </Text>
++            </Column>
++          </Show>
++        }
++      >
++        <For each={pedidos() ?? []}>
++          {(p) => (
++            <Row align gap="md">
++              <Avatar
++                size={40}
++                src={p.avatar ? `/autumn/avatars/${p.avatar}` : undefined}
++                fallback={p.nome}
++              />
++              <Column gap="none" grow>
++                <Text>{p.nome}</Text>
++                <Text size="small">
++                  {p.username ? `@${p.username} · ` : ""}
++                  {quandoFoi(p.em)}
++                </Text>
++                <Show when={p.mensagem}>
++                  <Text size="small">{p.mensagem}</Text>
++                </Show>
++              </Column>
++              <Row gap="sm">
++                <Button
++                  size="sm"
++                  isDisabled={ocupado() === p.id}
++                  onPress={() => decidir(p.id, "aceitar")}
++                >
++                  <Trans>Aceitar</Trans>
++                </Button>
++                <Button
++                  size="sm"
++                  variant="secondary"
++                  isDisabled={ocupado() === p.id}
++                  onPress={() => decidir(p.id, "rejeitar")}
++                >
++                  <Trans>Rejeitar</Trans>
++                </Button>
++              </Row>
++            </Row>
++          )}
++        </For>
++      </Show>
++    </Column>
++  );
++}

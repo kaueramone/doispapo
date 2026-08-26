@@ -130,6 +130,27 @@ if bundle:
     if 'case"dpsom"' not in bundle:
         erros.append("a pagina de Som nao entrou no switch de render")
 
+# ------------------- 2b-bis. a assinatura sob demanda das telas sobreviveu
+# Quatro ocorrencias vem dos dois remendos de VIDEO (rebrand.py, TELA) e
+# pelo menos uma do fonte, na guarda de AUDIO do RoomAudioManager.
+#
+# Este conferidor existe por um defeito real: a guarda de audio era um
+# remendo de bundle, o padrao dela dependia de um `console.info`, uma
+# limpeza de log tirou o log, o remendo passou a nao casar -- e o som de
+# toda tela compartilhada foi ao ar tocando para a sala inteira, sem que
+# nada no build reclamasse.
+if bundle:
+    _n_tela = bundle.count("dpTelaBloqueia")
+    if _n_tela < 5:
+        erros.append(
+            f"a assinatura sob demanda das telas nao esta completa: "
+            f"'dpTelaBloqueia' aparece {_n_tela}x, esperado ao menos 5 "
+            f"(2 remendos de video + a guarda de audio no fonte). "
+            f"Sem ela, video e som de tela vao para a sala inteira.")
+    if "dpSalaNova" not in bundle:
+        erros.append("o remendo que entrega a sala ao tela.js nao encontrou "
+                     "seu alvo — a assinatura sob demanda nao funciona")
+
 # ------------------- 2c. nenhum link para pagina institucional inexistente
 # O projeto nao tem Sobre / Termos / Privacidade / Uso aceitavel. Um link
 # para elas e um 404 na cara do usuario, em pagina de login e formulario.

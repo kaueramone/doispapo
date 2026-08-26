@@ -1,0 +1,477 @@
+diff --git a/packages/client/src/interface/Descobrir.tsx b/packages/client/src/interface/Descobrir.tsx
+new file mode 100644
+index 0000000..c853a50
+--- /dev/null
++++ b/packages/client/src/interface/Descobrir.tsx
+@@ -0,0 +1,471 @@
++import {
++  For,
++  Show,
++  createEffect,
++  createSignal,
++  onCleanup,
++  onMount,
++} from "solid-js";
++
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
++import { styled } from "styled-system/jsx";
++
++import { useClient } from "@revolt/client";
++import { useNavigate } from "@revolt/routing";
++import { Button, Column, Text, TextField, main } from "@revolt/ui";
++
++import { HeaderIcon } from "./common/CommonHeader";
++
++import MdExplore from "@material-design-icons/svg/filled/explore.svg?component-solid";
++
++const API = "/api-convites";
++
++type Categoria = {
++  id: string;
++  nome: string;
++  emoji: string;
++  comunidades: number;
++};
++
++type Cartao = {
++  id: string;
++  nome: string;
++  descricao: string;
++  icone: string | null;
++  banner: string | null;
++  membros: number;
++  categoria: string;
++  tags: string[];
++  estado: "membro" | "banido" | "pendente" | "rejeitado" | "disponivel";
++  liberado_em?: number;
++};
++
++/**
++ * O que o botão do cartão diz, por estado.
++ *
++ * O estado vem CALCULADO do servidor -- esta tabela só o desenha. É o que
++ * impede a interface de oferecer "solicitar entrada" para quem está
++ * banido, mesmo que alguém mexa no que chega pela rede.
++ */
++const ROTULO: Record<Cartao["estado"], string> = {
++  membro: "Abrir comunidade",
++  banido: "Acesso negado",
++  pendente: "Solicitação enviada",
++  rejeitado: "Solicitação recusada",
++  disponivel: "Solicitar entrada",
++};
++
++export function Descobrir() {
++  const { t } = useLingui();
++  const client = useClient();
++  const navigate = useNavigate();
++
++  const [categorias, setCategorias] = createSignal<Categoria[]>([]);
++  const [categoria, setCategoria] = createSignal<string | null>(null);
++  const [busca, setBusca] = createSignal("");
++  const [itens, setItens] = createSignal<Cartao[]>([]);
++  const [cursor, setCursor] = createSignal<string | null>(null);
++  const [carregando, setCarregando] = createSignal(false);
++  const [primeira, setPrimeira] = createSignal(true);
++  const [erro, setErro] = createSignal("");
++  const [ocupado, setOcupado] = createSignal<string | null>(null);
++
++  let sentinela: HTMLDivElement | undefined;
++
++  function cabecalhos() {
++    const [nome, valor] = client()!.authenticationHeader;
++    return { [nome]: valor, "Content-Type": "application/json" };
++  }
++
++  async function carregarCategorias() {
++    try {
++      const r = await fetch(`${API}/catalogo/categorias`, {
++        headers: cabecalhos(),
++      });
++      if (!r.ok) return;
++      const b = await r.json();
++      // Só as que têm alguma comunidade: uma categoria vazia no menu é um
++      // convite para um beco sem saída.
++      setCategorias(
++        (b.itens ?? []).filter((c: Categoria) => c.comunidades > 0),
++      );
++    } catch {
++      /* sem categorias, o catálogo ainda funciona sem filtro */
++    }
++  }
++
++  async function carregarPagina(reiniciar: boolean) {
++    if (carregando()) return;
++    setCarregando(true);
++    setErro("");
++    try {
++      const p = new URLSearchParams();
++      if (categoria()) p.set("categoria", categoria()!);
++      if (busca().trim()) p.set("q", busca().trim());
++      if (!reiniciar && cursor()) p.set("cursor", cursor()!);
++
++      const r = await fetch(`${API}/catalogo?${p}`, { headers: cabecalhos() });
++      if (!r.ok) {
++        setErro(t`Não consegui carregar o catálogo agora.`);
++        return;
++      }
++      const b = await r.json();
++      setItens(reiniciar ? b.itens ?? [] : [...itens(), ...(b.itens ?? [])]);
++      setCursor(b.proximo ?? null);
++    } catch {
++      setErro(t`Não consegui carregar o catálogo agora.`);
++    } finally {
++      setCarregando(false);
++      setPrimeira(false);
++    }
++  }
++
++  onMount(() => {
++    carregarCategorias();
++    carregarPagina(true);
++
++    // Rolagem infinita por observador, e não por evento de scroll: o
++    // navegador só avisa quando a sentinela entra em cena, em vez de
++    // calcular posição a cada quadro.
++    if (sentinela) {
++      const olho = new IntersectionObserver((entradas) => {
++        if (entradas[0]?.isIntersecting && cursor() && !carregando()) {
++          carregarPagina(false);
++        }
++      });
++      olho.observe(sentinela);
++      onCleanup(() => olho.disconnect());
++    }
++  });
++
++  // Filtro e busca reiniciam a paginação. `debounce` na busca porque
++  // digitar "tarkov" são seis requisições sem ele.
++  let relogioBusca: ReturnType<typeof setTimeout>;
++  createEffect(() => {
++    const _c = categoria();
++    const _q = busca();
++    clearTimeout(relogioBusca);
++    relogioBusca = setTimeout(() => {
++      setCursor(null);
++      carregarPagina(true);
++    }, _q ? 350 : 0);
++  });
++  onCleanup(() => clearTimeout(relogioBusca));
++
++  async function agir(c: Cartao) {
++    if (c.estado === "membro") return navigate(`/server/${c.id}`);
++    if (c.estado !== "disponivel") return;
++
++    setOcupado(c.id);
++    setErro("");
++    try {
++      const r = await fetch(`${API}/solicitacoes`, {
++        method: "POST",
++        headers: cabecalhos(),
++        body: JSON.stringify({ servidor: c.id }),
++      });
++      const corpo = await r.json().catch(() => ({}));
++      if (!r.ok) {
++        setErro(corpo.mensagem ?? t`Não consegui enviar o pedido agora.`);
++        // Mesmo no erro vale reler o cartão: 409 quase sempre significa
++        // que o estado real já é outro, e insistir num botão que não
++        // vale mais é pior do que a mensagem de erro.
++      }
++      setItens(
++        itens().map((x) =>
++          x.id === c.id
++            ? { ...x, estado: r.ok ? "pendente" : x.estado }
++            : x,
++        ),
++      );
++    } catch {
++      setErro(t`Não consegui enviar o pedido agora.`);
++    } finally {
++      setOcupado(null);
++    }
++  }
++
++  return (
++    <Base>
++      <Cabecalho>
++        <HeaderIcon>
++          <MdExplore />
++        </HeaderIcon>
++        <Trans>Encontre a sua comunidade</Trans>
++      </Cabecalho>
++
++      <Conteudo>
++        <Column gap="lg">
++          <TextField
++            placeholder={t`Buscar por nome ou etiqueta`}
++            value={busca()}
++            onInput={(e) => setBusca(e.currentTarget.value)}
++          />
++
++          <Show when={categorias().length}>
++            <Faixa>
++              <Pilula
++                data-ativa={categoria() === null ? "" : undefined}
++                onClick={() => setCategoria(null)}
++              >
++                <Trans>Todas</Trans>
++              </Pilula>
++              <For each={categorias()}>
++                {(c) => (
++                  <Pilula
++                    data-ativa={categoria() === c.id ? "" : undefined}
++                    onClick={() => setCategoria(c.id)}
++                  >
++                    {c.emoji} {c.nome} · {c.comunidades}
++                  </Pilula>
++                )}
++              </For>
++            </Faixa>
++          </Show>
++
++          <Show when={erro()}>
++            <Text size="small">{erro()}</Text>
++          </Show>
++
++          <Show
++            when={itens().length}
++            fallback={
++              <Show when={!primeira() && !carregando()}>
++                <Column gap="sm">
++                  <Text class="title">
++                    <Trans>Nada por aqui ainda</Trans>
++                  </Text>
++                  <Text size="small">
++                    <Show
++                      when={busca() || categoria()}
++                      fallback={
++                        <Trans>
++                          Nenhuma comunidade se abriu ao catálogo por
++                          enquanto. Que tal criar a sua?
++                        </Trans>
++                      }
++                    >
++                      <Trans>
++                        Nenhuma comunidade encontrada com esse filtro.
++                      </Trans>
++                    </Show>
++                  </Text>
++                </Column>
++              </Show>
++            }
++          >
++            <Grade>
++              <For each={itens()}>
++                {(c) => (
++                  <Cartao_>
++                    <Capa
++                      style={
++                        c.banner
++                          ? { "background-image": `url(${c.banner})` }
++                          : undefined
++                      }
++                    >
++                      {/* Sem banner, a inicial sobre o gradiente da marca.
++                          Das comunidades de hoje só uma tem banner, então
++                          este é o caso comum e não a exceção. */}
++                      <Show when={!c.banner}>
++                        <Inicial>{(c.nome || "?").slice(0, 1)}</Inicial>
++                      </Show>
++                      <Show when={c.icone}>
++                        <Icone src={c.icone!} alt="" />
++                      </Show>
++                    </Capa>
++
++                    <Column gap="sm" grow>
++                      <Text class="title">{c.nome}</Text>
++                      <Text size="small">
++                        {c.membros === 1
++                          ? "1 membro"
++                          : `${c.membros} membros`}
++                      </Text>
++                      <Show when={c.descricao}>
++                        <Descricao size="small">{c.descricao}</Descricao>
++                      </Show>
++                    </Column>
++
++                    <Button
++                      size="sm"
++                      isDisabled={
++                        ocupado() === c.id ||
++                        c.estado === "banido" ||
++                        c.estado === "pendente" ||
++                        c.estado === "rejeitado"
++                      }
++                                      /* `filled` e `tonal` sao os nomes REAIS das
++                         variantes. "primary"/"secondary" nao existem no
++                         Button deste design system -- passar um nome
++                         invalido nao da erro, so produz um botao sem
++                         estilo nenhum. Conferido em Button.tsx. */
++                      variant={c.estado === "membro" ? "tonal" : "filled"}
++                      onPress={() => agir(c)}
++                    >
++                      {ROTULO[c.estado] ?? ROTULO.disponivel}
++                    </Button>
++                  </Cartao_>
++                )}
++              </For>
++            </Grade>
++          </Show>
++
++          <Sentinela ref={sentinela} />
++          <Show when={carregando()}>
++            <Text size="small">
++              <Trans>Carregando…</Trans>
++            </Text>
++          </Show>
++        </Column>
++      </Conteudo>
++    </Base>
++  );
++}
++
++/**
++ * O painel da area principal.
++ *
++ * `main.raw()` e o que da a largura: ele traz `flexGrow: 1` mais a
++ * margem, o raio e o fundo que todas as outras telas usam. Sem ele a
++ * pagina ocupava so a largura do proprio conteudo -- ficou espremida
++ * numa coluna estreita a esquerda, e so olhando no navegador deu para
++ * ver.
++ */
++const Base = styled("div", {
++  base: {
++    ...main.raw(),
++  },
++});
++
++const Cabecalho = styled("div", {
++  base: {
++    display: "flex",
++    alignItems: "center",
++    gap: "8px",
++    height: "48px",
++    flexShrink: 0,
++    paddingInline: "16px",
++    fontWeight: 600,
++  },
++});
++
++const Conteudo = styled("div", {
++  base: {
++    flexGrow: 1,
++    minHeight: 0,
++    overflowY: "auto",
++    // Sem fundo nem raio proprios: o `main` do Base ja e o painel.
++    paddingBlockEnd: "16px",
++  },
++});
++
++const Faixa = styled("div", {
++  base: {
++    display: "flex",
++    gap: "8px",
++    overflowX: "auto",
++    paddingBottom: "4px",
++    // A faixa rola sozinha; sem isto a página inteira rolaria de lado.
++    scrollbarWidth: "thin",
++  },
++});
++
++const Pilula = styled("button", {
++  base: {
++    flexShrink: 0,
++    border: "none",
++    cursor: "pointer",
++    padding: "6px 14px",
++    borderRadius: "16px",
++    fontSize: "13px",
++    fontWeight: 500,
++    whiteSpace: "nowrap",
++    color: "var(--md-sys-color-on-surface)",
++    background: "var(--md-sys-color-surface-container)",
++    "&:hover": { background: "var(--md-sys-color-surface-container-high)" },
++    "&[data-ativa]": {
++      background: "var(--md-sys-color-primary-container)",
++      color: "var(--md-sys-color-on-primary-container)",
++    },
++  },
++});
++
++const Grade = styled("div", {
++  base: {
++    display: "grid",
++    gap: "16px",
++    // `auto-fill` com mínimo em px: uma coluna no celular, quantas
++    // couberem no monitor, sem media query e sem número mágico de colunas.
++    gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
++  },
++});
++
++const Cartao_ = styled("div", {
++  base: {
++    display: "flex",
++    flexDirection: "column",
++    gap: "12px",
++    padding: "12px",
++    borderRadius: "12px",
++    background: "var(--md-sys-color-surface-container)",
++    transition: "transform .12s ease, background .12s ease",
++    "&:hover": {
++      background: "var(--md-sys-color-surface-container-high)",
++      transform: "translateY(-2px)",
++    },
++    "@media (prefers-reduced-motion: reduce)": {
++      transition: "none",
++      "&:hover": { transform: "none" },
++    },
++  },
++});
++
++const Capa = styled("div", {
++  base: {
++    position: "relative",
++    aspectRatio: "16 / 9",
++    borderRadius: "8px",
++    overflow: "hidden",
++    backgroundSize: "cover",
++    backgroundPosition: "center",
++    background: "linear-gradient(135deg, #179EF0, #8249DB)",
++    display: "flex",
++    alignItems: "center",
++    justifyContent: "center",
++  },
++});
++
++const Inicial = styled("span", {
++  base: {
++    fontSize: "48px",
++    fontWeight: 700,
++    color: "rgba(255,255,255,.85)",
++    userSelect: "none",
++  },
++});
++
++const Icone = styled("img", {
++  base: {
++    position: "absolute",
++    insetInlineStart: "8px",
++    bottom: "8px",
++    width: "40px",
++    height: "40px",
++    borderRadius: "12px",
++    objectFit: "cover",
++    border: "2px solid var(--md-sys-color-surface-container)",
++  },
++});
++
++const Descricao = styled(Text, {
++  base: {
++    display: "-webkit-box",
++    WebkitLineClamp: 2,
++    WebkitBoxOrient: "vertical",
++    overflow: "hidden",
++  },
++});
++
++const Sentinela = styled("div", { base: { height: "1px" } });

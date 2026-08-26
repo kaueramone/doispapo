@@ -1,0 +1,27 @@
+diff --git a/packages/client/src/index.tsx b/packages/client/src/index.tsx
+index 918d373..5b536b0 100644
+--- a/packages/client/src/index.tsx
++++ b/packages/client/src/index.tsx
+@@ -44,6 +44,7 @@ import AuthPage from "./Auth";
+ import Interface from "./Interface";
+ import "./index.css";
+ import { DevelopmentPage } from "./interface/Development";
++import { Descobrir } from "./interface/Descobrir";
+ import { Discover } from "./interface/Discover";
+ import { Friends } from "./interface/Friends";
+ import { HomePage } from "./interface/Home";
+@@ -173,7 +174,13 @@ render(
+           <Route path="/" component={Interface as never}>
+             <Route path="/pwa" component={PWARedirect} />
+             <Route path="/dev" component={DevelopmentPage} />
+-            <Route path="/discover/*" component={Discover} />
++            {/* O `/discover` do upstream continua ali, inerte: e um iframe
++            para o stt.gg, e os dois pontos de entrada dele estao atras de
++            CONFIGURATION.IS_STOAT, que e falso nesta instancia. Nao foi
++            removido porque removê-lo obrigaria a mexer no Layout e na
++            barra de servidores por uma rota que ninguem alcanca. */}
++        <Route path="/discover/*" component={Discover} />
++        <Route path="/descobrir" component={Descobrir} />
+             <Route path="/settings" component={SettingsRedirect} />
+             <Route path="/invite/:code" component={InviteRedirect} />
+             <Route path="/bot/:code" component={BotRedirect} />

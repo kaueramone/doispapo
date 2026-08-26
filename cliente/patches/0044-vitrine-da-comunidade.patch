@@ -1,0 +1,216 @@
+diff --git a/packages/client/components/app/interface/settings/server/Vitrine.tsx b/packages/client/components/app/interface/settings/server/Vitrine.tsx
+new file mode 100644
+index 0000000..cb6eb5a
+--- /dev/null
++++ b/packages/client/components/app/interface/settings/server/Vitrine.tsx
+@@ -0,0 +1,210 @@
++import { createFormControl, createFormGroup } from "solid-forms";
++import {
++  For,
++  Show,
++  createEffect,
++  createResource,
++  createSignal,
++  on,
++} from "solid-js";
++
++import { Trans, useLingui } from "@lingui-solid/solid/macro";
++import type { Server } from "stoat.js";
++
++import { useClient } from "@revolt/client";
++import {
++  CircularProgress,
++  Column,
++  Form2,
++  MenuItem,
++  Row,
++  Text,
++} from "@revolt/ui";
++
++const API = "/api-convites";
++
++type Categoria = { id: string; nome: string; emoji: string };
++type DadosVitrine = {
++  publica: boolean;
++  categoria: string;
++  tags: string[];
++  membros: number;
++};
++
++/**
++ * Vitrine da comunidade — visibilidade, categoria e etiquetas.
++ *
++ * Formulário próprio, separado do formulário nativo logo acima, e isso é
++ * deliberado: estes campos não vão para `PATCH /servers/{id}`. O schema da
++ * API é fechado, e `discoverable` só é aceito de quem tem a flag
++ * `privileged` da instância inteira — testado contra a produção: 403
++ * NotPrivileged até para o dono da comunidade.
++ *
++ * Separado também para que uma falha do nosso serviço não bloqueie o
++ * salvamento do nome, do ícone e do banner, que passam pela API nativa.
++ */
++export function Vitrine(props: { server: Server }) {
++  const { t } = useLingui();
++  const client = useClient();
++  const [estado, setEstado] = createSignal("");
++
++  function cabecalhos() {
++    const [nome, valor] = client()!.authenticationHeader;
++    return { [nome]: valor, "Content-Type": "application/json" };
++  }
++
++  const [categorias] = createResource(async () => {
++    const r = await fetch(`${API}/vitrine/categorias`, {
++      headers: cabecalhos(),
++    });
++    if (!r.ok) return [] as Categoria[];
++    return ((await r.json()).itens ?? []) as Categoria[];
++  });
++
++  const [vitrine, { mutate }] = createResource(
++    () => props.server.id,
++    async (id: string) => {
++      const r = await fetch(`${API}/servidores/${id}/vitrine`, {
++        headers: cabecalhos(),
++      });
++      if (!r.ok) return null;
++      return (await r.json()) as DadosVitrine;
++    },
++  );
++
++  const grupo = createFormGroup({
++    publica: createFormControl(false),
++    categoria: createFormControl("geral"),
++    tags: createFormControl(""),
++  });
++
++  function preencher(v: DadosVitrine | null | undefined) {
++    if (!v) return;
++    grupo.controls.publica.setValue(v.publica);
++    grupo.controls.categoria.setValue(v.categoria);
++    grupo.controls.tags.setValue((v.tags ?? []).join(", "));
++  }
++
++  // Os valores chegam depois da rede. `setValue` não marca sujo, então o
++  // botão Salvar continua desligado até alguém mexer de verdade.
++  createEffect(on(vitrine, preencher));
++
++  // `useSubmitHandler` chama isto DEPOIS de um envio bem-sucedido, e não
++  // só no botão Redefinir. Por isso ele não limpa a mensagem de estado --
++  // limpar aqui apagaria o "Salvo." no mesmo instante em que ele aparece.
++  function onReset() {
++    preencher(vitrine());
++  }
++
++  function aoRedefinir() {
++    onReset();
++    setEstado("");
++  }
++
++  async function onSubmit() {
++    setEstado("");
++    const r = await fetch(`${API}/servidores/${props.server.id}/vitrine`, {
++      method: "POST",
++      headers: cabecalhos(),
++      body: JSON.stringify({
++        publica: grupo.controls.publica.value,
++        categoria: grupo.controls.categoria.value,
++        tags: grupo.controls.tags.value,
++      }),
++    });
++    const corpo = await r.json().catch(() => ({}));
++    if (!r.ok) {
++      // A mensagem do serviço já vem em português e pronta para exibir.
++      setEstado(corpo.mensagem ?? t`Não foi possível salvar.`);
++      throw new Error(corpo.erro ?? "falhou");
++    }
++    // O servidor devolve o estado como ficou gravado -- as etiquetas
++    // voltam normalizadas (sem acento, sem repetida, minúsculas).
++    // `mutate` faz o resource passar a valer esse estado.
++    //
++    // Sem isto a tela REGREDIA depois de salvar: `useSubmitHandler` chama
++    // `onReset` no sucesso, `onReset` relê o resource, e o resource ainda
++    // guardava o que veio da rede ANTES do envio. O banco ficava certo e
++    // a tela voltava para o valor antigo -- o pior tipo de defeito, o que
++    // faz a pessoa salvar de novo achando que não pegou.
++    mutate(corpo as DadosVitrine);
++    setEstado(t`Salvo.`);
++  }
++
++  const enviar = Form2.useSubmitHandler(grupo, onSubmit, onReset);
++
++  return (
++    <form onSubmit={enviar}>
++      <Column>
++        <Text class="title" size="small">
++          <Trans>Vitrine da comunidade</Trans>
++        </Text>
++
++        <Show when={vitrine.loading}>
++          <CircularProgress />
++        </Show>
++
++        <Show when={!vitrine.loading}>
++          <Form2.Checkbox control={grupo.controls.publica}>
++            <Trans>
++              Mostrar no catálogo, para qualquer pessoa encontrar
++            </Trans>
++          </Form2.Checkbox>
++
++          <Text size="small">
++            <Show
++              when={grupo.controls.publica.value}
++              fallback={
++                <Trans>
++                  Privada: não aparece no catálogo, e só entra quem receber um
++                  link de convite.
++                </Trans>
++              }
++            >
++              <Trans>
++                Pública: aparece no catálogo e pode receber pedidos de entrada.
++                O convite por link continua funcionando como antes.
++              </Trans>
++            </Show>
++          </Text>
++
++          <Column>
++            <Form2.Select
++              label={t`Categoria`}
++              control={grupo.controls.categoria}
++            >
++              <For each={categorias() ?? []}>
++                {(c) => (
++                  <MenuItem value={c.id}>
++                    {c.emoji} {c.nome}
++                  </MenuItem>
++                )}
++              </For>
++            </Form2.Select>
++          </Column>
++
++          <Form2.TextField
++            maxlength={120}
++            name="tags"
++            control={grupo.controls.tags}
++            label={t`Etiquetas`}
++            placeholder={t`tarkov, fps, competitivo`}
++          />
++
++          <Row>
++            <Form2.Reset group={grupo} onReset={aoRedefinir} />
++            <Form2.Submit group={grupo} requireDirty>
++              <Trans>Salvar</Trans>
++            </Form2.Submit>
++            <Show when={grupo.isPending}>
++              <CircularProgress />
++            </Show>
++            <Show when={estado()}>
++              <Text size="small">{estado()}</Text>
++            </Show>
++          </Row>
++        </Show>
++      </Column>
++    </form>
++  );
++}

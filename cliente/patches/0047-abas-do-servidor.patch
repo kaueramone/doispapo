@@ -1,0 +1,46 @@
+diff --git a/packages/client/components/app/interface/settings/ServerSettings.tsx b/packages/client/components/app/interface/settings/ServerSettings.tsx
+index 28d8803..c9f903a 100644
+--- a/packages/client/components/app/interface/settings/ServerSettings.tsx
++++ b/packages/client/components/app/interface/settings/ServerSettings.tsx
+@@ -5,6 +5,7 @@ import {
+   BiSolidHappyBeaming,
+   BiSolidInfoCircle,
+   BiSolidTrash,
++  BiSolidUserPlus,
+   BiSolidUserX,
+ } from "solid-icons/bi";
+ 
+@@ -23,6 +24,7 @@ import { ListServerBans } from "./server/bans/ListBans";
+ import { EmojiList } from "./server/emojis/EmojiList";
+ import { ListServerInvites } from "./server/invites/ListServerInvites";
+ import { ServerRoleEditor } from "./server/roles/ServerRoleEditor";
++import { Solicitacoes } from "./server/Solicitacoes";
+ import { ServerRoleOverview } from "./server/roles/ServerRoleOverview";
+ import { BackCard } from "./user/_AccountCard";
+ 
+@@ -73,6 +75,8 @@ const Config: SettingsConfiguration<Server> = {
+         return <Overview server={server} />;
+       case "emojis":
+         return <EmojiList server={server} />;
++      case "solicitacoes":
++        return <Solicitacoes server={server} />;
+       case "roles":
+         return <ServerRoleOverview context={server} />;
+       case "invites":
+@@ -140,6 +144,16 @@ const Config: SettingsConfiguration<Server> = {
+               icon: <BiSolidFlagAlt size={20} />,
+               title: <Trans>Roles</Trans>,
+             },
++            {
++              // Mesma permissao do convite por link, de proposito: quem
++              // hoje pode convidar alguem passa a poder aprovar um pedido.
++              // E a mesma autoridade por outro caminho, e nao um conceito
++              // novo de moderacao.
++              hidden: !server.havePermission("ManageServer"),
++              id: "solicitacoes",
++              icon: <BiSolidUserPlus size={20} />,
++              title: <Trans>Solicitações de entrada</Trans>,
++            },
+             {
+               hidden: !server.havePermission("ManageServer"),
+               id: "invites",

@@ -1,0 +1,20 @@
+diff --git a/packages/client/components/app/interface/settings/server/Overview.tsx b/packages/client/components/app/interface/settings/server/Overview.tsx
+index b2be570..f4a7e76 100644
+--- a/packages/client/components/app/interface/settings/server/Overview.tsx
++++ b/packages/client/components/app/interface/settings/server/Overview.tsx
+@@ -16,6 +16,7 @@ import {
+ } from "@revolt/ui";
+ 
+ import { ServerSettingsProps } from "../ServerSettings";
++import { Vitrine } from "./Vitrine";
+ 
+ /**
+  * Server overview
+@@ -324,6 +325,7 @@ export default function ServerOverview(props: ServerSettingsProps) {
+           </Row>
+         </Column>
+       </form>
++      <Vitrine server={props.server} />
+     </Column>
+   );
+ }

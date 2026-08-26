@@ -70,6 +70,13 @@ declare -A SERIE=(
   [0038-palco-movel]=packages/client/components/ui/components/features/voice/callCard/VoiceCallCardActiveRoom.tsx
   [0042-folga-de-reproducao]=packages/client/components/ui/components/features/voice/folga.ts
   [0043-audio-da-sala]=packages/client/components/rtc/components/RoomAudioManager.tsx
+  [0044-vitrine-da-comunidade]=packages/client/components/app/interface/settings/server/Vitrine.tsx
+  [0045-visao-geral-com-vitrine]=packages/client/components/app/interface/settings/server/Overview.tsx
+  [0046-fila-de-solicitacoes]=packages/client/components/app/interface/settings/server/Solicitacoes.tsx
+  [0047-abas-do-servidor]=packages/client/components/app/interface/settings/ServerSettings.tsx
+  [0048-catalogo]=packages/client/src/interface/Descobrir.tsx
+  [0049-rotas]=packages/client/src/index.tsx
+  [0050-tela-inicial]=packages/client/src/interface/Home.tsx
 )
 
 for nome in $(printf '%s\n' "${!SERIE[@]}" | sort); do

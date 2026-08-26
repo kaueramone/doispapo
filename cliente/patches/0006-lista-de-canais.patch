@@ -1,16 +1,26 @@
 diff --git a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
-index fa1ef5a..aaee507 100644
+index fa1ef5a..41b4c32 100644
 --- a/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
 +++ b/packages/client/src/interface/navigation/channels/ServerSidebar.tsx
-@@ -6,6 +6,7 @@ import {
+@@ -6,13 +6,17 @@ import {
    Setter,
    Show,
    Switch,
 +  createEffect,
    createMemo,
++  createSignal,
++  onCleanup,
  } from "solid-js";
  
-@@ -33,7 +34,9 @@ import {
+ import { useLingui } from "@lingui-solid/solid/macro";
+ import type { API, Channel, Server, ServerFlags } from "stoat.js";
+ import { styled } from "styled-system/jsx";
+ 
++import { useClient } from "@revolt/client";
+ import { useDevice } from "@revolt/common";
+ import { KeybindAction, createKeybind } from "@revolt/keybinds";
+ import { TextWithEmoji } from "@revolt/markdown";
+@@ -33,7 +37,9 @@ import {
    symbolSize,
    typography,
  } from "@revolt/ui";
@@ -20,7 +30,7 @@ index fa1ef5a..aaee507 100644
  import { createDragHandle } from "@revolt/ui/components/utils/Draggable";
  import { Symbol } from "@revolt/ui/components/utils/Symbol";
  
-@@ -252,6 +255,7 @@ export const ServerSidebar = (props: Props) => {
+@@ -252,6 +258,7 @@ export const ServerSidebar = (props: Props) => {
            )}
          </Draggable>
        </div>
@@ -28,7 +38,128 @@ index fa1ef5a..aaee507 100644
      </SidebarBase>
    );
  };
-@@ -490,14 +494,47 @@ function Entry(
+@@ -271,19 +278,112 @@ function ServerInfo(
+         <TextWithEmoji content={props.server.name} />
+       </ServerName>
+       <Show when={props.canManageServer}>
+-        <IconButton
+-          size="xs"
+-          width="narrow"
+-          variant={props.server.banner ? "_header" : "standard"}
+-          onPress={props.openServerSettings}
+-        >
+-          <MdSettings {...symbolSize(24)} />
+-        </IconButton>
++        <AncoraDoSelo>
++          <IconButton
++            size="xs"
++            width="narrow"
++            variant={props.server.banner ? "_header" : "standard"}
++            onPress={props.openServerSettings}
++          >
++            <MdSettings {...symbolSize(24)} />
++          </IconButton>
++          <ContadorDePedidos server={props.server} />
++        </AncoraDoSelo>
+       </Show>
+     </Row>
+   );
+ }
+ 
++/**
++ * Selo vermelho com o numero de pedidos de entrada aguardando.
++ *
++ * So e montado para quem tem Gerenciar Servidor -- vive dentro do
++ * `<Show when={props.canManageServer}>` da engrenagem. Sem essa guarda,
++ * todo membro comum consultaria a cada minuto uma rota que so lhe
++ * responde 403.
++ *
++ * Consulta em laco, e nao por evento: o `EventV1` do bonfire e um enum
++ * fechado de 54 variantes, entao nao existe -- nem vai existir sem
++ * recompilar o backend -- um evento "pedido novo". Um `fetch` por minuto
++ * nesta escala e ruido; forjar evento seria manter a mao o formato de um
++ * enum Rust de terceiro.
++ */
++function ContadorDePedidos(props: { server: Server }) {
++  const client = useClient();
++  const [pendentes, setPendentes] = createSignal(0);
++
++  createEffect(() => {
++    const sid = props.server.id;
++    let vivo = true;
++
++    async function ler() {
++      try {
++        const [nome, valor] = client()!.authenticationHeader;
++        const r = await fetch(
++          `/api-convites/servidores/${sid}/solicitacoes/contagem`,
++          { headers: { [nome]: valor } },
++        );
++        if (!r.ok) return;
++        const corpo = await r.json();
++        if (vivo) setPendentes(Number(corpo.pendentes) || 0);
++      } catch {
++        // Rede fora do ar: mantem o numero anterior e tenta na proxima
++        // volta. Zerar aqui faria o selo piscar a cada oscilacao.
++      }
++    }
++
++    ler();
++    const relogio = setInterval(ler, 60000);
++    onCleanup(() => {
++      vivo = false;
++      clearInterval(relogio);
++    });
++  });
++
++  return (
++    <Show when={pendentes() > 0}>
++      <SeloDePedidos>{pendentes() > 9 ? "9+" : pendentes()}</SeloDePedidos>
++    </Show>
++  );
++}
++
++/**
++ * Ancora do selo.
++ *
++ * Existe para o selo se prender AQUI e nao a algum ancestral posicionado
++ * mais acima. Depender do `IconButton` ser `position: relative` seria
++ * supor um detalhe interno de um componente do upstream -- que pode mudar
++ * numa atualizacao e levaria o selo para o canto da tela sem aviso.
++ */
++const AncoraDoSelo = styled("div", {
++  base: {
++    position: "relative",
++    display: "inline-flex",
++  },
++});
++
++/**
++ * O selo em si.
++ */
++const SeloDePedidos = styled("span", {
++  base: {
++    position: "absolute",
++    top: "-2px",
++    insetInlineEnd: "-2px",
++    minWidth: "16px",
++    height: "16px",
++    paddingInline: "4px",
++    borderRadius: "8px",
++    background: "var(--md-sys-color-error)",
++    color: "var(--md-sys-color-on-error)",
++    fontSize: "10px",
++    fontWeight: 700,
++    lineHeight: "16px",
++    textAlign: "center",
++    pointerEvents: "none",
++  },
++});
++
+ /**
+  * Server name
+  */
+@@ -490,14 +590,47 @@ function Entry(
              : "normal",
    );
  
